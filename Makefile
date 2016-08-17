@@ -1,9 +1,9 @@
-.PHONY: build
+.PHONY: build doc test clean all
 
 all: build
 
 clean:
-	rm -rf build
+	rm -rf build doc
 
 build:
 	mkdir -p build
@@ -11,3 +11,6 @@ build:
 
 test: build
 	cd build; ./letkf_test
+
+doc:
+	ford doc.md

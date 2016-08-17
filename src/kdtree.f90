@@ -1,13 +1,19 @@
 module kdtree
-  !! A lon/lat based kd tree for fast retrieval of points.
+  !! author: Travis Sluka
+  !! category: support
+  !!
+  !! A lon/lat based 3D kd tree for fast retrieval of points.
+  !!
   !! Initialization of the tree via "kd_init" creates a 3d tree
   !! with points converted into x/y/z space. Points can then be retrieved
   !! either by a point and max radius (kd_search_radius), or by a point and
   !! the number of desired closest points to return (kd_search_nnearest)
   !!
-  !! Derived from Numerical Recipes, 2007
-  !! author: Travis Sluka (tsluka@umd.edu)
-  
+  !! @note Algorithm derived from Numerical Recipes, 2007
+  !!
+  !! @todo Allow for specification of MINDIV during initialization.
+  !! Different trees might require different values here
+
   implicit none
   private
 
@@ -29,8 +35,7 @@ module kdtree
 
   integer, parameter :: MINDIV = 10
   !! kd-tree will not bother dividing a box any further if it contains
-  !! this many or fewer items. TODO, have this specified in kd_init instead,
-  !! different trees might require different values here
+  !! this many or fewer items.
 
   real(dp), parameter :: pi = 4*atan(1.0_dp)
   !! pi, duh
