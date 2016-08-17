@@ -10,7 +10,7 @@ build:
 	cd build; cmake ../ -DCMAKE_BUILD_TYPE=Debug; make
 
 test: build
-	cd build; ./letkf_test
+	cd build; make test
 
 doc:
 	ford doc.md

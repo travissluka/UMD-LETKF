@@ -51,12 +51,13 @@ set_target_properties( ${LIB_NAME}
 
 ## build test executables
 enable_testing()
-file( GLOB LETKF_TEST_SRCS "src/test/*.f90" )
+file( GLOB LETKF_TEST_SRCS "src_test/*.f90" )
 foreach( test_source_file ${LETKF_TEST_SRCS} )
   string( REPLACE ".f90" "" test_name ${test_source_file} )
   string( FIND  ${test_name} "/" pos REVERSE )
   math( EXPR pos "${pos}+1" )
   string( SUBSTRING ${test_name} ${pos} -1 test_name )
+  set( test_name test_${test_name} )
   add_executable( ${test_name} ${test_source_file} )
   target_link_libraries( ${test_name} ${LIB_NAME} )
   target_link_libraries( ${test_name} ${LAPACK_LIBRARIES} )

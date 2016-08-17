@@ -1,6 +1,11 @@
 module letkf_core  
-  !! author: Takemasa Miyoshi
   !! Core LETKF equations.
+  !!
+  !! @note Original code taken from Takemasa Miyoshi's LETKF code
+  !!
+  !! @todo correctly determine evwork_size based on ILAENV and max
+  !! number of observations, \( evwork\_size = (NB+2)*n\)
+  
   implicit none
   private
   
@@ -14,8 +19,6 @@ contains
     integer, intent(in) :: nbv
     !! number of ensemble members
 
-    ! TODO, correctly determine evwork_size based on ILAENV and
-    ! max number of observations, evwork_size = (NB+2)*n
     evwork_size = (64+2) * nbv
   end subroutine letkf_core_init
 

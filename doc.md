@@ -1,12 +1,12 @@
 ---
 project: UMD-LETKF
-project_dir: ./src
+src_dir: ./src
 output_dir: ./doc
 project_github: https://github.com/travissluka/umd-letkf
 summary: Universal Multi-Domain Local Ensemble Transform Kalman Filter
 author: Travis Sluka
+email: tsluka@umd.edu
 github: https://github.com/travissluka
-exclude_dir: test
 graph: true
 source: false
 ---
