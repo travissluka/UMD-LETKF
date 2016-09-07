@@ -30,8 +30,11 @@ set ( INSTALL_MOD_DIR ${PACKAGE_NAME}-foo/lib )
 
 ## required dependencies
 LIST(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/)
-find_package(MPI)
-include_directories(${MPI_INCLUDE})
+
+find_package(MPI REQUIRED)
+include_directories(${MPI_INCLUDE_PATH})
+include_directories($ENV{MPI_FORTRAN_MOD_DIR})
+
 find_package(LAPACK REQUIRED)
 set(NETCDF_F77 "YES")
 find_package(NetCDF REQUIRED)

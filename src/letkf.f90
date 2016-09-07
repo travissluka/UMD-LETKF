@@ -1,7 +1,9 @@
 module letkf
-  use iso_fortran_env
   use timing
+  use mpi
   use letkf_obs
+  use letkf_mpi
+  
   implicit none
 
   type :: letkf_solver
@@ -17,16 +19,23 @@ contains
   
   subroutine letkf_solver_run(self)
     class(letkf_solver) :: self
-    print *, "============================================================"
-    print *, " Unified Multi-Domain Local Ensemble Transform Kalman Filter"
-    print *, " (UMD-LETKF)"
-    print *, " version 0.0.0"
-    print *, "============================================================"
-    print *, ""
+
+    call letkf_mpi_init()
+
+    if (mpi_rank == 0) then
+       print *, "============================================================"
+       print *, " Unified Multi-Domain Local Ensemble Transform Kalman Filter"
+       print *, " (UMD-LETKF)"
+       print *, " version 0.0.0"
+       print *, "============================================================"
+       print *, ""
+    end if
 
     call self%read_config
     call self%read_obs
-    call timing_print()
+    if (mpi_rank == 0) call timing_print()
+    
+    call letkf_mpi_end()
   end subroutine letkf_solver_run
 
 
@@ -34,26 +43,19 @@ contains
   subroutine letkf_solver_read_config(self)
     class(letkf_solver) :: self
     logical :: ex
+    integer :: ierr
 
     
     call timing_start("config")
-
-    print *, ""
-    print *, "Reading LETKF configuration"
-    print *, "==========================================================="
+    if (mpi_rank == 0) then
+       print *, ""
+       print *, "Reading LETKF configuration"
+       print *, "============================================================"
+       print *, ""       
+    end if
+    call mpi_barrier(mpi_comm_world,ierr)
 
     call letkf_obs_init("obsdef.cfg", "platdef.cfg")
-    ! inquire(file=config_file, exist=ex)
-    ! if (.not. ex) then
-    !    write (error_unit, *) "ERROR: LETKF configuration file does not exist: ", trim(config_file)
-    !    stop 1
-    ! end if
-
-!    open(99, file=config_file, status="old")
-!    read(99, nml=master)
-!    close(99)
-!    print master
-    
     call timing_end("config")
   end subroutine letkf_solver_read_config
 
@@ -61,10 +63,17 @@ contains
   
   subroutine letkf_solver_read_obs(self)
     class(letkf_solver) :: self
+    integer :: ierr
+    
     call timing_start("obs")
 
-    print *, "Reading Observations"
-    print *, "==========================================================="
+    if (mpi_rank == 0) then
+       print *, ""
+       print *, "Reading Observations"
+       print *, "============================================================"
+       print *, ""       
+    end if
+    call mpi_barrier(mpi_comm_world,ierr)
     
     call timing_end("obs")    
   end subroutine letkf_solver_read_obs

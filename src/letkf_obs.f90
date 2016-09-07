@@ -1,4 +1,6 @@
 module letkf_obs
+  use letkf_mpi
+  
   implicit none
   private
 
@@ -128,13 +130,16 @@ contains
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
 
-    print *, ''
-    print *, 'LETKF observation configuration'
-    print *, '----------------------------------------'
-    print *, '  observation definition file: "', trim(obsdef_file),'"'
-    print *, '  platform    definition file: "', trim(platdef_file),'"'
-    print *, '  I/O format: ???'
-
+    if (mpi_rank == 0) then
+       print *, ''
+       print *, 'LETKF observation configuration files'
+       print *, '------------------------------------------------------------'
+       print *, '  observation definition file: "', trim(obsdef_file),'"'
+       print *, '  platform    definition file: "', trim(platdef_file),'"'
+       print *, '  I/O format: ???'
+       print *, ''       
+    end if
+    
     call obsdef_read(obsdef_file)
     call platdef_read(platdef_file)
     
@@ -154,8 +159,12 @@ contains
     integer :: obsdef_list_tmp_len
     integer :: i,j
 
-    print *, ""
-    print *, "Observation Definition File"
+    if (mpi_rank == 0) then
+       print *, ''       
+       print *, ""
+       print *, "Observation Definition File"
+       print *, "------------------------------------------------------------"
+    end if
 
     ! make sure the file exists
     inquire(file=file, exist=ex)
@@ -167,7 +176,7 @@ contains
     obsdef_list_tmp_len = 0
     
     ! open it up for reading
-    print *, 'reading file: "',trim(file),'"'
+    if (mpi_rank == 0)    print *, 'file = "',trim(file),'"'
     open(newunit=unit, file=file, action='read')
     do while (1==1)
        ! read a new line
@@ -222,11 +231,13 @@ contains
     obsdef_list = obsdef_list_tmp(1:obsdef_list_tmp_len)
 
     ! write summary
-    print *, 'obs defined = ', size(obsdef_list)
-    print "(A6,A10,A10,A5,A)", "ID", "NAME", "UNITS", "","FULL NAME"
-    do pos=1, size(obsdef_list)
-       call obsdef_list(pos)%print()
-    end do
+    if (mpi_rank == 0) then
+       print *, 'obs defined = ', size(obsdef_list)
+       print "(A6,A10,A10,A5,A)", "ID", "NAME", "UNITS", "","FULL NAME"
+       do pos=1, size(obsdef_list)
+          call obsdef_list(pos)%print()
+       end do
+    end if
 
     ! check for duplicate ID / short name
     i = 1
@@ -248,7 +259,7 @@ contains
     end do
 
     ! all done
-    print *, ""
+    if (mpi_rank == 0)    print *, ""
   end subroutine obsdef_read
 
 

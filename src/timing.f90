@@ -1,5 +1,4 @@
 module timing
-  use iso_fortran_env, only :error_unit
   implicit none
   private
   
@@ -42,7 +41,7 @@ contains
        active_timers = active_timers + 1
        i = active_timers
        if (active_timers > max_timers) then
-          write (error_unit, *) "ERROR, too many timers have been created, increase max_timers"
+          print *, "ERROR, too many timers have been created, increase max_timers"
           stop 1
        end if
        timer_objs(i)%name = timer
@@ -77,9 +76,11 @@ contains
     integer(kind=8) :: timer_rate
     real :: total
 
-    print *,"============================================================"
+    print *,""    
     print *,"Timing:"
+    print *,"============================================================"    
     print *,""
+    
 
     call system_clock(timer_objs(1)%end, timer_rate)
     total = (timer_objs(1)%end-timer_objs(1)%start)/timer_rate
