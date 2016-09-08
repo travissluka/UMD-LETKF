@@ -195,6 +195,11 @@ contains
             stop 1
        end if
 
+       ! convert tabs to spaces
+       do i = 1, len(line)
+          if (line(i:i) == char(9)) line(i:i) = ' '
+       end do
+       
        ! ignore comments
        s_tmp = adjustl(line)
        if (s_tmp(1:1) == '#') cycle
@@ -316,6 +321,11 @@ contains
             stop 1
        end if
 
+       ! convert tabs to spaces
+       do i = 1, len(line)
+          if (line(i:i) == char(9)) line(i:i) = ' '
+       end do       
+       
        ! ignore comments
        s_tmp = adjustl(line)
        if (s_tmp(1:1) == '#') cycle
