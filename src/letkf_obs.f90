@@ -46,7 +46,7 @@ module letkf_obs
      !! dependant error)
   end type observation
 
-
+  
   
   type obsdef
      !! The specification for a single user-defined observation type
@@ -124,6 +124,9 @@ module letkf_obs
   
 contains
 
+
+  ! ============================================================
+  ! ============================================================    
   subroutine letkf_obs_init(obsdef_file, platdef_file)
     character(len=*), optional, intent(in) :: obsdef_file
     !! observation definition file to read in. By default `letkf.obsdef`
@@ -149,6 +152,8 @@ contains
 
 
   
+  ! ============================================================
+  ! ============================================================    
   subroutine obsdef_read(file)    
     character(len=*), intent(in) :: file
 
@@ -166,7 +171,7 @@ contains
        print *, ""
        print *, "Observation Definition File"
        print *, "------------------------------------------------------------"
-       print *, 'file = "',trim(file),'"'       
+       print *, 'Reading file "',trim(file),'" ...'
     end if
 
     ! make sure the file exists
@@ -267,7 +272,10 @@ contains
   end subroutine obsdef_read
 
 
+
   
+  ! ============================================================
+  ! ============================================================    
   subroutine platdef_read(file)
     character(len=*), intent(in) :: file
     integer :: unit, pos, iostat
@@ -284,7 +292,7 @@ contains
        print *, ""
        print *, "Platform Definition File"
        print *, "------------------------------------------------------------"
-       print *, 'file = "',trim(file),'"'       
+       print *, 'Reading file "',trim(file),'" ...'       
     end if
 
     ! make sure the file exists
@@ -314,7 +322,7 @@ contains
 
        ! ignore empty lines
        if (len(trim(adjustl(line))) == 0) cycle
-
+          
        ! read ID
        line = adjustl(line)
        pos = findspace(line)
@@ -380,7 +388,9 @@ contains
   end subroutine platdef_read
 
 
-  
+
+  ! ============================================================
+  ! ============================================================  
   function obsdef_getbyid(id) result(res)
     !! returns information about an observation type given its id number.
     !! An error is thrown if the id is not found
@@ -393,6 +403,8 @@ contains
 
   
 
+  ! ============================================================
+  ! ============================================================    
   function obsdef_getbyname(name) result(res)
     !! @warning this has not been implemented    
     character(len=*), intent(in) :: name
@@ -402,7 +414,9 @@ contains
   end function obsdef_getbyname
 
 
-  
+
+  ! ============================================================
+  ! ============================================================    
   function platdef_getbyid(id) result(res)
     !! @warning this has not been implemented    
     integer, intent(in) :: id
@@ -412,7 +426,9 @@ contains
   end function platdef_getbyid
 
 
-  
+
+  ! ============================================================
+  ! ============================================================    
   function platdef_getbyname(name) result(res)
     !! @warning this has not been implemented
     
@@ -422,7 +438,10 @@ contains
     integer :: i
   end function platdef_getbyname
 
+  
 
+  ! ============================================================
+  ! ============================================================  
   subroutine obsdef_print(ob)
     class(obsdef), intent(in) :: ob
     print "(I6,A10,A10,A5,A)", ob%id, ob%name_short, &
@@ -431,12 +450,17 @@ contains
 
 
 
+  ! ============================================================
+  ! ============================================================    
   subroutine platdef_print(plat)
     class(platdef), intent(in) :: plat
     print "(I6,A10,A5,A)", plat%id, plat%name_short, &
          "", plat%name_long
   end subroutine platdef_print
 
+
+  ! ============================================================
+  ! ============================================================    
   function tolower(in_str) result(out_str)
     character(*), intent(in) :: in_str
     character(len(in_str)) :: out_str
@@ -453,6 +477,8 @@ contains
 
 
   
+  ! ============================================================
+  ! ============================================================    
   function toupper(in_str) result(out_str)
     character(*), intent(in) :: in_str
     character(len(in_str)) :: out_str
@@ -468,7 +494,9 @@ contains
   end function toupper
 
 
-  
+
+  ! ============================================================
+  ! ============================================================    
   function findspace(string)
     integer :: findspace
     character(len=*), intent(in) :: string
