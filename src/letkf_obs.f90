@@ -41,6 +41,8 @@ module letkf_obs
      !! Time (hours) from base time
      real(dp) :: val
      !! Observation value
+     real(dp) :: err
+     !! standard deviation of observation error
      integer :: qc
      !! Quality control flag. ( 0 = no errors, > 0 observation type
      !! dependant error)
