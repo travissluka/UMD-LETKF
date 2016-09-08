@@ -72,6 +72,8 @@ module letkf_obs
      !! short (3-4 character) name of platform type
      character(len=:), allocatable :: name_long
      !! longer more descriptive name of platform type
+   contains
+     procedure :: print => platdef_print     
   end type platdef
 
   
@@ -164,6 +166,7 @@ contains
        print *, ""
        print *, "Observation Definition File"
        print *, "------------------------------------------------------------"
+       print *, 'file = "',trim(file),'"'       
     end if
 
     ! make sure the file exists
@@ -176,7 +179,6 @@ contains
     obsdef_list_tmp_len = 0
     
     ! open it up for reading
-    if (mpi_rank == 0)    print *, 'file = "',trim(file),'"'
     open(newunit=unit, file=file, action='read')
     do while (1==1)
        ! read a new line
@@ -240,23 +242,25 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    i = 1
-    do while(i < size(obsdef_list))
-       j = i + 1
-       do while(j < size(obsdef_list))
-          if ( obsdef_list(i)%id == obsdef_list(j)%id) then
-             print *, "ERROR: multiple definitions for ID = ",&
-                  obsdef_list(j)%id
-             stop 1
-          else if( obsdef_list(i)%name_short==obsdef_list(j)%name_short) then
-             print *, "ERROR: multiple definitions for NAME = ",&
-                  obsdef_list(j)%name_short
-             stop 1
-          end if          
-          j = j + 1
+    if (mpi_rank == 0) then
+       i = 1
+       do while(i < size(obsdef_list))
+          j = i + 1
+          do while(j <= size(obsdef_list))
+             if ( obsdef_list(i)%id == obsdef_list(j)%id) then
+                print *, "ERROR: multiple definitions for ID = ",&
+                     obsdef_list(j)%id
+                stop 1
+             else if( obsdef_list(i)%name_short==obsdef_list(j)%name_short) then
+                print *, "ERROR: multiple definitions for NAME = ",&
+                     obsdef_list(j)%name_short
+                stop 1
+             end if
+             j = j + 1
+          end do
+          i = i + 1
        end do
-       i = i + 1
-    end do
+    end if
 
     ! all done
     if (mpi_rank == 0)    print *, ""
@@ -265,8 +269,114 @@ contains
 
   
   subroutine platdef_read(file)
-    !! @warning this has not been implemented        
     character(len=*), intent(in) :: file
+    integer :: unit, pos, iostat
+    character(len=1024) :: line, s_tmp
+    logical :: ex
+    type(platdef) :: new_plat
+    integer, parameter :: MAX_PLATDEF = 1024
+    type(platdef) :: platdef_list_tmp(MAX_PLATDEF)
+    integer :: platdef_list_tmp_len
+    integer :: i,j
+
+    if (mpi_rank == 0) then
+       print *, ''       
+       print *, ""
+       print *, "Platform Definition File"
+       print *, "------------------------------------------------------------"
+       print *, 'file = "',trim(file),'"'       
+    end if
+
+    ! make sure the file exists
+    inquire(file=file, exist=ex)
+    if (.not. ex) then
+       print *, 'ERROR: file does not exists: "',trim(file),'"'
+       stop 1
+    end if
+
+    platdef_list_tmp_len = 0
+    
+    ! open it up for reading
+    open(newunit=unit, file=file, action='read')
+    do while (1==1)
+       ! read a new line
+       read(unit, '(A)', iostat=iostat) line
+       if (iostat < 0) exit
+       if (iostat > 0) then
+          print *, 'ERROR: there was a problem reading "', &
+            trim(file), '" error code: ', iostat
+            stop 1
+       end if
+
+       ! ignore comments
+       s_tmp = adjustl(line)
+       if (s_tmp(1:1) == '#') cycle
+
+       ! ignore empty lines
+       if (len(trim(adjustl(line))) == 0) cycle
+
+       ! read ID
+       line = adjustl(line)
+       pos = findspace(line)
+       read(line(1:pos), *) new_plat%id
+
+       ! read short name
+       line = adjustl(line(pos+1:))
+       pos = findspace(line)
+       new_plat%name_short = toupper(trim(line(:pos-1)))
+
+       ! read long name
+       line = adjustl(line(pos+1:))
+       new_plat%name_long = trim(line)
+
+       ! add this one to the list
+       platdef_list_tmp_len = platdef_list_tmp_len + 1
+       if (platdef_list_tmp_len > MAX_PLATDEF) then
+          print *, 'ERROR, there are more platform definitions ',&
+               'than there is room for. Check the "',trim(file),&
+               '" file, and/or increase MAX_PLATDEF.'
+          print *, 'MAX_PLATDEF = ',MAX_PLATDEF
+          stop 1
+       end if
+       platdef_list_tmp(platdef_list_tmp_len) = new_plat
+    end do
+    
+    close (unit)
+    allocate(platdef_list(platdef_list_tmp_len))
+    platdef_list = platdef_list_tmp(1:platdef_list_tmp_len)
+
+    ! write summary
+    if (mpi_rank == 0) then
+       print *, 'platforms defined = ', size(platdef_list)
+       print "(A6,A10,A5,A)", "ID", "NAME", "","DESCRIPTION"
+       do pos=1, size(platdef_list)
+          call platdef_list(pos)%print()
+       end do
+    end if
+
+    ! check for duplicate ID / short name
+    if (mpi_rank == 0) then
+       i = 1
+       do while(i < size(platdef_list))
+          j = i + 1
+          do while(j <= size(platdef_list))
+             if ( platdef_list(i)%id == platdef_list(j)%id) then
+                print *, "ERROR: multiple definitions for ID = ",&
+                     platdef_list(j)%id
+                stop 1
+             else if( platdef_list(i)%name_short==platdef_list(j)%name_short) then
+                print *, "ERROR: multiple definitions for NAME = ",&
+                     platdef_list(j)%name_short
+                stop 1
+             end if
+             j = j + 1
+          end do
+          i = i + 1
+       end do
+    end if
+    
+    ! all done
+    if (mpi_rank == 0)    print *, ""    
   end subroutine platdef_read
 
 
@@ -319,6 +429,13 @@ contains
          ob%units, " ", ob%name_long
   end subroutine obsdef_print
 
+
+
+  subroutine platdef_print(plat)
+    class(platdef), intent(in) :: plat
+    print "(I6,A10,A5,A)", plat%id, plat%name_short, &
+         "", plat%name_long
+  end subroutine platdef_print
 
   function tolower(in_str) result(out_str)
     character(*), intent(in) :: in_str
