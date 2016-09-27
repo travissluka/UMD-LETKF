@@ -137,7 +137,7 @@ contains
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
 
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, ''
        print *, 'LETKF observation configuration files'
        print *, '------------------------------------------------------------'
@@ -168,7 +168,7 @@ contains
     integer :: obsdef_list_tmp_len
     integer :: i,j
 
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, ''       
        print *, ""
        print *, "Observation Definition File"
@@ -245,7 +245,7 @@ contains
     obsdef_list = obsdef_list_tmp(1:obsdef_list_tmp_len)
 
     ! write summary
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, 'obs defined = ', size(obsdef_list)
        print "(A6,A10,A10,A5,A)", "ID", "NAME", "UNITS", "","FULL NAME"
        do pos=1, size(obsdef_list)
@@ -254,7 +254,7 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        i = 1
        do while(i < size(obsdef_list))
           j = i + 1
@@ -275,7 +275,7 @@ contains
     end if
 
     ! all done
-    if (mpi_rank == 0)    print *, ""
+    if (pe_isroot)    print *, ""
   end subroutine obsdef_read
 
 
@@ -294,7 +294,7 @@ contains
     integer :: platdef_list_tmp_len
     integer :: i,j
 
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, ''       
        print *, ""
        print *, "Platform Definition File"
@@ -366,7 +366,7 @@ contains
     platdef_list = platdef_list_tmp(1:platdef_list_tmp_len)
 
     ! write summary
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, 'platforms defined = ', size(platdef_list)
        print "(A6,A10,A5,A)", "ID", "NAME", "","DESCRIPTION"
        do pos=1, size(platdef_list)
@@ -375,7 +375,7 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        i = 1
        do while(i < size(platdef_list))
           j = i + 1
@@ -396,7 +396,7 @@ contains
     end if
     
     ! all done
-    if (mpi_rank == 0)    print *, ""    
+    if (pe_isroot)    print *, ""    
   end subroutine platdef_read
 
 

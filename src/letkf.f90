@@ -19,10 +19,17 @@ contains
   
   subroutine letkf_solver_run(self)
     class(letkf_solver) :: self
+    integer :: t_total, t_init, t_letkf
 
+    t_total = timer_init("Total Runtime")
+    call timer_start(t_total)
+
+    ! Initialize
+    t_init = timer_init("Initialize")
+    call timer_start(t_init)
+    
     call letkf_mpi_init()
-
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, "============================================================"
        print *, " Unified Multi-Domain Local Ensemble Transform Kalman Filter"
        print *, " (UMD-LETKF)"
@@ -33,9 +40,22 @@ contains
 
     call self%read_config
     call self%read_obs
-    if (mpi_rank == 0) call timing_print()
+    call timer_stop(t_init)
+    
+    ! run LETKF
+    t_letkf = timer_init("core", TIMER_SYNC)
+    call timer_start(t_letkf)
+    call timer_stop(t_letkf)
+    
+    ! all done
+    
+    call timer_stop(t_total)
+
+    call timer_print()
     
     call letkf_mpi_end()
+
+    
   end subroutine letkf_solver_run
 
 
@@ -45,18 +65,21 @@ contains
     logical :: ex
     integer :: ierr
 
+    integer :: timer
+
+    timer = timer_init("read config", TIMER_SYNC)
+    call timer_start(timer)
     
-    call timing_start("config")
-    if (mpi_rank == 0) then
+    if (pe_isroot) then
        print *, ""
        print *, "Reading LETKF configuration"
        print *, "============================================================"
        print *, ""       
     end if
-    call mpi_barrier(mpi_comm_world,ierr)
 
     call letkf_obs_init("obsdef.cfg", "platdef.cfg")
-    call timing_end("config")
+    call timer_stop(timer)
+    
   end subroutine letkf_solver_read_config
 
   
@@ -64,18 +87,20 @@ contains
   subroutine letkf_solver_read_obs(self)
     class(letkf_solver) :: self
     integer :: ierr
-    
-    call timing_start("obs")
 
-    if (mpi_rank == 0) then
+    integer :: timer
+
+    timer = timer_init("obs read", TIMER_SYNC)
+    call timer_start(timer)
+
+    if (pe_isroot) then
        print *, ""
        print *, "Reading Observations"
        print *, "============================================================"
        print *, ""       
     end if
-    call mpi_barrier(mpi_comm_world,ierr)
     
-    call timing_end("obs")    
+    call timer_stop(timer)
   end subroutine letkf_solver_read_obs
   
 end module letkf
