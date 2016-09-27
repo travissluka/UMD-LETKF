@@ -13,6 +13,8 @@ module letkf
      procedure :: read_obs => letkf_solver_read_obs
   end type letkf_solver
 
+
+  integer :: mem
   
 contains
 
@@ -21,12 +23,19 @@ contains
     class(letkf_solver) :: self
     integer :: t_total, t_init, t_letkf
 
+
+    namelist /letkf_settings/ mem
+    
     t_total = timer_init("Total Runtime")
     call timer_start(t_total)
 
     ! Initialize
     t_init = timer_init("Initialize")
     call timer_start(t_init)
+
+    open(90, file="letkf.nml")
+    read(90, nml=letkf_settings)
+    close(90)
     
     call letkf_mpi_init()
     if (pe_isroot) then
@@ -36,8 +45,10 @@ contains
        print *, " version 0.0.0"
        print *, "============================================================"
        print *, ""
+       print letkf_settings
     end if
-
+    call letkf_mpi_init2(mem)
+    
     call self%read_config
     call self%read_obs
     call timer_stop(t_init)

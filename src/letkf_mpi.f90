@@ -1,10 +1,16 @@
 module letkf_mpi
   use mpi
-
+  implicit none
+  
   integer, save :: pe_root, pe_rank, pe_size
   integer, save :: mpi_comm_letkf
 
   logical, save :: pe_isroot
+
+  integer, save, allocatable :: ens_list(:)
+  integer, save :: ens_count
+
+
   
 contains
 
@@ -27,15 +33,58 @@ contains
 
     pe_isroot = pe_root == pe_rank
     
-
-    if (pe_isroot) then       
-       print *, "Using MPI nproc =", pe_size
-       print *, "Using MPI root  =", pe_root
-       print *,""
-    end if
-
   end subroutine letkf_mpi_init
 
+
+
+  !############################################################
+  subroutine letkf_mpi_init2(mem)
+    integer, intent(in) :: mem    
+    integer :: ierr, i, j
+    integer :: count, prev
+    !TODO: allow for more complicated layouts
+        
+    call mpi_barrier(mpi_comm_letkf, ierr)
+
+    ! print header info
+    if (pe_isroot) then
+       print '(A)', ""
+       print '(A)', "MPI configuration"
+       print '(A)', "------------------------------------------------------------"
+       print '(A,I4)', "Using MPI nproc =", pe_size
+       print '(A,I4)', "Using MPI root  =", pe_root
+       print '(A)', "ensemble member list:"
+    end if
+
+
+    prev = 0
+    do i=0, pe_size-1      
+       !determine how many ensemble members number this PE should deal with
+       count = mem / pe_size
+       if (i < mod(mem, pe_size)) count = count + 1
+
+       !
+       if (i == pe_rank) then
+          ens_count = count
+          allocate(ens_list(count))
+          do j=1,count
+             ens_list(j) = prev+j
+          end do
+       end if
+
+       ! if root proc, print out info about each PE
+       if (pe_isroot) then
+          if (count > 0) then
+             print '(A,I4,A,I4,A,I4)', "  PE ", i,':', prev+1, ' to ',count+prev
+          else
+             print '(A,I4,A)', "  PE ", i,':'
+          end if
+       end if
+       
+       prev = prev + count
+    end do
+    
+  end subroutine letkf_mpi_init2
   
 
   !############################################################
