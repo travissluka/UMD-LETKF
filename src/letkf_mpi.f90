@@ -53,7 +53,7 @@ contains
        print '(A)', "------------------------------------------------------------"
        print '(A,I4)', "Using MPI nproc =", pe_size
        print '(A,I4)', "Using MPI root  =", pe_root
-       print '(A)', "ensemble member list:"
+       print '(A)', "ensemble member I/O list:"
     end if
 
 
@@ -74,10 +74,12 @@ contains
 
        ! if root proc, print out info about each PE
        if (pe_isroot) then
-          if (count > 0) then
-             print '(A,I4,A,I4,A,I4)', "  PE ", i,':', prev+1, ' to ',count+prev
+          if (count > 1) then
+             print '(A,I4,A,I4,A,I4,A,I4)', " proc ", i,' is I/O for ',count,' ensemble member(s): ', prev+1, ' to ',count+prev
+          else if (count == 1) then
+             print '(A,I4,A,I4)', " proc ", i,' is I/O for    1 ensemble member(s): ', prev+1
           else
-             print '(A,I4,A)', "  PE ", i,':'
+             print '(A,I4,A)', " proc ", i,' is I/O for    0 ensemble member(s)'
           end if
        end if
        

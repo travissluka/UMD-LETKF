@@ -30,7 +30,7 @@ contains
   subroutine obs_write_nc(self, file, obs, iostat)
     class(obsio_nc) :: self
     character(len=*), intent(in) :: file
-    class(observation), intent(in) :: obs(:)    
+    type(observation), intent(in) :: obs(:)    
     integer, optional, intent(out) :: iostat
 
     integer :: nobs, n
@@ -151,10 +151,12 @@ contains
 
 
   !============================================================  
-  subroutine obs_read_nc(self, file, obs, iostat)
+  subroutine obs_read_nc(self, file, obs, obs_inov, obs_qc, iostat)
     class(obsio_nc) :: self    
     character(len=*), intent(in) :: file
-    class(observation), allocatable, intent(out) :: obs(:)
+    type(observation), allocatable, intent(out) :: obs(:)
+    real(dp), allocatable, intent(out) :: obs_inov(:)
+    integer, allocatable, intent(out) :: obs_qc(:)
     integer, intent(out), optional :: iostat
 
     integer :: nobs, n

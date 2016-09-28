@@ -9,11 +9,11 @@ module letkf_obs
   public :: obsio, I_obsio_write, I_obsio_read
 
   ! observation definitions
-  public :: obsdef
+  public :: obsdef, obsdef_list
   public :: obsdef_read,  obsdef_getbyname,  obsdef_getbyid
 
   !platform definitions
-  public :: platdef
+  public :: platdef, platdef_list
   public :: platdef_read, platdef_getbyname, platdef_getbyid
  
 
@@ -99,18 +99,23 @@ module letkf_obs
        class(obsio) :: self
        character(len=*), intent(in)   :: file
        !! filename to write observations to
-       class(observation), intent(in) :: obs(:)
+       type(observation), intent(in) :: obs(:)
        !! list of 1 or more observatiosn to write
        integer, optional, intent(out) :: iostat
      end subroutine I_obsio_write
 
-     subroutine I_obsio_read(self, file, obs, iostat)
+     subroutine I_obsio_read(self, file, obs, obs_inov, obs_qc, iostat)
        !! interface for procedures to load observation data
        import observation
        import obsio
+       import dp
        class(obsio) :: self
        character(len=*), intent(in) :: file
-       class(observation), intent(out) :: obs(:)
+       
+       type(observation),allocatable, intent(out) :: obs(:)
+       real(dp), allocatable, intent(out) :: obs_inov(:)
+       integer,  allocatable, intent(out) :: obs_qc(:)
+       
        integer, optional, intent(out) :: iostat
      end subroutine I_obsio_read
   end interface
