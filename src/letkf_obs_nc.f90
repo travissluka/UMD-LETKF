@@ -78,8 +78,8 @@ contains
     call check( nf90_def_var(ncid, "err",   nf90_real, dimid, varid))
     call check( nf90_put_att(ncid, varid, "long_name", "observation error"))
     
-    call check( nf90_def_var(ncid, "qc",    nf90_int,  dimid, varid))
-    call check( nf90_put_att(ncid, varid, "long_name", "quality control"))
+!    call check( nf90_def_var(ncid, "qc",    nf90_int,  dimid, varid))
+!    call check( nf90_put_att(ncid, varid, "long_name", "quality control"))
 
     call check( nf90_enddef(ncid))
 
@@ -132,11 +132,11 @@ contains
     call check( nf90_inq_varid(ncid, "err", varid))
     call check( nf90_put_var(ncid, varid, tmp_r))
 
-    do n=1, nobs
-       tmp_i(n) = obs(n)%qc
-    end do
-    call check( nf90_inq_varid(ncid, "qc", varid))
-    call check( nf90_put_var(ncid, varid, tmp_i))
+    ! do n=1, nobs
+    !    tmp_i(n) = obs(n)%qc
+    ! end do
+    ! call check( nf90_inq_varid(ncid, "qc", varid))
+    ! call check( nf90_put_var(ncid, varid, tmp_i))
 
     ! all done, cleanup
     
@@ -151,11 +151,11 @@ contains
 
 
   !============================================================  
-  subroutine obs_read_nc(self, file, obs, obs_inov, obs_qc, iostat)
+  subroutine obs_read_nc(self, file, obs, obs_innov, obs_qc, iostat)
     class(obsio_nc) :: self    
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
-    real(dp), allocatable, intent(out) :: obs_inov(:)
+    real(dp), allocatable, intent(out) :: obs_innov(:)
     integer, allocatable, intent(out) :: obs_qc(:)
     integer, intent(out), optional :: iostat
 
@@ -225,11 +225,11 @@ contains
        obs(n)%err = tmp_r(n)
     end do
 
-    call check( nf90_inq_varid(ncid, "qc", varid))
-    call check( nf90_get_var(ncid, varid, tmp_i))
-    do n=1,nobs
-       obs(n)%qc = tmp_i(n)
-    end do
+    ! call check( nf90_inq_varid(ncid, "qc", varid))
+    ! call check( nf90_get_var(ncid, varid, tmp_i))
+    ! do n=1,nobs
+    !    obs(n)%qc = tmp_i(n)
+    ! end do
     
     ! close / cleanup
     call check( nf90_close(ncid))  

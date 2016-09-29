@@ -1,10 +1,16 @@
 module letkf_obs
   use letkf_mpi
+  use timing
+  use global
+  use kdtree
   
   implicit none
   private
 
-  public :: letkf_obs_init
+  ! public subroutines
+  public :: letkf_obs_init, letkf_obs_read
+
+  ! observation and obsio class
   public :: observation
   public :: obsio, I_obsio_write, I_obsio_read
 
@@ -19,8 +25,6 @@ module letkf_obs
 
   !------------------------------------------------------------
   
-  integer, parameter :: dp=kind(0.0d0)
-
 
   
   type observation
@@ -43,9 +47,9 @@ module letkf_obs
      !! Observation value
      real(dp) :: err
      !! standard deviation of observation error
-     integer :: qc
-     !! Quality control flag. ( 0 = no errors, > 0 observation type
-     !! dependant error)
+!     integer :: qc
+     !! Quality control flag. ( 0 = no errors, > 0 removed by obs op, < 0
+     !! removed by LETKF qc
   end type observation
 
   
@@ -104,7 +108,7 @@ module letkf_obs
        integer, optional, intent(out) :: iostat
      end subroutine I_obsio_write
 
-     subroutine I_obsio_read(self, file, obs, obs_inov, obs_qc, iostat)
+     subroutine I_obsio_read(self, file, obs, obs_innov, obs_qc, iostat)
        !! interface for procedures to load observation data
        import observation
        import obsio
@@ -113,7 +117,7 @@ module letkf_obs
        character(len=*), intent(in) :: file
        
        type(observation),allocatable, intent(out) :: obs(:)
-       real(dp), allocatable, intent(out) :: obs_inov(:)
+       real(dp), allocatable, intent(out) :: obs_innov(:)
        integer,  allocatable, intent(out) :: obs_qc(:)
        
        integer, optional, intent(out) :: iostat
@@ -125,6 +129,11 @@ module letkf_obs
   type(obsdef),  allocatable ::  obsdef_list(:)
   type(platdef), allocatable :: platdef_list(:)
 
+  type(kd_root)                  :: obs_tree
+  type(observation), allocatable :: obs_list(:)
+  integer, allocatable           :: obs_qc(:)
+  real(dp), allocatable          :: obs_ohx(:,:)
+  real(dp), allocatable          :: obs_ohx_mean(:)
   
   !------------------------------------------------------------
 
@@ -156,6 +165,214 @@ contains
     call platdef_read(platdef_file)
     
   end subroutine letkf_obs_init
+
+
+
+  ! ============================================================
+  ! ============================================================    
+  subroutine letkf_obs_read(reader)
+    class(obsio), intent(in) :: reader    
+
+    integer :: ierr
+    integer :: i, j
+    integer :: timer, timer2, timer3, timer4
+
+    character(len=1024) :: filename    
+    
+    integer, allocatable :: obs_qc_l(:,:)
+
+    type(observation), allocatable :: obs_t(:)
+    real(dp), allocatable :: obs_ohx_t(:)
+    integer, allocatable :: obs_qc_t(:)
+
+    integer, allocatable :: obstat_count(:,:)
+    integer, allocatable :: obplat_count(:,:)
+
+    real(dp), allocatable :: obs_lons(:), obs_lats(:)
+    integer :: cnt
+
+    timer  = timer_init("obs read", TIMER_SYNC)
+    timer2 = timer_init("obs read I/O")
+    timer3 = timer_init("obs read MPI", timer_sync)
+    timer4 = timer_init("obs kd_init")
+    
+    call timer_start(timer)
+
+    if (pe_isroot) then
+       print *, ""
+       print *, "Reading Observations"
+       print *, "============================================================"
+    end if
+
+    ! parallel read of the observation innovation files for each ensemble member
+    do i=1,size(ens_list)
+       write (filename, '(A,I0.3,A)') 'data/obsop/2005070300_atm',ens_list(i),'.dat'
+
+       ! read the file
+       !TODO, not the most efficient, general observation information is not
+       ! needed with every single ensemble member, this should be in a separate
+       ! file, with each ens member file only containing the obs space value and qc
+       call timer_start(timer2)       
+       call reader%read(filename, obs_t, obs_ohx_t, obs_qc_t)
+       call timer_stop(timer2)
+
+       ! create the obs storage if it hasn't already been done
+       if (.not. allocated(obs_list)) then
+          allocate(obs_list(size(obs_t)))
+          obs_list = obs_t
+          allocate(obs_ohx( mem, size(obs_ohx_t)))
+          allocate(obs_ohx_mean( size(obs_ohx_t)))          
+          allocate(obs_qc_l( mem, size(obs_qc_t)))
+       end if
+
+       ! copy the per ensemble member innovation and qc
+       obs_ohx(ens_list(i), :) = obs_ohx_t(:)
+       obs_qc_l (ens_list(i), :) = obs_qc_t(:)
+
+       !cleanup
+       deallocate(obs_t)
+       deallocate(obs_ohx_t)
+       deallocate(obs_qc_t)
+    end do
+
+    
+    ! distribute the qc and innovation values
+    ! TODO, using MPI_SUM is likely inefficient, do this another way
+    call timer_start(timer3)    
+    call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real8, mpi_sum, mpi_comm_letkf, ierr)
+    call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
+    call timer_stop(timer3)
+
+
+    ! calculate the combined QC
+    allocate(obs_qc(size(obs_list)))
+    do i=1,size(obs_list)
+       obs_qc(i) = sum(obs_qc_l(:,i))
+    end do
+    deallocate(obs_qc_l)
+
+    ! calculate ohx perturbations
+    do i=1,size(obs_list)
+       obs_ohx_mean(i) = sum(obs_ohx(:,i))/mem
+       obs_ohx(:,i) = obs_ohx(:,i) - obs_ohx_mean(i)
+    end do
+
+    !TODO basic QC checks on the observations
+    ! TODO: check stddev of ohx, problems if == 0 (odds of this happening though?)
+    do i=1,size(obs_list)
+       if (obs_qc(i) == 0) then
+          if( abs(obs_ohx_mean(i)-obs_list(i)%val)/obs_list(i)%err  > obsqc_maxstd) then
+             obs_qc(i) = -1
+          end if
+       end if
+    end do
+
+    !TODO: keep track of invalid obs or plat IDs
+    !TODO: set qc < 0 for invalid obs or plat IDs
+    
+    ! add locations to the kd-tree
+    ! TODO: dont add obs to the tree that have a bad QC value
+    allocate(obs_lons(size(obs_list)))
+    allocate(obs_lats(size(obs_list)))
+    call timer_start(timer4)
+    call kd_init(obs_tree, obs_lons, obs_lats)
+    call timer_stop(timer4)
+    deallocate(obs_lons)
+    deallocate(obs_lats)
+    
+    ! print statistics about the observations
+    if (pe_isroot) then
+       print '(I11,A)', size(obs_list), " observations loaded"
+
+       allocate(obstat_count (size(obsdef_list)+1,  4))
+       allocate(obplat_count (size(platdef_list)+1, 4))
+       
+       obstat_count = 0
+       obplat_count = 0
+
+       ! count
+       do i=1,size(obs_list)
+          if (obs_qc(i) == 0) then
+             cnt = 2
+          else if (obs_qc(i) > 0) then
+             cnt = 3
+          else
+             cnt = 4
+          end if
+
+          ! if (obs_list(i)%id == 1220 .and. obs_qc(i) < 0) then
+          !    print *, obs_qc(i)
+          !    print *, obs_ohx_mean(i)
+          !    print *, obs_list(i)
+          !    print *, obs_ohx(:,i)
+          !    print *,""
+          ! end if
+          
+          ! count by obs type
+          do j=1,size(obsdef_list)
+             if (obs_list(i)%id == obsdef_list(j)%id) then
+                obstat_count(j,1) = obstat_count(j,1) + 1
+                obstat_count(j,cnt) = obstat_count(j,cnt) + 1
+                exit
+             end if
+          end do
+          if (j > size(obsdef_list)) &
+               obstat_count(size(obsdef_list)+1,1) = obstat_count(size(obsdef_list)+1,1) + 1
+
+          ! count by plat type
+          do j=1,size(platdef_list)
+             if (obs_list(i)%plat == platdef_list(j)%id) then
+                obplat_count(j,1) = obplat_count(j,1) + 1
+                obplat_count(j,cnt) = obplat_count(j,cnt) + 1
+                exit
+             end if
+          end do
+          if (j > size(platdef_list)) &
+               obplat_count(size(platdef_list)+1,1) = obplat_count(size(platdef_list)+1,1) + 1
+       end do
+
+       ! print for counts by obs type
+       print *, ""
+       print '(4A10,A12)', '','total','bad-obop','bad-qc','good'
+       print *, '         --------------------------------------------'       
+       do i=1,size(obstat_count,1)
+          if (obstat_count(i,1) == 0) cycle
+          if (i < size(obstat_count,1)) then
+             print '(A10,I10, 2I10, I10,A2,F5.1,A)',&
+                  obsdef_list(i)%name_short, obstat_count(i,1), &
+                  obstat_count(i,3), obstat_count(i,4), &
+                  obstat_count(i,2), '(',real(obstat_count(i,2))/obstat_count(i,1)*100, ')%'
+          else
+             print '(A10,I10,3A10,A)', 'unknown', obstat_count(i,1),'X','X','0',' (  0.0)%'
+             
+          end if
+       end do
+
+       ! print stats for counts by plat type
+       print *, ""
+       print '(4A10,A12)', '','total','bad-obop','bad-qc','good'
+       print *, '         --------------------------------------------'       
+       do i=1,size(obplat_count,1)
+          if (obplat_count(i,1) == 0) cycle
+          if (i < size(obplat_count,1)) then
+             print '(A10,I10, 2I10, I10,A2,F5.1,A)',&
+                  platdef_list(i)%name_short, obplat_count(i,1), &
+                  obplat_count(i,3), obplat_count(i,4),&                  
+                  obplat_count(i,2), '(',real(obplat_count(i,2))/obplat_count(i,1)*100, ')%'
+
+          else
+             print '(A10,I10,3A10,A)', 'unknown', obplat_count(i,1),'X','X','0',' (  0.0)%'
+          end if
+       end do
+       
+       !cleanup
+       deallocate(obstat_count)
+       deallocate(obplat_count)
+    end if
+    
+
+    call timer_stop(timer)
+  end subroutine letkf_obs_read
 
 
   
@@ -526,4 +743,5 @@ contains
     if (i >= len(string)) i = -1
     findspace = i    
   end function findspace
+
 end module letkf_obs

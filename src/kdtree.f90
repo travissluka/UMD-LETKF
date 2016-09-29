@@ -126,7 +126,6 @@ contains
     
     
     ! generate initial unsorted index array
-    write (*,*) "Initializing kd-tree with ", size(lons), "locations"
     allocate(root%ptindx(size(lons)))
     do n=1, size(root%ptindx)
        root%ptindx(n) = n

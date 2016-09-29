@@ -29,11 +29,11 @@ contains
 
 
 
-  subroutine obsio_dat_read(self, file, obs, obs_inov, obs_qc, iostat)
+  subroutine obsio_dat_read(self, file, obs, obs_innov, obs_qc, iostat)
     class(obsio_dat) :: self
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
-    real(dp), allocatable, intent(out) :: obs_inov(:)
+    real(dp), allocatable, intent(out) :: obs_innov(:)
     integer,  allocatable, intent(out) :: obs_qc(:)    
     integer, optional, intent(out) :: iostat
 
@@ -43,10 +43,10 @@ contains
     ! determine the number of observations that will be read in
     inquire(file=file, size=filesize)
     allocate( obs(filesize/4/12) ) !TODO, do this better
-    allocate( obs_inov(filesize/4/12) )
+    allocate( obs_innov(filesize/4/12) )
     allocate( obs_qc(filesize/4/12) )
 
-    open(newunit=unit, file=file, form='unformatted', access='sequential')
+    open(newunit=unit, file=file, form='unformatted', access='sequential', action='read')
     do i = 1, size(obs)
        read(unit) record
        obs(i)%id    = record(1)
@@ -57,9 +57,16 @@ contains
        obs(i)%err   = record(6)
        obs(i)%plat  = record(7)
        obs(i)%time  = record(8)
-       obs_inov(i)  = record(9)
+       obs_innov(i)  = record(9)
        obs_qc(i)    = record(10)
-       
+
+       !TODO: temporary, remove this
+       if (obs(i)%id == 1100) obs_innov(i) = obs_innov(i) / 100.0
+       if (obs_qc(i) == 0) then
+          obs_qc(i) = 1
+       else
+          obs_qc(i) = 0
+       end if
     end do
     close(unit)
   end subroutine obsio_dat_read
