@@ -25,6 +25,8 @@ module letkf_mpi
   integer, save :: ij_count
 
 
+  real, allocatable, save :: load_weights(:)
+  
   integer, allocatable, save :: scatterv_count(:)
   integer, allocatable, save :: scatterv_displ(:)
   
@@ -76,6 +78,15 @@ contains
         
     call mpi_barrier(mpi_comm_letkf, ierr)
 
+    !TODO load weights
+    allocate(load_weights(pe_size))
+    load_weights = 1
+    load_weights(1) = 2.325
+    load_weights(2) = 0.7
+    load_weights(3) = 0.375
+    load_weights(4) = 0.75
+    load_weights = load_weights / sum(load_weights)
+    
     ! print header info
     if (pe_isroot) then
        print '(A)', ""
@@ -133,8 +144,11 @@ contains
     end if    
     prev = 0
     do i=0, pe_size-1      
-       count = (grid_x*grid_y) / pe_size
-       if (i < mod(grid_x*grid_y,pe_size)) count = count +1
+!       count = (grid_x*grid_y) / pe_size
+       count = (grid_x*grid_y) * load_weights(i+1)
+       !       if (i < mod(grid_x*grid_y,pe_size)) count = count +1
+       if (i == pe_size-1) count = (grid_x*grid_y) - prev
+       
        if (i == pe_rank) then
           ij_count = count
           allocate(ij_list(count))
