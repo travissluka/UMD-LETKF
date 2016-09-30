@@ -5,10 +5,11 @@ module letkf_obs
   use kdtree
   
   implicit none
-  private
+!  private
 
   ! public subroutines
-  public :: letkf_obs_init, letkf_obs_read
+  public :: letkf_obs_init
+  public :: letkf_obs_read
 
   ! observation and obsio class
   public :: observation
@@ -127,7 +128,9 @@ module letkf_obs
 
   !------------------------------------------------------------
   type(obsdef),  allocatable ::  obsdef_list(:)
+  !! list of all observation types
   type(platdef), allocatable :: platdef_list(:)
+  !! list of all platform types for observations
 
   type(kd_root)                  :: obs_tree
   type(observation), allocatable :: obs_list(:)
@@ -141,8 +144,6 @@ module letkf_obs
 contains
 
 
-  ! ============================================================
-  ! ============================================================    
   subroutine letkf_obs_init(obsdef_file, platdef_file)
     character(len=*), optional, intent(in) :: obsdef_file
     !! observation definition file to read in. By default `letkf.obsdef`
@@ -168,10 +169,10 @@ contains
 
 
 
-  ! ============================================================
-  ! ============================================================    
   subroutine letkf_obs_read(reader)
-    class(obsio), intent(in) :: reader    
+    !! parallel read in of observation    
+    class(obsio), intent(in) :: reader
+    !! abstract reader class
 
     integer :: ierr
     integer :: i, j
@@ -205,6 +206,7 @@ contains
     end if
 
     ! parallel read of the observation innovation files for each ensemble member
+    !! @TODO un-hardcode this
     do i=1,size(ens_list)
        write (filename, '(A,I0.3,A)') 'data/obsop/2005070300_atm',ens_list(i),'.dat'
 
@@ -274,7 +276,13 @@ contains
     ! TODO: dont add obs to the tree that have a bad QC value
     allocate(obs_lons(size(obs_list)))
     allocate(obs_lats(size(obs_list)))
+    do i=1,size(obs_list)
+       obs_lons(i) = obs_list(i)%lon
+       obs_lats(i) = obs_list(i)%lat       
+    end do
+    
     call timer_start(timer4)
+
     call kd_init(obs_tree, obs_lons, obs_lats)
     call timer_stop(timer4)
     deallocate(obs_lons)

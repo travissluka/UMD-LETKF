@@ -2,6 +2,8 @@ module letkf_obs_nc
   
   use letkf_obs
   use netcdf
+  use global
+  
   implicit none
 
   private
@@ -9,7 +11,6 @@ module letkf_obs_nc
   
   public :: obsio_nc
 
-  integer, parameter :: dp=kind(0.0d0)
 
   
   !============================================================  

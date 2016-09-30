@@ -146,7 +146,7 @@ contains
        call mpi_reduce (tdif2, tdif2g, 1, mpi_real, mpi_sum, pe_root, mpi_comm_letkf, ierr)
 
        if (pe_isroot) then
-          tdif2g = sqrt(tdif2g)
+          tdif2g = sqrt(tdif2g/pe_size)
           print '(A15,4F10.3)', trim(timer_objs(i)%name), tave, tmin, tmax, tdif2g
        end if
        

@@ -1,6 +1,7 @@
 module letkf_obs_dat
   use letkf_obs
   use letkf_mpi
+  use global
   
   implicit none
   private
@@ -8,8 +9,6 @@ module letkf_obs_dat
   public :: obsio_dat
   
   !------------------------------------------------------------
-
-  integer, parameter :: dp=kind(0.0d0)
 
   type, extends(obsio) :: obsio_dat
    contains

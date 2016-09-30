@@ -42,7 +42,7 @@ contains
     integer :: nobs
       !!number of observations, inferred from shape of `hdxb`      
     integer :: nbv
-      !!number of ensemble members, inferred from shape of `nbv`
+      !!number of ensemble members, inferred from shape of `hdxb`
 
     real(rsize) :: hdxb_rinv(size(hdxb,1), size(hdxb,2))
     real(rsize) :: work1(size(hdxb,2), size(hdxb,2))
