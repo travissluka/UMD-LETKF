@@ -128,7 +128,8 @@ contains
        deallocate(anal2d_sprd)       
     end if
 
-    
+
+    call letkf_write_ana()
     ! all done
     
     call timer_stop(t_total)
@@ -277,6 +278,52 @@ contains
 
 
 
+  !============================================================  
+  subroutine letkf_write_ana()
+    real, allocatable :: ana3d(:,:,:,:,:)
+    real, allocatable :: ana2d(:,:,:,:)
+    character(len=1024) :: filename
+    integer :: i,k,m, ierr
+    allocate(ana3d(grid_x, grid_y, grid_z, grid_3d, size(ens_list)))
+    allocate(ana2d(grid_x, grid_y, grid_2d, size(ens_list)))
+
+    if(pe_isroot) then
+       print *, "writing analysis ensemble members..."
+    end if
+
+    ! gather the ensemble members
+    do m=1,mem
+       ! distribute 3d variables
+       do i=1,grid_3d
+          do k=1,grid_z
+             call mpi_gatherv(&
+                  anal3d_ij(:,k,i,m), ij_count, mpi_real, &
+                  ana3d(:,:,k,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
+                  ens_map(m), mpi_comm_letkf, ierr)
+          end do
+       end do
+
+       !distribute 2d variables
+       do i=1,grid_2d
+          call mpi_gatherv(&
+               anal2d_ij(:,i,m), ij_count, mpi_real, &
+               ana2d(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
+               ens_map(m), mpi_comm_letkf, ierr)
+       end do
+    end do
+
+    ! write out the members this proc is responsible for
+    do m=1,size(ens_list)
+       write (filename, '(A,I0.3,A)') 'data/ana/ana',ens_list(m),'.grd'
+       call letkf_state_write(filename, ana3d(:,:,:,:,m), ana2d(:,:,:,m))
+    end do
+    
+    deallocate(ana3d)
+    deallocate(ana2d)
+
+  end subroutine letkf_write_ana
+
+  
   !============================================================
   subroutine letkf_read_gues()
     !! @todo move this out of this module

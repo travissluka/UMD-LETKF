@@ -13,6 +13,8 @@ module letkf_state
   
 contains
 
+
+  !============================================================
   subroutine letkf_state_read(filename, state_3d, state_2d)
     character(len=*), intent(in) :: filename
     real, intent(inout) :: state_3d(:,:,:,:)
@@ -44,11 +46,13 @@ contains
     end do
     close(unit)
   end subroutine letkf_state_read
+
   
+  !============================================================
   subroutine letkf_state_write(filename, state_3d, state_2d)
     character(len=*), intent(in) :: filename
-    real, allocatable, intent(in) :: state_3d(:,:,:,:)
-    real, allocatable, intent(in) :: state_2d(:,:,:)
+    real, intent(in) :: state_3d(:,:,:,:)
+    real, intent(in) :: state_2d(:,:,:)
 
     integer :: unit, nrec
     real :: r
