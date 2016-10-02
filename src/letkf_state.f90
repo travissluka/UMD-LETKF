@@ -13,6 +13,38 @@ module letkf_state
   
 contains
 
+  subroutine letkf_state_read(filename, state_3d, state_2d)
+    character(len=*), intent(in) :: filename
+    real, intent(inout) :: state_3d(:,:,:,:)
+    real, intent(inout) :: state_2d(:,:,:)
+    integer :: unit, nrec
+    integer :: l,k
+    real :: r
+    logical :: ex
+    
+    ! check to make sure the file exists
+    inquire(file=filename, exist=ex)
+    if (.not. ex) then
+       print *, "ERROR: file does not exists ",trim(filename)
+       stop 1
+    end if
+
+    ! read in the file
+    open(newunit=unit, file=filename, form='unformatted', access='direct',&
+         recl=grid_x*grid_y*sizeof(r))
+    nrec = 1
+    do l=1,grid_3d
+       do k=1,grid_z
+          read(unit, rec=nrec) state_3d(:,:,k,l)
+          nrec = nrec + 1
+       end do
+    end do
+    do l=1,grid_2d
+       read(unit, rec=nrec) state_2d(:,:,l)
+    end do
+    close(unit)
+  end subroutine letkf_state_read
+  
   subroutine letkf_state_write(filename, state_3d, state_2d)
     character(len=*), intent(in) :: filename
     real, allocatable, intent(in) :: state_3d(:,:,:,:)

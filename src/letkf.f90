@@ -148,7 +148,7 @@ contains
        print *, "============================================================"
     end if
     
-    timer1 = timer_init("kd_search")
+    timer1 = timer_init("obs search")
     timer2 = timer_init("letkf_core_solve")
     timer3 = timer_init("letkf_core trans")
 
@@ -157,13 +157,14 @@ contains
     
     do ij=1,ij_count
 
+       ! search for all observations in a given radius of this gridpoint
        call timer_start(timer1)
        call kd_search_radius(obs_tree, &
             (/lon_ij(ij)*1.0e0, lat_ij(ij)*1.0e0 /), 500.0e3, &
             rpoints, rdistance, rnum, .false.)
        call timer_stop(timer1)
 
-       ! only if there are observations to assimilate
+       ! if there are observations found, process them
        ob_cnt = 0
        do i=1,rnum
           n = rpoints(i)
@@ -175,8 +176,11 @@ contains
           rloc(ob_cnt) = 1.0
           dep(ob_cnt) = obs_ohx_mean(n) - obs_list(n)%val
        end do
-          
+
+       
+       ! if there are still good quality observations to assimilate, do so
        if (ob_cnt > 0) then
+          
           ! main LETKF equations
           call timer_start(timer2)
           call letkf_core_solve(&
@@ -184,8 +188,7 @@ contains
                dep(:ob_cnt), 1.0e0, trans)
           call timer_stop(timer2)
 
-
-          ! calculate the new ensemble member ( - guess mean)
+          ! calculate the ensemble increments
           call timer_start(timer3)
           call sgemm('n','n', grid_3d*grid_z, mem, mem, &
                1.0e0, gues3d_ij(ij,:,:,:), grid_3d*grid_z, &
@@ -303,28 +306,7 @@ contains
     !! @todo un-hardcode this
     do m=1,size(ens_list)
        write (filename, '(A,I0.3,A)') 'data/gues/gues',ens_list(m),'.grd'
-
-       ! check to make sure file exists
-       inquire(file=filename, exist=ex)
-       if (.not. ex) then
-          print *, "ERROR: file does not exist ",filename
-          stop 1
-       end if
-
-       !read in the file
-       open(newunit=unit, file=filename, form='unformatted', access='direct', recl=grid_x*grid_y*4)
-       nrec=1
-       do l=1,grid_3d
-          do k=1,grid_z
-             read(unit,rec=nrec) gues3d(:,:,k,l,m)
-             nrec = nrec + 1
-          end do
-       end do
-       do l=1,grid_2d
-          read(unit, rec=nrec) gues2d(:,:,l,m)
-          nrec = nrec + 1
-       end do      
-       close(unit)
+       call letkf_state_read(filename, gues3d(:,:,:,:,m), gues2d(:,:,:,m))
     end do
     call timer_stop(timer2)
 
