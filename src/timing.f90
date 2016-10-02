@@ -46,9 +46,9 @@ contains
 
 
   !############################################################
-  function timer_init(name, flags, grain) result(id)
+  function timer_init(name, flags) result(id)
     character(len=*), intent(in) :: name
-    integer, optional, intent(in) :: flags, grain
+    integer, optional, intent(in) :: flags
     integer :: id
 
     id = gettimer(name)
@@ -136,7 +136,7 @@ contains
     call system_clock(count_rate=timer_rate)
     i = 1
     do while (i <= active_timers)
-       t = (timer_objs(i)%total_ticks)/real(timer_rate)
+       t = real(timer_objs(i)%total_ticks)/real(timer_rate)
 
        call mpi_reduce   (t, tmin, 1, mpi_real, mpi_min, pe_root, mpi_comm_letkf, ierr)
        call mpi_reduce   (t, tmax, 1, mpi_real, mpi_max, pe_root, mpi_comm_letkf, ierr)
@@ -157,36 +157,36 @@ contains
   end subroutine timer_print
 
 
-  !############################################################
-  function tolower(in_str) result(out_str)
-    character(*), intent(in) :: in_str
-    character(len(in_str)) :: out_str
-    integer :: i,n
-    integer, parameter :: offset = 32
+  ! !############################################################
+  ! function tolower(in_str) result(out_str)
+  !   character(*), intent(in) :: in_str
+  !   character(len(in_str)) :: out_str
+  !   integer :: i
+  !   integer, parameter :: offset = 32
 
-    out_str = in_str
-    do i=1, len(out_str)
-       if (out_str(i:i) >= "A" .and. out_str(i:i) <= "Z") then
-          out_str(i:i) = achar(iachar(out_str(i:i)) + offset)
-       end if
-    end do
-  end function tolower
+  !   out_str = in_str
+  !   do i=1, len(out_str)
+  !      if (out_str(i:i) >= "A" .and. out_str(i:i) <= "Z") then
+  !         out_str(i:i) = achar(iachar(out_str(i:i)) + offset)
+  !      end if
+  !   end do
+  ! end function tolower
 
 
   
-  !############################################################
-  function toupper(in_str) result(out_str)
-    character(*), intent(in) :: in_str
-    character(len(in_str)) :: out_str
-    integer :: i,n
-    integer, parameter :: offset = 32
+  ! !############################################################
+  ! function toupper(in_str) result(out_str)
+  !   character(*), intent(in) :: in_str
+  !   character(len(in_str)) :: out_str
+  !   integer :: i
+  !   integer, parameter :: offset = 32
 
-    out_str = in_str
-    do i=1, len(out_str)
-       if (out_str(i:i) >= "a" .and. out_str(i:i) <= "z") then
-          out_str(i:i) = achar(iachar(out_str(i:i)) - offset)
-       end if
-    end do
-  end function toupper
+  !   out_str = in_str
+  !   do i=1, len(out_str)
+  !      if (out_str(i:i) >= "a" .and. out_str(i:i) <= "z") then
+  !         out_str(i:i) = achar(iachar(out_str(i:i)) - offset)
+  !      end if
+  !   end do
+  ! end function toupper
   
 end module timing

@@ -1,4 +1,5 @@
 module letkf_state
+  !! performs I/O for the background and analysis states
   use global
 
   implicit none
@@ -8,8 +9,11 @@ module letkf_state
   integer :: grid_x = 192
   integer :: grid_y = 94
   integer :: grid_z = 64
+  !! number of vertical levels for the 3D state variables
   integer :: grid_3d = 5
+  !! number of 3D state variables
   integer :: grid_2d = 1
+  !! number of 2D state variables
   
 contains
 

@@ -136,8 +136,8 @@ contains
     allocate(root%pts_ll( size(lons), 2)) 
     allocate(root%pts( size(lons), kd_dim))
     do n=1, size(lons)
-       root%pts_ll(n,1) = lons(n)*pi/180.0d0
-       root%pts_ll(n,2) = lats(n)*pi/180.0d0       
+       root%pts_ll(n,1) = lons(n)*pi/180.0e0
+       root%pts_ll(n,2) = lats(n)*pi/180.0e0       
        root%pts(n,:) = ll2xyz( (/lons(n), lats(n)/) )
     end do
 
@@ -246,8 +246,8 @@ contains
 
 
     ! local variables
-    real(dp) :: s_xyz(kd_dim), r3(kd_dim)
-    real(dp) :: r, latr, slatr, clatr, lonr
+    real(dp) :: s_xyz(kd_dim)
+    real(dp) :: r, slatr, clatr, lonr
     integer :: k, i, n, nb, nbold, ntask, jdim, d1, d2
     integer :: task(task_size)
     type(boxnode), pointer :: boxes(:)  
@@ -388,9 +388,9 @@ contains
     
     integer :: kp, i, n, ntask, k
     real(dp) :: d
-    real(dp) :: s_xyz(kd_dim), r3(kd_dim)
+    real(dp) :: s_xyz(kd_dim)
     integer :: task(task_size)
-    real(dp) :: latr, slatr, clatr, lonr
+    real(dp) :: slatr, clatr, lonr
 
     ! set all entries in the heap to a really big number
     dn = 1e20
@@ -630,7 +630,7 @@ contains
     real(dp), intent(in) :: lon1, clat1, slat1, lon2, lat2
     real(dp) :: dist_gc
     
-    dist_gc = re * acos(min(slat1*sin(lat2) + clat1*cos(lat2) * cos( (lon2-lon1)), 1.0d0))
+    dist_gc = re * acos(min(slat1*sin(lat2) + clat1*cos(lat2) * cos( (lon2-lon1)), 1.0))
     
   end function dist_gc
 

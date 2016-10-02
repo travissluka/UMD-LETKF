@@ -40,7 +40,9 @@ contains
     real(4), allocatable :: tmp_r(:)
     
 
-!    iostat = 0
+    !!@todo have iostat do something useful, or remove it
+    if (present(iostat)) iostat = 1
+
     nobs = size(obs)
     allocate(tmp_i(nobs))
     allocate(tmp_r(nobs))
@@ -165,7 +167,8 @@ contains
     integer, allocatable :: tmp_i(:)
     real(4), allocatable :: tmp_r(:)
 
-!    iostat = 0
+    !!@todo have iostat do something useful, or remove it
+    if (present(iostat)) iostat = 1
     
     ! open the file
     call check( nf90_open(file, nf90_nowrite, ncid) )

@@ -638,11 +638,22 @@ contains
   function obsdef_getbyid(id) result(res)
     !! returns information about an observation type given its id number.
     !! An error is thrown if the id is not found
-    !! @warning this has not been implemented    
     integer, intent(in) :: id
     type(obsdef) :: res
 
     integer :: i
+
+    i = 1
+    do while (i <= size(obsdef_list))
+       if (obsdef_list(i)%id == id) exit
+       i = i + 1
+    end do
+    if (i > size(obsdef_list)) then
+       print *, "ERROR: search for observation definition for ",&
+            id, " failed."
+       stop 1
+    end if
+    res = obsdef_list(i)
   end function obsdef_getbyid
 
   
@@ -650,11 +661,24 @@ contains
   ! ============================================================
   ! ============================================================    
   function obsdef_getbyname(name) result(res)
-    !! @warning this has not been implemented    
     character(len=*), intent(in) :: name
     type(obsdef) :: res
 
     integer :: i
+
+    !!@todo convert to upper case first
+    i = 1
+    do while (i <= size(obsdef_list))
+       if (obsdef_list(i)%name_short == trim(name)) exit
+       i = i + 1
+    end do
+    !!@todo return an error code instead?
+    if (i > size(obsdef_list)) then
+       print *, "ERROR: search ofr observation definition for ",&
+            name, " failed."
+       stop 1
+    end if
+    res = obsdef_list(i)
   end function obsdef_getbyname
 
 
@@ -662,11 +686,23 @@ contains
   ! ============================================================
   ! ============================================================    
   function platdef_getbyid(id) result(res)
-    !! @warning this has not been implemented    
     integer, intent(in) :: id
     type(platdef) :: res
 
     integer :: i
+
+    i = 1
+    do while(i <= size(platdef_list))
+       if (platdef_list(i)%id == id) exit
+       i = i + 1       
+    end do
+    !!@todo return an error code instead
+    if (i > size(platdef_list)) then
+       print *, "ERROR: search for platform definition by ID ",id,&
+            " failed."
+       stop 1
+    end if
+    res = platdef_list(i)
   end function platdef_getbyid
 
 
@@ -674,12 +710,24 @@ contains
   ! ============================================================
   ! ============================================================    
   function platdef_getbyname(name) result(res)
-    !! @warning this has not been implemented
-    
     character(len=*), intent(in) :: name
     type(platdef) :: res
 
     integer :: i
+
+    i = 1
+    !!@todo convert name to upper case first
+    do while(i <= size(platdef_list))
+       if(platdef_list(i)%name_short == trim(name)) exit
+       i = i+1
+    end do
+    !!@todo return an error code instead
+    if(i> size(platdef_list)) then
+       print *, "ERROR: search for platform definition for ",name,&
+            " failed"
+       stop 1
+    end if
+    res = platdef_list(i)
   end function platdef_getbyname
 
   
@@ -708,7 +756,7 @@ contains
   function tolower(in_str) result(out_str)
     character(*), intent(in) :: in_str
     character(len(in_str)) :: out_str
-    integer :: i,n
+    integer :: i
     integer, parameter :: offset = 32
     out_str = in_str
 
@@ -726,7 +774,7 @@ contains
   function toupper(in_str) result(out_str)
     character(*), intent(in) :: in_str
     character(len(in_str)) :: out_str
-    integer :: i,n
+    integer :: i
     integer, parameter :: offset = 32
     out_str = in_str
 
