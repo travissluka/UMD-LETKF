@@ -6,7 +6,6 @@ module letkf_core
   !! @todo correctly determine evwork_size based on ILAENV and max
   !! number of observations, \( evwork\_size = (NB+2)*n\)
 
-  use letkf_mpi
   implicit none
   private
   

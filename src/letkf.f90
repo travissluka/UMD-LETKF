@@ -35,6 +35,8 @@ module letkf
 
   real, allocatable :: anal3d_mean_ij(:,:,:)
   real, allocatable :: anal2d_mean_ij(:,:)
+  real, allocatable :: anal3d_sprd_ij(:,:,:)
+  real, allocatable :: anal2d_sprd_ij(:,:)
 
 contains
 
@@ -47,6 +49,8 @@ contains
     integer :: i, k, l, nrec, unit
     real, allocatable :: anal3d_mean(:,:,:,:)
     real, allocatable :: anal2d_mean(:,:,:)    
+    real, allocatable :: anal3d_sprd(:,:,:,:)
+    real, allocatable :: anal2d_sprd(:,:,:)    
 
     namelist /letkf_settings/ mem, obsqc_maxstd
     
@@ -89,30 +93,41 @@ contains
     call letkf_do_letkf()    
     call timer_stop(t_letkf)
     call mpi_barrier(mpi_comm_letkf, ierr)
-    
 
-    ! gather the mean and write out
+    ! gather the mean/sprd and write out
     if (pe_isroot) then
        allocate(anal3d_mean(grid_x, grid_y, grid_z, grid_3d))
        allocate(anal2d_mean(grid_x, grid_y, grid_2d))
+       allocate(anal3d_sprd(grid_x, grid_y, grid_z, grid_3d))
+       allocate(anal2d_sprd(grid_x, grid_y, grid_2d))       
     end if
     do i=1,grid_3d
        do k=1,grid_z
           call mpi_gatherv(anal3d_mean_ij(:,k,i), ij_count, mpi_real, &
                anal3d_mean(:,:,k,i), scatterv_count, scatterv_displ, mpi_real,&
-               pe_root, mpi_comm_letkf, ierr)          
+               pe_root, mpi_comm_letkf, ierr)
+          call mpi_gatherv(anal3d_sprd_ij(:,k,i), ij_count, mpi_real, &
+               anal3d_sprd(:,:,k,i), scatterv_count, scatterv_displ, mpi_real,&
+               pe_root, mpi_comm_letkf, ierr)                    
        end do
     end do
     do i=1,grid_2d
        call mpi_gatherv(anal2d_mean_ij(:,i), ij_count, mpi_real, &
             anal2d_mean(:,:,i), scatterv_count, scatterv_displ, mpi_real,&
-            pe_root, mpi_comm_letkf, ierr)          
+            pe_root, mpi_comm_letkf, ierr)
+       call mpi_gatherv(anal2d_sprd_ij(:,i), ij_count, mpi_real, &
+            anal2d_sprd(:,:,i), scatterv_count, scatterv_displ, mpi_real,&
+            pe_root, mpi_comm_letkf, ierr)                 
     end do    
     if (pe_isroot) then
        call letkf_state_write('anal_mean.grd', anal3d_mean, anal2d_mean)
+       call letkf_state_write('anal_sprd.grd', anal3d_sprd, anal2d_sprd)       
        deallocate(anal3d_mean)
        deallocate(anal2d_mean)
+       deallocate(anal3d_sprd)
+       deallocate(anal2d_sprd)       
     end if
+
     
     ! all done
     
@@ -173,7 +188,7 @@ contains
           !TODO: should hdxb be transposed for efficiency?
           hdxb(ob_cnt,:) = obs_ohx(:,n)
           rdiag(ob_cnt)  = obs_list(n)%err
-          rloc(ob_cnt) = 1.0
+          rloc(ob_cnt) = exp(-0.5 * ((rdistance(i) / 700.0e3) ** 2))
           dep(ob_cnt) = obs_ohx_mean(n) - obs_list(n)%val
        end do
 
@@ -197,8 +212,11 @@ contains
                1.0e0, gues2d_ij(ij,:,:), grid_2d, &
                trans, mem, 0.0e0, anal2d_ij(ij,:,:), grid_2d)
           call timer_stop(timer3)
-
-       end if       
+       else
+          anal3d_ij(ij,:,:,:) = gues3d_ij(ij,:,:,:)
+          anal2d_ij(ij,:,:) = gues2d_ij(ij,:,:)
+       end if
+       
     end do
 
     ! add the mean back to the analysis
@@ -209,6 +227,21 @@ contains
     anal3d_mean_ij = sum(anal3d_ij,4) / mem
     anal2d_mean_ij = sum(anal2d_ij,3) / mem
 
+    !calculate spread
+    anal3d_sprd_ij = 0
+    anal2d_sprd_ij = 0
+    do i=1,mem
+       anal3d_sprd_ij = anal3d_sprd_ij + &
+                        (anal3d_ij(:,:,:,i) - anal3d_mean_ij) * &
+                        (anal3d_ij(:,:,:,i) - anal3d_mean_ij)
+       anal2d_sprd_ij = anal2d_sprd_ij + &
+                        (anal2d_ij(:,:,i) - anal2d_mean_ij) * &
+                        (anal2d_ij(:,:,i) - anal2d_mean_ij)
+    end do
+    anal3d_sprd_ij = sqrt(anal3d_sprd_ij/mem)
+    anal2d_sprd_ij = sqrt(anal2d_sprd_ij/mem)    
+
+    
     print *,"done",pe_rank
 
 
@@ -298,6 +331,8 @@ contains
     allocate(anal2d_ij(ij_count, grid_3d, mem))
     allocate(anal3d_mean_ij(ij_count, grid_z, grid_3d))
     allocate(anal2d_mean_ij(ij_count,grid_3d))
+    allocate(anal3d_sprd_ij(ij_count, grid_z, grid_3d))
+    allocate(anal2d_sprd_ij(ij_count,grid_3d))
     
 
     ! for each ensemble member we are responsible for loading, read in
