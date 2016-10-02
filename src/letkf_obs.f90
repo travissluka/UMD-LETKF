@@ -241,7 +241,7 @@ contains
     ! distribute the qc and innovation values
     ! TODO, using MPI_SUM is likely inefficient, do this another way
     call timer_start(timer3)    
-    call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real8, mpi_sum, mpi_comm_letkf, ierr)
+    call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
     call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
     call timer_stop(timer3)
 
@@ -253,11 +253,13 @@ contains
     end do
     deallocate(obs_qc_l)
 
+
     ! calculate ohx perturbations
     do i=1,size(obs_list)
        obs_ohx_mean(i) = sum(obs_ohx(:,i))/mem
        obs_ohx(:,i) = obs_ohx(:,i) - obs_ohx_mean(i)
     end do
+
 
     !TODO basic QC checks on the observations
     ! TODO: check stddev of ohx, problems if == 0 (odds of this happening though?)

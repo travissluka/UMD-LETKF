@@ -5,7 +5,8 @@ module letkf_core
   !!
   !! @todo correctly determine evwork_size based on ILAENV and max
   !! number of observations, \( evwork\_size = (NB+2)*n\)
-  
+
+  use letkf_mpi
   implicit none
   private
   
@@ -25,7 +26,7 @@ contains
 
   
   subroutine letkf_core_solve(hdxb, rdiag, rloc, dep, infl, trans)
-    integer, parameter :: rsize = 8    
+    integer, parameter :: rsize = 4
     real(rsize), intent(in)  :: hdxb(:,:)
       !!ensemble perturbations in obs space, shape(nobs, nbv)
     real(rsize), intent(in)  :: rdiag(:)
@@ -66,29 +67,30 @@ contains
     end do
 
     ! hdxb^T Rinv hdxb
-    call dgemm('t','n', nbv, nbv, nobs, &
-         1.0d0, hdxb_rinv, nobs, hdxb, nobs, 0.0d0, work1, nbv)
-
+    call sgemm('t','n', nbv, nbv, nobs, &
+         1.0e0, hdxb_rinv, nobs, hdxb, nobs, 0.0e0, work1, nbv)
+   
     ! hdxb^T Rinv hdxb + (k-1) I / rho (covariance inflation)
-    r = real(nbv-1,rsize)*1.0d0/infl
+    r = real(nbv-1,rsize)*1.0e0/infl
     do i=1,nbv
        work1(i,i) = work1(i,i) + r
     end do
     
     ! eigenvalues and eigenvectors of above
-    call dsyev('V','U', nbv, work1, nbv, eival, evwork, size(evwork), err)
+    call ssyev('V','U', nbv, work1, nbv, eival, evwork, size(evwork), err)
     eivec = work1
+    
 
     ! Pa = [hdxb^T Rinv hdxb + (m-1) I] inv
     do i=1,nbv
        work1(i,:) = eivec(i,:) / eival
     end do
-    call dgemm('n','t',nbv,nbv,nbv,1.0d0, work1, nbv, eivec,&
-         nbv, 0.0d0, pa, nbv)
+    call sgemm('n','t',nbv,nbv,nbv,1.0e0, work1, nbv, eivec,&
+         nbv, 0.0e0, pa, nbv)
 
     ! Pa hdxb_rinv^T
-    call dgemm('n', 't', nbv, nobs, nbv, 1.0d0, pa, nbv, hdxb_rinv,&
-         nobs, 0.0d0, work2, nbv)
+    call sgemm('n', 't', nbv, nobs, nbv, 1.0e0, pa, nbv, hdxb_rinv,&
+         nobs, 0.0e0, work2, nbv)
 
     ! Pa hdxb_rinv^T dep
     work3 = 0
@@ -101,8 +103,8 @@ contains
        r = sqrt(real(nbv-1,rsize) / eival(j))
        work1(:,j) = eivec(:,j) * r
     end do
-    call dgemm('n', 't', nbv, nbv, nbv, 1.0d0, work1, nbv, eivec, &
-         nbv, 0.0d0, trans, nbv)
+    call sgemm('n', 't', nbv, nbv, nbv, 1.0e0, work1, nbv, eivec, &
+         nbv, 0.0e0, trans, nbv)
 
     ! Relaxation (RTPP or RTPS?)
     ! TODO
@@ -112,6 +114,10 @@ contains
        trans(:,j) = trans(:,j) + work3
     end do
 
+!    if (pe_isroot) then
+!       print *, trans
+!       stop 1
+!    end if
     ! adaptive inflation
     ! TODO
     

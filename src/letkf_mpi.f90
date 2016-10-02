@@ -70,8 +70,9 @@ contains
 
 
   !############################################################
-  subroutine letkf_mpi_init2(mem)
-    integer, intent(in) :: mem    
+  subroutine letkf_mpi_init2(mem, grid_ij)
+    integer, intent(in) :: mem
+    integer, intent(in) :: grid_ij
     integer :: ierr, i, j
     integer :: count, prev
     !TODO: allow for more complicated layouts
@@ -99,6 +100,7 @@ contains
     allocate (ens_map(mem))
     
     ! determine which ensemble members number this PE should deal with
+    ! ----------------------------------------    
     prev = 0   
     if (pe_isroot) then
        print *, ""
@@ -134,20 +136,19 @@ contains
        prev = prev + count
     end do
 
-    allocate(scatterv_count(pe_size))
-    allocate(scatterv_displ(pe_size))
     
     ! determine how many gridpoints this PE should deal with
+    ! ----------------------------------------
+    allocate(scatterv_count(pe_size))
+    allocate(scatterv_displ(pe_size))    
     if (pe_isroot) then
        print *, ""
        print "(A)", "gridpoint assignment list:"
     end if    
     prev = 0
     do i=0, pe_size-1      
-!       count = (grid_x*grid_y) / pe_size
-       count = (grid_x*grid_y) * load_weights(i+1)
-       !       if (i < mod(grid_x*grid_y,pe_size)) count = count +1
-       if (i == pe_size-1) count = (grid_x*grid_y) - prev
+       count = grid_ij * load_weights(i+1)
+       if (i == pe_size-1) count = grid_ij - prev
        
        if (i == pe_rank) then
           ij_count = count

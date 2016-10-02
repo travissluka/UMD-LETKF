@@ -24,7 +24,8 @@ module kdtree
   ! parameters
   ! ------------------------------------------------------------
 
-  integer, parameter :: dp=kind(0.d0)
+  integer, parameter :: dp=kind(0.0)
+  
   !! double definition
   
   integer, parameter :: kd_dim = 3
