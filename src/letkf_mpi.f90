@@ -147,7 +147,7 @@ contains
     end if    
     prev = 0
     do i=0, pe_size-1      
-       count = grid_ij * load_weights(i+1)
+       count = nint(grid_ij * load_weights(i+1))
        if (i == pe_size-1) count = grid_ij - prev
        
        if (i == pe_rank) then

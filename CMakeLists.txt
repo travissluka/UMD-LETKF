@@ -15,7 +15,7 @@ enable_language( Fortran )
 include ( "cmake/pickFortranCompilerFlags.cmake" )
 include ( "cmake/checkOutOfSource.cmake" )
 
-
+add_definitions(-Wall)
 
 ## setup project files, dependencies, install locations
 ## ------------------------------------------------------------

@@ -46,7 +46,7 @@ contains
     class(letkf_solver) :: self
     integer :: t_total, t_init, t_letkf, ierr
 
-    integer :: i, k, l, nrec, unit
+    integer :: i, k
     real, allocatable :: anal3d_mean(:,:,:,:)
     real, allocatable :: anal2d_mean(:,:,:)    
     real, allocatable :: anal3d_sprd(:,:,:,:)
@@ -154,9 +154,9 @@ contains
 
     real :: hdxb(maxpt,mem), rdiag(maxpt), rloc(maxpt), dep(maxpt)
     real :: trans(mem,mem)
-    integer :: timer1, timer2, n, ierr, timer3
-    integer :: i, j, k, l, m
-
+    integer :: timer1, timer2, n, timer3
+    integer :: i
+    
     real, allocatable:: wrk3d1(:,:,:), wrk3d2(:,:,:)
     real, allocatable:: wrk2d1(:,:), wrk2d2(:,:)
     
@@ -166,7 +166,6 @@ contains
     allocate(wrk3d2( grid_z, grid_3d, mem))
     allocate(wrk2d1( grid_2d, mem))
     allocate(wrk2d2( grid_2d, mem))
-
     
     if (pe_isroot) then
        print *, ""
@@ -277,9 +276,6 @@ contains
   !############################################################
   subroutine letkf_solver_read_config(self)
     class(letkf_solver) :: self
-    logical :: ex
-    integer :: ierr
-
     integer :: timer
 
     timer = timer_init("read config", TIMER_SYNC)
@@ -298,6 +294,7 @@ contains
     class(letkf_solver) :: self
     type(obsio_dat) :: ioclass
 
+    !! @todo remove hard coding of obsio type
     call letkf_obs_read(ioclass)
   end subroutine letkf_solver_read_obs
 
@@ -353,11 +350,9 @@ contains
   subroutine letkf_read_gues()
     !! @todo move this out of this module
     integer :: timer, timer2, timer3
-    integer :: m, i, j, k, l
+    integer :: m, i, k
     character(len=1024) :: filename
 
-    integer :: unit, nrec
-    logical :: ex
     integer :: ierr, revcount
     
     !! @TODO, can i collapse these down into a single variable?
