@@ -156,6 +156,17 @@ contains
     real :: trans(mem,mem)
     integer :: timer1, timer2, n, ierr, timer3
     integer :: i, j, k, l, m
+
+    real, allocatable:: wrk3d1(:,:,:), wrk3d2(:,:,:)
+    real, allocatable:: wrk2d1(:,:), wrk2d2(:,:)
+    
+
+
+    allocate(wrk3d1( grid_z, grid_3d, mem))
+    allocate(wrk3d2( grid_z, grid_3d, mem))
+    allocate(wrk2d1( grid_2d, mem))
+    allocate(wrk2d2( grid_2d, mem))
+
     
     if (pe_isroot) then
        print *, ""
@@ -206,12 +217,23 @@ contains
 
           ! calculate the ensemble increments
           call timer_start(timer3)
+          !!@todo is there anyway to call sgemm without needing to copy in/out of
+          !! the wrk1/wrk2 arrays (anal/gues need to be copied anyway, even if by compiler
+          !! because they are being sliced from the front, somewhat faster on gfortran if
+          !! i copy myself in a preallocated array)
+          !! this might not be necessary with better intel compiler, which should do everythinh on the stack
+          wrk3d1 = gues3d_ij(ij,:,:,:)
           call sgemm('n','n', grid_3d*grid_z, mem, mem, &
-               1.0e0, gues3d_ij(ij,:,:,:), grid_3d*grid_z, &
-               trans, mem, 0.0e0, anal3d_ij(ij,:,:,:), grid_3d*grid_z)
+               1.0e0, wrk3d1, grid_3d*grid_z, &
+               trans, mem, 0.0e0, wrk3d2, grid_3d*grid_z)
+          anal3d_ij(ij,:,:,:) = wrk3d2
+
+          wrk2d1(:,:) = gues2d_ij(ij,:,:)
           call sgemm('n','n', grid_2d, mem, mem, &
-               1.0e0, gues2d_ij(ij,:,:), grid_2d, &
-               trans, mem, 0.0e0, anal2d_ij(ij,:,:), grid_2d)
+               1.0e0, wrk2d1(:,:), grid_2d, &
+               trans, mem, 0.0e0, wrk2d2(:,:), grid_2d)
+          anal2d_ij(ij,:,:) = wrk2d2(:,:)
+          
           call timer_stop(timer3)
        else
           anal3d_ij(ij,:,:,:) = gues3d_ij(ij,:,:,:)
@@ -242,6 +264,9 @@ contains
     anal3d_sprd_ij = sqrt(anal3d_sprd_ij/mem)
     anal2d_sprd_ij = sqrt(anal2d_sprd_ij/mem)    
 
+
+    deallocate(wrk3d1, wrk3d2)
+    deallocate(wrk2d1, wrk2d2)
     
     print *,"done",pe_rank
 
