@@ -375,11 +375,11 @@ contains
     allocate(lat_ij(ij_count))
 
     allocate(anal3d_ij(ij_count, grid_z, grid_3d, mem))
-    allocate(anal2d_ij(ij_count, grid_3d, mem))
+    allocate(anal2d_ij(ij_count, grid_2d, mem))
     allocate(anal3d_mean_ij(ij_count, grid_z, grid_3d))
     allocate(anal2d_mean_ij(ij_count,grid_3d))
     allocate(anal3d_sprd_ij(ij_count, grid_z, grid_3d))
-    allocate(anal2d_sprd_ij(ij_count,grid_3d))
+    allocate(anal2d_sprd_ij(ij_count,grid_2d))
     
 
     ! for each ensemble member we are responsible for loading, read in
