@@ -8,6 +8,7 @@ module letkf
   use netcdf
   use letkf_core
   use letkf_state
+  use letkf_loc
   
   implicit none
 
@@ -159,7 +160,7 @@ contains
     
     real, allocatable:: wrk3d1(:,:,:), wrk3d2(:,:,:)
     real, allocatable:: wrk2d1(:,:), wrk2d2(:,:)
-    
+    real :: loc_h
 
 
     allocate(wrk3d1( grid_z, grid_3d, mem))
@@ -186,20 +187,28 @@ contains
        ! search for all observations in a given radius of this gridpoint
        call timer_start(timer1)
        call kd_search_radius(obs_tree, &
-            (/lon_ij(ij)*1.0e0, lat_ij(ij)*1.0e0 /), 500.0e3, &
+            (/lon_ij(ij)*1.0e0, lat_ij(ij)*1.0e0 /), 2500.0e3, &
             rpoints, rdistance, rnum, .false.)
        call timer_stop(timer1)
 
        ! if there are observations found, process them
        ob_cnt = 0
        do i=1,rnum
-          n = rpoints(i)
-          if (obs_qc(n) /= 0) cycle
+          n = rpoints(i)          
+
+          ! get rid of obs with bad QC values
+          if (obs_qc(n) /= 0) cycle  
+
+          ! calculate observation localization, and 
+          ! get rid of obs outside of localization radius
+          loc_h = loc_gc(rdistance(i), 1000.0e3)
+          if (loc_h <= 0 ) cycle     
+
+          ! use this observation
           ob_cnt = ob_cnt + 1
-          !TODO: should hdxb be transposed for efficiency?
-          hdxb(ob_cnt,:) = obs_ohx(:,n)
+          hdxb(ob_cnt,:) = obs_ohx(:,n)  !TODO: should hdxb be transposed for efficiency?
           rdiag(ob_cnt)  = obs_list(n)%err
-          rloc(ob_cnt) = exp(-0.5 * ((rdistance(i) / 700.0e3) ** 2))
+          rloc(ob_cnt) = loc_h
           dep(ob_cnt) = obs_ohx_mean(n) - obs_list(n)%val
        end do
 
