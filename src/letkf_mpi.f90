@@ -1,34 +1,12 @@
 module letkf_mpi
   use mpi
   use global
-  
+  use timing
+  use letkf_mpi_g
+
   implicit none
-  
-  integer, save :: pe_root, pe_rank, pe_size
-  integer, save :: mpi_comm_letkf
 
-  logical, save :: pe_isroot
-
-  integer, save, allocatable :: ens_list(:)
-  !! A list of ensemble numbers (from 0 to MEM) that this
-  !! process is responsible for the I/O
-  integer, save :: ens_count
-
-  integer, save, allocatable :: ens_map(:)
-  !! for each index MEM, the number of the PE
-  !! respsonsible for its I/O
-  
-  
-  integer, save, allocatable :: ij_list(:)
-  !! A list of grid point locations that this process
-  !! is responsible for doing core LETKF algorithm on
-  integer, save :: ij_count
-
-
-  real, allocatable, save :: load_weights(:)
-  
-  integer, allocatable, save :: scatterv_count(:)
-  integer, allocatable, save :: scatterv_displ(:)
+  real :: autotune_alpha = 0.5
   
 contains
 
@@ -47,7 +25,9 @@ contains
     end do
     ens_idx = -1
   end function ens_idx
-    
+
+
+  
   !############################################################  
   subroutine letkf_mpi_init()
     integer :: ierr
@@ -64,7 +44,8 @@ contains
     call mpi_comm_rank(mpi_comm_letkf, pe_rank, ierr)
 
     pe_isroot = pe_root == pe_rank
-    
+
+
   end subroutine letkf_mpi_init
 
 
@@ -74,25 +55,36 @@ contains
     integer, intent(in) :: mem
     integer, intent(in) :: grid_ij
     integer :: ierr, i, j
-    integer :: count, prev
+    integer :: count, prev, unit
+    character(len=:), allocatable :: autotune_infile
+    logical :: ex
+    
+    namelist /mpi_settings/ autotune, autotune_infile, autotune_outfile, autotune_alpha
+
     !TODO: allow for more complicated layouts
         
     call mpi_barrier(mpi_comm_letkf, ierr)
 
-    !TODO load weights
-    allocate(load_weights(pe_size))
-    load_weights = 1
-    load_weights(1) = 2.325
-    load_weights(2) = 0.7
-    load_weights(3) = 0.375
-    load_weights(4) = 0.75
-    load_weights = load_weights / sum(load_weights)
+
+    ! load in namelist settings
+    allocate(character(len=1024) :: autotune_infile)
+    allocate(character(len=1024) :: autotune_outfile)    
+    open(newunit=unit, file="letkf.nml")
+    read(unit, nml=mpi_settings)
+    close(unit)
+    autotune_infile = trim(autotune_infile)
+    autotune_outfile = trim(autotune_outfile)     
+
     
+   
     ! print header info
     if (pe_isroot) then
        print '(A)', ""
+       print '(A)', ""       
        print '(A)', "MPI configuration"
        print '(A)', "------------------------------------------------------------"
+       print mpi_settings
+       print '(A)', ""       
        print '(A,I4)', "Using MPI nproc =", pe_size
        print '(A,I4)', "Using MPI root  =", pe_root
     end if
@@ -136,15 +128,41 @@ contains
        prev = prev + count
     end do
 
-    
+
+
     ! determine how many gridpoints this PE should deal with
-    ! ----------------------------------------
-    allocate(scatterv_count(pe_size))
-    allocate(scatterv_displ(pe_size))    
+    ! ----------------------------------------   
+    if (pe_isroot) print *, ""
+
+    ! determine the process load weights
+    allocate(load_weights(pe_size))
+    load_weights = 1.0
+    if (autotune) then
+       inquire(file=autotune_infile, exist=ex)
+       if (ex) then
+          if (pe_isroot) print *, "Using load balancing file: ",autotune_infile
+          ! load file
+          !TODO error checking on the format of the file
+          ! if any errors, ignore and set all weights to 1
+          open(newunit=unit, file=autotune_infile)
+          do i=1,pe_size
+             read(unit,*) load_weights(i)
+          end do
+          close(unit)
+       else if (pe_isroot) then
+          print *, "WARNING: autotune file not present"
+       end if       
+    end if
+    load_weights = load_weights / sum(load_weights)
+
+
+    ! calculate actual numer of gridpoints to use
     if (pe_isroot) then
        print *, ""
        print "(A)", "gridpoint assignment list:"
-    end if    
+    end if        
+    allocate(scatterv_count(pe_size))
+    allocate(scatterv_displ(pe_size))    
     prev = 0
     do i=0, pe_size-1      
        count = nint(grid_ij * load_weights(i+1))
@@ -172,10 +190,44 @@ contains
   
   !############################################################
   subroutine letkf_mpi_end
-    integer :: ierr
+    integer :: ierr, timer_id
+    real :: runtimes(pe_size)
+    real :: runtimes_avg
+
+    real :: weights(pe_size)
+    integer :: i, unit
+
+    weights = 0.0
+    ! recalculate processore load weights
+    if (autotune) then
+       timer_id = gettimer("loop")       
+       call timer_gather(timer_id, runtimes)
+       if (pe_isroot) then
+          print *, ""
+          print *, "Calculating new load balancing weights for next run..."
+          print *, runtimes
+          print *, load_weights
+          
+          ! calculate new weights
+          runtimes_avg = sum(runtimes) / pe_size
+          weights = load_weights
+          do i=1,pe_size
+             weights(i) = weights(i) + autotune_alpha*weights(i)*&
+                  ((runtimes_avg - runtimes(i)) / runtimes(i))
+          end do
+          weights = weights / sum(weights)
+
+          ! save these to file
+          open(newunit=unit, file=autotune_outfile)
+          do i=1,pe_size
+             write (unit,*) weights(i)
+          end do
+          close(unit)
+          print *, weights
+       end if
+    end if
     call mpi_finalize(ierr)
   end subroutine letkf_mpi_end
-
 
   
 end module letkf_mpi

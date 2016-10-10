@@ -88,7 +88,7 @@ contains
 
     
     ! run LETKF
-    t_letkf = timer_init("core", TIMER_SYNC)
+    t_letkf = timer_init("loop", TIMER_SYNC)
     call timer_start(t_letkf)
     call letkf_do_letkf()    
     call timer_stop(t_letkf)

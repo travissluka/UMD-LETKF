@@ -1,12 +1,13 @@
 module timing
   use mpi
-  use letkf_mpi
+  use letkf_mpi_g
   
   implicit none
   private
   
   public :: timer_init, timer_start, timer_stop
-  public :: timer_print
+  public :: timer_print, timer_gather
+  public :: gettimer
 
 
   integer, parameter, public :: TIMER_SYNC = 1
@@ -113,6 +114,20 @@ contains
   end subroutine timer_stop
 
 
+
+  subroutine timer_gather(id, times)
+    integer, intent(in) :: id
+    real,intent(inout) :: times(:)
+    integer(kind=8) :: timer_rate    
+    real :: t0
+    integer :: ierr
+
+    !! todo, error checking on valid timer id
+    call system_clock(count_rate=timer_rate)    
+    t0 = real(timer_objs(id)%total_ticks) / real(timer_rate)
+    call mpi_allgather(t0, 1, mpi_real, &
+         times, 1, mpi_real, mpi_comm_letkf, ierr)
+  end subroutine timer_gather
   
   !############################################################
   subroutine timer_print
