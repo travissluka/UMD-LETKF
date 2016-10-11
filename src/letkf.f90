@@ -209,7 +209,7 @@ contains
           hdxb(ob_cnt,:) = obs_ohx(:,n)  !TODO: should hdxb be transposed for efficiency?
           rdiag(ob_cnt)  = obs_list(n)%err
           rloc(ob_cnt) = loc_h
-          dep(ob_cnt) = obs_ohx_mean(n) - obs_list(n)%val
+          dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
        end do
 
        
