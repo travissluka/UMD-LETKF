@@ -16,6 +16,9 @@ module letkf_core
 contains
 
   subroutine letkf_core_init(nbv)
+    !! initializes the LETKF core for future calls to letkf_core_solve
+    !! (mainly just sets the size of a temporary working matix used
+    !! by calls to BLAS/LAPACK)
     integer, intent(in) :: nbv
     !! number of ensemble members
 
@@ -27,17 +30,17 @@ contains
   subroutine letkf_core_solve(hdxb, rdiag, rloc, dep, infl, trans)
     integer, parameter :: rsize = 4
     real(rsize), intent(in)  :: hdxb(:,:)
-      !!ensemble perturbations in obs space, shape(nobs, nbv)
+      !!ensemble perturbations in obs space, \( \mathbf{Y}^{b} \), of shape \( (nobs, nbv) \)
     real(rsize), intent(in)  :: rdiag(:)
-      !!obs error variance
+      !!observation error variance, \( \mathbf{R} \), of shape \( (nobs) \)
     real(rsize), intent(in)  :: rloc(:)
-      !!obs localization weights    
+      !!observation localization weights, of shape \( (nobs) \)
     real(rsize), intent(in)  :: dep(:)
-      !!obs departure  
+      !!observation departures, \( \mathbf{y}^o - \bar{\mathbf{y}}^b\), of shape \( (nobs) \)
     real(rsize), intent(in)  :: infl
-      !!covariance inflation    
+      !!covariance inflation, \( \rho \)
     real(rsize), intent(out) :: trans(:,:)
-      !!ensemble transformation matrix
+      !!ensemble transformation matrix, \( \mathbf{w}^{a(i)} \), of shape \( (nbv, nbv) \)
    
     integer :: nobs
       !!number of observations, inferred from shape of `hdxb`      

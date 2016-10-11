@@ -20,9 +20,16 @@ contains
 
   !============================================================
   subroutine letkf_state_read(filename, state_3d, state_2d)
+    !! read a complete model state from a file.
+    !! Terminates program if the file is not found.
+
     character(len=*), intent(in) :: filename
+    !! name of file from which state variables will be read
     real, intent(inout) :: state_3d(:,:,:,:)
+    !! 3D state variables of shape \( (x,y,z,var) \)
     real, intent(inout) :: state_2d(:,:,:)
+    !! 2D state variables of shape \( (x,y,var) \)
+
     integer :: unit, nrec
     integer :: l,k
     real :: r
@@ -54,9 +61,14 @@ contains
   
   !============================================================
   subroutine letkf_state_write(filename, state_3d, state_2d)
+    !! writes a given complete model state out to a file.
+
     character(len=*), intent(in) :: filename
+    !! name of file to which state variables will be written
     real, intent(in) :: state_3d(:,:,:,:)
+    !! 3D state variables of shape \( (x,y,z,var) \)
     real, intent(in) :: state_2d(:,:,:)
+    !! 2D state variables of shape \( (x,y,var) \)
 
     integer :: unit, nrec
     real :: r
