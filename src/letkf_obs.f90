@@ -3,7 +3,7 @@ module letkf_obs
   use timing
   use global
   use kdtree
-  
+  use str
   implicit none
 !  private
 
@@ -240,6 +240,7 @@ contains
     
     ! distribute the qc and innovation values
     ! TODO, using MPI_SUM is likely inefficient, do this another way
+
     call timer_start(timer3)    
     call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
     call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
@@ -435,8 +436,8 @@ contains
        end do
        
        ! ignore comments
-       s_tmp = adjustl(line)
-       if (s_tmp(1:1) == '#') cycle
+       line = adjustl(line)
+       if (line(1:1) == '#') cycle
 
        ! ignore empty lines
        if (len(trim(adjustl(line))) == 0) cycle
@@ -518,7 +519,7 @@ contains
   subroutine platdef_read(file)
     character(len=*), intent(in) :: file
     integer :: unit, pos, iostat
-    character(len=1024) :: line, s_tmp
+    character(len=1024) :: line
     logical :: ex
     type(platdef) :: new_plat
     integer, parameter :: MAX_PLATDEF = 1024
@@ -561,8 +562,8 @@ contains
        end do       
        
        ! ignore comments
-       s_tmp = adjustl(line)
-       if (s_tmp(1:1) == '#') cycle
+       line = adjustl(line)
+       if (line(1:1) == '#') cycle
 
        ! ignore empty lines
        if (len(trim(adjustl(line))) == 0) cycle
@@ -751,55 +752,5 @@ contains
   end subroutine platdef_print
 
 
-  ! ============================================================
-  ! ============================================================    
-  function tolower(in_str) result(out_str)
-    character(*), intent(in) :: in_str
-    character(len(in_str)) :: out_str
-    integer :: i
-    integer, parameter :: offset = 32
-    out_str = in_str
-
-    do i = 1, len(out_str)
-       if (out_str(i:i) >= "A" .and. out_str(i:i) <= "Z") then
-          out_str(i:i) = achar(iachar(out_str(i:i)) + offset)
-       end if
-    end do
-  end function tolower
-
-
-  
-  ! ============================================================
-  ! ============================================================    
-  function toupper(in_str) result(out_str)
-    character(*), intent(in) :: in_str
-    character(len(in_str)) :: out_str
-    integer :: i
-    integer, parameter :: offset = 32
-    out_str = in_str
-
-    do i = 1, len(out_str)
-       if (out_str(i:i) >= "a" .and. out_str(i:i) <= "z") then
-          out_str(i:i) = achar(iachar(out_str(i:i)) - offset)
-       end if
-    end do
-  end function toupper
-
-
-
-  ! ============================================================
-  ! ============================================================    
-  function findspace(string)
-    integer :: findspace
-    character(len=*), intent(in) :: string
-    integer :: i, start = 1
-
-    i = start
-    do while(string(i:i) /= ' ' .and. i < len(string))
-       i = i + 1
-    end do
-    if (i >= len(string)) i = -1
-    findspace = i    
-  end function findspace
 
 end module letkf_obs

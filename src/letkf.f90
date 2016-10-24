@@ -77,6 +77,8 @@ contains
        print "(A)", ""
        print letkf_settings
     end if
+
+    call letkf_state_init()       
     call letkf_mpi_init2(mem, grid_x*grid_y)
     
     call self%read_config
