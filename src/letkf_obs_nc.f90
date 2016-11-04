@@ -17,6 +17,7 @@ module letkf_obs_nc
   type, extends(obsio) :: obsio_nc
      !! class to read and write observations in NetCDF format
    contains
+     procedure :: init => obs_init_nc
      procedure :: write => obs_write_nc
      procedure :: read => obs_read_nc
      
@@ -27,6 +28,14 @@ module letkf_obs_nc
   
 contains
 
+
+  subroutine obs_init_nc(self)
+    class(obsio_nc) :: self
+    self%description = "netCDF observation I/O"
+    self%extension   = "nc"
+  end subroutine obs_init_nc
+
+  
   !============================================================
   subroutine obs_write_nc(self, file, obs, iostat)
     class(obsio_nc) :: self

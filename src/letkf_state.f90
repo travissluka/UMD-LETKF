@@ -15,7 +15,9 @@ module letkf_state
   integer :: grid_2d = 1
   !! number of 2D state variables
 
-
+  
+! ------------------------------------------------------------
+  
   type statedef
      character(len=:), allocatable :: name_short
      character(len=:), allocatable :: name_long     
@@ -25,11 +27,53 @@ module letkf_state
      procedure :: print => statedef_print
   end type statedef
 
+  
+  type(statedef), allocatable :: statedef_list(:)  
 
-  type(statedef), allocatable :: statedef_list(:)
+  
+! ------------------------------------------------------------
+  
+  type, abstract :: stateio
+     !! abstract base class for state file reading and writing.
+   contains
+     procedure(I_stateio_read),  deferred :: read     
+     procedure(I_stateio_write), deferred :: write
+  end type stateio
 
+  abstract interface
+       
+     subroutine I_stateio_read(self, file, state)
+       !! interface for subroutines that read the state for
+       !! a single ensemble member
+       import stateio
+       class(stateio) :: self
+       character(len=*), intent(in) :: file
+       real, allocatable, intent(out) :: state(:,:,:)
+       !! filename to read from
+       !! TODO, change this to just ensemble member number
+     end subroutine I_stateio_read
+
+     subroutine I_stateio_write(self, file, state)
+       !! interface for subroutines that write the state for a
+       !! single ensemble member to a file
+       import stateio
+       class(stateio) :: self
+       character(len=*), intent(in) :: file
+       real, allocatable, intent(in) :: state(:,:,:)       
+       !! filename to write to
+       !! TODO, change this to just ensemble member number       
+     end subroutine I_stateio_write
+     
+  end interface
+
+  
+! ------------------------------------------------------------ 
+  
 contains
 
+  
+! ============================================================
+  
   subroutine letkf_state_init()
     character(len=:), allocatable :: statedef_file
     integer :: unit
@@ -59,21 +103,21 @@ contains
        if (grid_x <= 0) stop 1
        if (grid_y <= 0) stop 1
        if (grid_z <= 0) stop 1
-    end if
-          
-    
+    end if              
 
     ! read in statedef config file
     call statedef_read(statedef_file)
-
-
   end subroutine letkf_state_init
 
 
-
+! ============================================================
   
   subroutine statedef_read(file)
+    !! read in the configuration file detailing the contents of the
+    !! state variables
+    
     character(len=*), intent(in) :: file
+    !! path to file to load
 
     logical :: ex
     integer :: unit, iostat, i, pos
@@ -154,7 +198,6 @@ contains
     allocate(statedef_list(statedef_list_tmp_len))
     statedef_list = statedef_list_tmp(1:statedef_list_tmp_len)
 
-
     ! write a summary
     if (pe_isroot) then
        print *, 'state variables = ', size(statedef_list)
@@ -171,12 +214,16 @@ contains
   end subroutine statedef_read
 
 
+! ============================================================
+  
   subroutine statedef_print(st)
     class(statedef), intent(in) :: st
     print "(A10, I6, A,A)", st%name_short, st%levels, " ",st%name_long
   end subroutine statedef_print
+
+
+! ============================================================
   
-  !============================================================
   subroutine letkf_state_read(filename, state_3d, state_2d)
     !! read a complete model state from a file.
     !! Terminates program if the file is not found.
@@ -217,7 +264,8 @@ contains
   end subroutine letkf_state_read
 
   
-  !============================================================
+!============================================================
+  
   subroutine letkf_state_write(filename, state_3d, state_2d)
     !! writes a given complete model state out to a file.
 
@@ -249,5 +297,7 @@ contains
        
   end subroutine letkf_state_write
 
+  
+! ============================================================
   
 end module letkf_state

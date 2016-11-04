@@ -12,6 +12,7 @@ module letkf_obs_dat
 
   type, extends(obsio) :: obsio_dat
    contains
+     procedure :: init => obsio_dat_init
      procedure :: write => obsio_dat_write
      procedure :: read => obsio_dat_read
   end type obsio_dat
@@ -19,6 +20,15 @@ module letkf_obs_dat
 
 contains
 
+
+  subroutine obsio_dat_init(self)
+    class(obsio_dat) :: self
+
+    self%description = "raw observation I/O"
+    self%extension   = "dat"
+  end subroutine obsio_dat_init
+
+  
   subroutine obsio_dat_write(self, file, obs, iostat)
     class(obsio_dat) :: self
     character(len=*), intent(in) :: file

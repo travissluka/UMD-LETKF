@@ -89,7 +89,10 @@ module letkf_obs
      !! Abstract base class for observation file reading and writing.
      !! All user-defined, and built-in, obs file I/O modules for
      !! specific file types should be built from a class extending this
+     character(len=1024) :: description
+     character(len=10)   :: extension
    contains
+     procedure(I_obsio_init), deferred :: init
      procedure(I_obsio_write), deferred :: write
      !! write a list of observatiosn to the given file     
      procedure(I_obsio_read),  deferred :: read
@@ -97,6 +100,11 @@ module letkf_obs
   end type obsio
   
   abstract interface
+     subroutine I_obsio_init(self)
+       import obsio
+       class(obsio) :: self       
+     end subroutine I_obsio_init
+     
      subroutine I_obsio_write(self, file, obs, iostat)
        !! interface for procedures to write observation data
        import obsio
@@ -203,6 +211,8 @@ contains
        print *, ""
        print *, "Reading Observations"
        print *, "============================================================"
+       print *, "  obsio class: ", trim(reader%description)
+       print *, ""
     end if
 
     ! parallel read of the observation innovation files for each ensemble member

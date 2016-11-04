@@ -4,20 +4,11 @@ module letkf
   use letkf_obs
   use letkf_mpi
   use global
-  use letkf_obs_dat
-  use netcdf
   use letkf_core
   use letkf_state
   use letkf_loc
   
   implicit none
-
-  type :: letkf_solver
-   contains
-     procedure :: run => letkf_solver_run
-     procedure :: read_config => letkf_solver_read_config
-     procedure :: read_obs => letkf_solver_read_obs
-  end type letkf_solver
 
 
   !TODO: move these elsewhere
@@ -39,22 +30,23 @@ module letkf
   real, allocatable :: anal3d_sprd_ij(:,:,:)
   real, allocatable :: anal2d_sprd_ij(:,:)
 
+  logical :: initialized = .false.
+  integer :: t_total
+  class(obsio), pointer :: usr_obsio_class
 contains
 
 
+  
   !############################################################
-  subroutine letkf_solver_run(self)
-    class(letkf_solver) :: self
-    integer :: t_total, t_init, t_letkf, ierr
-
-    integer :: i, k
-    real, allocatable :: anal3d_mean(:,:,:,:)
-    real, allocatable :: anal2d_mean(:,:,:)    
-    real, allocatable :: anal3d_sprd(:,:,:,:)
-    real, allocatable :: anal2d_sprd(:,:,:)    
-
+  subroutine letkf_driver_init()
+    integer :: t_init 
     namelist /letkf_settings/ mem, obsqc_maxstd
-    
+   
+    if (initialized) then
+       print *, "ERROR: letkf_driver_init() called more than once"
+       stop 1
+    end if
+    initialized = .true.
     t_total = timer_init("Total Runtime")
     call timer_start(t_total)
 
@@ -81,11 +73,42 @@ contains
     call letkf_state_init()       
     call letkf_mpi_init2(mem, grid_x*grid_y)
     
-    call self%read_config
+    call letkf_read_config
     call letkf_core_init(mem)
     call timer_stop(t_init)
 
-    call self%read_obs
+  end subroutine letkf_driver_init
+
+
+
+  subroutine letkf_set_obsio(obsio_class)
+    class(obsio), target, intent(in) :: obsio_class
+    call obsio_class%init()
+    usr_obsio_class => obsio_class
+  end subroutine letkf_set_obsio
+
+
+  
+  subroutine letkf_set_stateio(stateio_class)
+    class(stateio), intent(in) :: stateio_class
+  end subroutine letkf_set_stateio
+
+  
+  !############################################################
+  subroutine letkf_driver_run()
+    integer ::  t_letkf, ierr
+
+    integer :: i, k
+    real, allocatable :: anal3d_mean(:,:,:,:)
+    real, allocatable :: anal2d_mean(:,:,:)    
+    real, allocatable :: anal3d_sprd(:,:,:,:)
+    real, allocatable :: anal2d_sprd(:,:,:)    
+
+    
+  
+
+
+    call letkf_obs_read(usr_obsio_class)    
     call letkf_read_gues()
 
 
@@ -142,7 +165,7 @@ contains
     call letkf_mpi_end()
 
     
-  end subroutine letkf_solver_run
+  end subroutine letkf_driver_run
 
 
 
@@ -189,7 +212,7 @@ contains
        ! search for all observations in a given radius of this gridpoint
        call timer_start(timer1)
        call kd_search_radius(obs_tree, &
-            (/lon_ij(ij)*1.0e0, lat_ij(ij)*1.0e0 /), 2500.0e3, &
+            (/lon_ij(ij)*1.0e0, lat_ij(ij)*1.0e0 /), 1000.0e3, &
             rpoints, rdistance, rnum, .false.)
        call timer_stop(timer1)
 
@@ -203,7 +226,7 @@ contains
 
           ! calculate observation localization, and 
           ! get rid of obs outside of localization radius
-          loc_h = loc_gc(rdistance(i), 1000.0e3)
+          loc_h = loc_gc(rdistance(i), 500.0e3)
           if (loc_h <= 0 ) cycle     
 
           ! use this observation
@@ -285,8 +308,7 @@ contains
 
   
   !############################################################
-  subroutine letkf_solver_read_config(self)
-    class(letkf_solver) :: self
+  subroutine letkf_read_config()
     integer :: timer
 
     timer = timer_init("read config", TIMER_SYNC)
@@ -296,18 +318,13 @@ contains
     call letkf_obs_init("obsdef.cfg", "platdef.cfg")
     call timer_stop(timer)
     
-  end subroutine letkf_solver_read_config
+  end subroutine letkf_read_config
 
   
 
   !############################################################  
-  subroutine letkf_solver_read_obs(self)
-    class(letkf_solver) :: self
-    type(obsio_dat) :: ioclass
-
-    !! @todo remove hard coding of obsio type
-    call letkf_obs_read(ioclass)
-  end subroutine letkf_solver_read_obs
+!  subroutine letkf_read_obs()
+!  end subroutine letkf_read_obs
 
 
 
@@ -355,6 +372,7 @@ contains
     deallocate(ana2d)
 
   end subroutine letkf_write_ana
+
 
   
   !============================================================
@@ -452,7 +470,7 @@ contains
 
     !determine lat/lon allocation
     if (pe_isroot) print *,"distributing lat/lon grid..."
-    call getlatlon()
+!    call getlatlon()
     call mpi_scatterv(&
          lon, scatterv_count, scatterv_displ, mpi_real, &
          lon_ij, revcount, mpi_real, &
@@ -526,25 +544,13 @@ contains
   end subroutine letkf_read_gues
 
 
+  subroutine letkf_set_grid(lon_grd_in, lat_grd_in)
+    real, allocatable, intent(in) :: lon_grd_in(:,:)
+    real, allocatable, intent(in) :: lat_grd_in(:,:)
+
+    !! TODO, do some error checking on these
+    lat = lat_grd_in
+    lon = lon_grd_in
+  end subroutine letkf_set_grid
   
-  subroutine getlatlon()
-    integer :: ncid, ierr, varid, n
-
-    allocate(lat(grid_x, grid_y))
-    allocate(lon(grid_x, grid_y))    
-    
-    ierr = nf90_open('data/grid_spec.nc', nf90_nowrite, ncid)
-    ierr = nf90_inq_varid(ncid, 'xta', varid)
-    ierr = nf90_get_var(ncid, varid, lon(:,1))
-    ierr = nf90_inq_varid(ncid, 'yta', varid)
-    ierr = nf90_get_var(ncid, varid, lat(1,:))
-    ierr = nf90_close(ncid)
-
-    do n=2,grid_x
-       lat(n,:) = lat(1,:)
-    end do
-    do n=2, grid_y
-       lon(:,n) = lon(:,1)
-    end do
-  end subroutine getlatlon
 end module letkf
