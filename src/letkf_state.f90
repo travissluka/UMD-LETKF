@@ -5,16 +5,31 @@ module letkf_state
   use str
   implicit none
 
+  private
 
-  integer :: grid_x
-  integer :: grid_y
-  integer :: grid_z
+  ! public variables
+  public :: grid_x, grid_y, grid_z
+  public :: grid_3d, grid_2d
+
+  !public types
+  public :: statedef, stateio
+
+  !public methods
+  public :: letkf_set_vcoord  
+  public :: letkf_state_init
+  public :: letkf_state_read, letkf_state_write
+
+  
+  integer, protected :: grid_x
+  integer, protected :: grid_y
+  integer, protected :: grid_z
   !! number of vertical levels for the 3D state variables
-  integer :: grid_3d = 5
+  integer, protected :: grid_3d = 5
   !! number of 3D state variables
-  integer :: grid_2d = 1
+  integer, protected :: grid_2d = 1
   !! number of 2D state variables
 
+  procedure(I_vcoord), pointer :: vcoord_proc
   
 ! ------------------------------------------------------------
   
@@ -30,7 +45,24 @@ module letkf_state
   
   type(statedef), allocatable :: statedef_list(:)  
 
+
+! ------------------------------------------------------------
+
+  abstract interface
+     subroutine I_vcoord(i,j,z)
+       !! given a x/y grid point, calculates the vertical coordinates
+       !! at each vertical level. Z must already be allocated.
+       integer, intent(in) :: i, j
+       real, intent(inout) :: z(:)
+     end subroutine I_vcoord
+  end interface
+
+
   
+  ! function letkf_vcoord_const(i,j,z)
+  !      integer, intent(in) :: i, j
+  !      real, intent(inout) :: z(:)    
+  ! end function letkf_vcoord_const
 ! ------------------------------------------------------------
   
   type, abstract :: stateio
@@ -70,6 +102,19 @@ module letkf_state
 ! ------------------------------------------------------------ 
   
 contains
+
+  ! subroutine I_vcoord(i,j,z)
+  !      !! given a x/y grid point, calculates the vertical coordinates
+  !      !! at each vertical level. Z must already be allocated.
+  !      integer, intent(in) :: i, j
+  !      real, intent(inout) :: z(:)
+  !  end function I_vcoord
+
+  subroutine letkf_set_vcoord(vcoord_proc_I)
+    procedure(I_vcoord) :: vcoord_proc_I
+
+    vcoord_proc => vcoord_proc_I 
+  end subroutine letkf_set_vcoord
 
   
 ! ============================================================

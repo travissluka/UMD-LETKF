@@ -14,8 +14,11 @@ include_directories( "/usr/lib64/gfortran/modules")
 enable_language( Fortran )
 include ( "cmake/pickFortranCompilerFlags.cmake" )
 include ( "cmake/checkOutOfSource.cmake" )
-
-add_definitions(-Wall)
+#add_definitions(-Wall)
+#add_definitions(-fcheck=all)
+#add_definitions(-g)
+#add_definitions(-O0)
+set(CMAKE_BUILD_TYPE Release)
 
 ## setup project files, dependencies, install locations
 ## ------------------------------------------------------------

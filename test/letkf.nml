@@ -1,0 +1,20 @@
+&letkf_settings
+ mem = 50
+ obsqc_maxstd = 3.0
+/
+
+
+&grid_def
+ grid_x = 192
+ grid_y = 94
+ grid_z = 64
+ statedef_file = "statedef.cfg"
+/
+
+
+&mpi_settings
+ autotune = F
+ autotune_infile = "loadbalance.cfg",
+ autotune_outfile = "loadbalance.cfg",
+ autotune_alpha = 0.0
+/

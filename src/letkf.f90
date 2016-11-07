@@ -7,6 +7,7 @@ module letkf
   use letkf_core
   use letkf_state
   use letkf_loc
+  use kdtree
   
   implicit none
 
@@ -41,7 +42,7 @@ contains
   subroutine letkf_driver_init()
     integer :: t_init 
     namelist /letkf_settings/ mem, obsqc_maxstd
-   
+
     if (initialized) then
        print *, "ERROR: letkf_driver_init() called more than once"
        stop 1

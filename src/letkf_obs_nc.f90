@@ -1,5 +1,5 @@
 module letkf_obs_nc
-  
+ 
   use letkf_obs
   use netcdf
   use global
@@ -8,7 +8,7 @@ module letkf_obs_nc
 
   private
 
-  
+  ! public types
   public :: obsio_nc
 
 

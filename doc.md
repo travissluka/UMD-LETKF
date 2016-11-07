@@ -9,6 +9,9 @@ email: tsluka@umd.edu
 github: https://github.com/travissluka
 graph: true
 source: false
+display: public
+display: protected
+display: private
 ---
 
 Brief Description

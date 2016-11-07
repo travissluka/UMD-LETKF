@@ -5,24 +5,22 @@ module letkf_obs
   use kdtree
   use str
   implicit none
-!  private
+  private
 
   ! public subroutines
   public :: letkf_obs_init
   public :: letkf_obs_read
 
-  ! observation and obsio class
+  ! public types
   public :: observation
   public :: obsio, I_obsio_write, I_obsio_read
-
-  ! observation definitions
   public :: obsdef, obsdef_list
   public :: obsdef_read,  obsdef_getbyname,  obsdef_getbyid
-
-  !platform definitions
   public :: platdef, platdef_list
   public :: platdef_read, platdef_getbyname, platdef_getbyid
- 
+
+  ! protected variables
+  public :: obs_ohx, obs_list, obs_tree, obs_qc, obs_ohx_mean
 
   !------------------------------------------------------------
   
@@ -135,16 +133,16 @@ module letkf_obs
 
 
   !------------------------------------------------------------
-  type(obsdef),  allocatable ::  obsdef_list(:)
+  type(obsdef), protected, allocatable ::  obsdef_list(:)
   !! list of all observation types
-  type(platdef), allocatable :: platdef_list(:)
+  type(platdef), protected, allocatable :: platdef_list(:)
   !! list of all platform types for observations
 
-  type(kd_root)                  :: obs_tree
-  type(observation), allocatable :: obs_list(:)
-  integer, allocatable           :: obs_qc(:)
-  real(dp), allocatable          :: obs_ohx(:,:)
-  real(dp), allocatable          :: obs_ohx_mean(:)
+  type(kd_root), protected                  :: obs_tree
+  type(observation), protected, allocatable :: obs_list(:)
+  integer,  protected, allocatable          :: obs_qc(:)
+  real(dp), protected, allocatable          :: obs_ohx(:,:)
+  real(dp), protected, allocatable          :: obs_ohx_mean(:)
   
   !------------------------------------------------------------
 
