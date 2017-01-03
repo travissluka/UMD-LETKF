@@ -1,8 +1,10 @@
 module letkf_state
   !! performs I/O for the background and analysis states
-  use global
+  use letkf_common
   use letkf_mpi
   use str
+
+  use netcdf
   implicit none
 
   private
@@ -15,11 +17,11 @@ module letkf_state
   public :: statedef, stateio
 
   !public methods
-  public :: letkf_set_vcoord  
+  public :: letkf_set_vcoord
   public :: letkf_state_init
   public :: letkf_state_read, letkf_state_write
 
-  
+
   integer, protected :: grid_x
   integer, protected :: grid_y
   integer, protected :: grid_z
@@ -30,20 +32,21 @@ module letkf_state
   !! number of 2D state variables
 
   procedure(I_vcoord), pointer :: vcoord_proc
-  
+
 ! ------------------------------------------------------------
-  
+
   type statedef
      character(len=:), allocatable :: name_short
-     character(len=:), allocatable :: name_long     
+     character(len=:), allocatable :: name_long
+     character(len=:), allocatable :: file_field
      character(len=:), allocatable :: units
      integer :: levels
    contains
      procedure :: print => statedef_print
   end type statedef
 
-  
-  type(statedef), allocatable :: statedef_list(:)  
+
+  type(statedef), allocatable :: statedef_list(:)
 
 
 ! ------------------------------------------------------------
@@ -58,22 +61,22 @@ module letkf_state
   end interface
 
 
-  
+
   ! function letkf_vcoord_const(i,j,z)
   !      integer, intent(in) :: i, j
-  !      real, intent(inout) :: z(:)    
+  !      real, intent(inout) :: z(:)
   ! end function letkf_vcoord_const
 ! ------------------------------------------------------------
-  
+
   type, abstract :: stateio
      !! abstract base class for state file reading and writing.
    contains
-     procedure(I_stateio_read),  deferred :: read     
+     procedure(I_stateio_read),  deferred :: read
      procedure(I_stateio_write), deferred :: write
   end type stateio
 
   abstract interface
-       
+
      subroutine I_stateio_read(self, file, state)
        !! interface for subroutines that read the state for
        !! a single ensemble member
@@ -91,16 +94,16 @@ module letkf_state
        import stateio
        class(stateio) :: self
        character(len=*), intent(in) :: file
-       real, allocatable, intent(in) :: state(:,:,:)       
+       real, allocatable, intent(in) :: state(:,:,:)
        !! filename to write to
-       !! TODO, change this to just ensemble member number       
+       !! TODO, change this to just ensemble member number
      end subroutine I_stateio_write
-     
+
   end interface
 
-  
-! ------------------------------------------------------------ 
-  
+
+! ------------------------------------------------------------
+
 contains
 
   ! subroutine I_vcoord(i,j,z)
@@ -113,12 +116,12 @@ contains
   subroutine letkf_set_vcoord(vcoord_proc_I)
     procedure(I_vcoord) :: vcoord_proc_I
 
-    vcoord_proc => vcoord_proc_I 
+    vcoord_proc => vcoord_proc_I
   end subroutine letkf_set_vcoord
 
-  
+
 ! ============================================================
-  
+
   subroutine letkf_state_init()
     character(len=:), allocatable :: statedef_file
     integer :: unit
@@ -133,7 +136,7 @@ contains
 
     ! read in namelist
     allocate(character(len=1024) :: statedef_file)
-    open(newunit=unit, file='letkf.nml')
+    open(newunit=unit, file=nml_filename)
     read(unit, nml=grid_def)
     close(unit)
 
@@ -142,25 +145,30 @@ contains
        print grid_def
        print *,''
     end if
-    
-    ! do some basic checks    
+
+    ! do some basic checks
     if (pe_isroot) then
        if (grid_x <= 0) stop 1
        if (grid_y <= 0) stop 1
        if (grid_z <= 0) stop 1
-    end if              
+    end if
 
     ! read in statedef config file
     call statedef_read(statedef_file)
+
+    !TODO, TEMP
+    grid_3d = 2
+    grid_2d = 0
+
   end subroutine letkf_state_init
 
 
 ! ============================================================
-  
+
   subroutine statedef_read(file)
     !! read in the configuration file detailing the contents of the
     !! state variables
-    
+
     character(len=*), intent(in) :: file
     !! path to file to load
 
@@ -184,7 +192,7 @@ contains
     end if
 
     statedef_list_tmp_len = 0
-    
+
     ! open it up for reading
     open(newunit=unit, file=file, action='read')
     do while (.true.)
@@ -214,7 +222,7 @@ contains
        newdef%name_short = toupper(trim(line(:pos-1)))
 
        line= adjustl(line(pos+1:))
-       pos = findspace(line)      
+       pos = findspace(line)
        s_tmp = tolower(trim(line(:pos-1)))
        if(s_tmp == 'nlev') then
           newdef%levels = grid_z
@@ -223,11 +231,15 @@ contains
        end if
 
        line= adjustl(line(pos+1:))
-       pos = findspace(line)      
+       pos = findspace(line)
+       newdef%name_long = toupper(trim(line(:pos-1)))
+
+       line= adjustl(line(pos+1:))
+       pos = findspace(line)
        newdef%units = toupper(trim(line(:pos-1)))
 
        line = adjustl(line(pos+1:))
-       newdef%name_long = trim(line)
+       newdef%file_field = trim(line)
 
        ! add this one to the list
        statedef_list_tmp_len = statedef_list_tmp_len + 1
@@ -236,7 +248,7 @@ contains
                trim(file),'" file, and/or increase MAX_STATEDEF.'
           stop 1
        end if
-       statedef_list_tmp(statedef_list_tmp_len) = newdef          
+       statedef_list_tmp(statedef_list_tmp_len) = newdef
     end do
 
     close (unit)
@@ -246,6 +258,7 @@ contains
     ! write a summary
     if (pe_isroot) then
        print *, 'state variables = ', size(statedef_list)
+       print "(A6, A6, A15, A15)", "NAME","LVLS","DESC","FILE_FIELD"
        do pos=1, size(statedef_list)
           call statedef_list(pos)%print()
        end do
@@ -260,16 +273,64 @@ contains
 
 
 ! ============================================================
-  
+
   subroutine statedef_print(st)
     class(statedef), intent(in) :: st
-    print "(A10, I6, A,A)", st%name_short, st%levels, " ",st%name_long
+    print "(A6, I6, A15,A15)", st%name_short, st%levels, st%name_long,st%file_field
   end subroutine statedef_print
 
 
-! ============================================================
-  
+
   subroutine letkf_state_read(filename, state_3d, state_2d)
+    character(len=*), intent(in) :: filename
+    real, intent(inout) :: state_3d(:,:,:,:)
+    real, intent(inout) :: state_2d(:,:,:)
+
+    integer :: ncid, varid
+
+    call check(nf90_open(filename, nf90_nowrite, ncid))
+
+    call check(nf90_inq_varid(ncid, "temp", varid))
+    call check(nf90_get_var(ncid, varid, state_3d(:,:,:,1)))
+
+    call check(nf90_inq_varid(ncid, "salt", varid))
+    call check(nf90_get_var(ncid, varid, state_3d(:,:,:,2)))
+
+    call check(nf90_close(ncid))
+  end subroutine letkf_state_read
+
+
+
+
+  subroutine letkf_state_write(filename, state_3d, state_2d)
+    character(len=*), intent(in) :: filename
+    real, intent(in) :: state_3d(:,:,:,:)
+    real, intent(in) :: state_2d(:,:,:)
+
+    integer :: ncid
+    integer :: d_x, d_y, d_z, v_t, v_s
+
+    print *, trim(filename)
+
+    call check(nf90_create(filename,  nf90_write, ncid))
+    call check(nf90_def_dim(ncid, "xaxis", 720, d_x))
+    call check(nf90_def_dim(ncid, "yaxis", 410, d_y))
+    call check(nf90_def_dim(ncid, "zaxis", 40,  d_z))
+    call check(nf90_def_var(ncid, "temp", nf90_real, (/d_x,d_y,d_z/), v_t))
+    call check(nf90_def_var(ncid, "salt", nf90_real, (/d_x,d_y,d_z/), v_s))
+    call check(nf90_enddef(ncid))
+
+    call check(nf90_put_var(ncid, v_t, state_3d(:,:,:,1)))
+
+
+    call check(nf90_close(ncid))
+  end subroutine letkf_state_write
+
+
+
+! ============================================================
+
+  subroutine letkf_state_read_dat(filename, state_3d, state_2d)
     !! read a complete model state from a file.
     !! Terminates program if the file is not found.
 
@@ -284,7 +345,7 @@ contains
     integer :: l,k
     real :: r
     logical :: ex
-    
+
     ! check to make sure the file exists
     inquire(file=filename, exist=ex)
     if (.not. ex) then
@@ -306,12 +367,12 @@ contains
        read(unit, rec=nrec) state_2d(:,:,l)
     end do
     close(unit)
-  end subroutine letkf_state_read
+  end subroutine letkf_state_read_dat
 
-  
+
 !============================================================
-  
-  subroutine letkf_state_write(filename, state_3d, state_2d)
+
+  subroutine letkf_state_write_dat(filename, state_3d, state_2d)
     !! writes a given complete model state out to a file.
 
     character(len=*), intent(in) :: filename
@@ -339,10 +400,18 @@ contains
     end do
 
     close(unit)
-       
-  end subroutine letkf_state_write
 
-  
+  end subroutine letkf_state_write_dat
+
+
 ! ============================================================
-  
+
+
+  subroutine check(status)
+    integer, intent(in) :: status
+    if(status /= nf90_noerr) then
+       write (*,*) trim(nf90_strerror(status))
+       stop 1
+    end if
+  end subroutine check
 end module letkf_state

@@ -1,7 +1,7 @@
 module letkf_obs
   use letkf_mpi
   use timing
-  use global
+  use letkf_common
   use kdtree
   use str
   implicit none
@@ -23,9 +23,9 @@ module letkf_obs
   public :: obs_ohx, obs_list, obs_tree, obs_qc, obs_ohx_mean
 
   !------------------------------------------------------------
-  
 
-  
+
+
   type observation
      !! information for a single observation
      integer :: id = -1
@@ -51,8 +51,8 @@ module letkf_obs
      !! removed by LETKF qc
   end type observation
 
-  
-  
+
+
   type obsdef
      !! The specification for a single user-defined observation type
      integer :: id
@@ -67,7 +67,7 @@ module letkf_obs
   end type obsdef
 
 
-  
+
 
   type platdef
      !!specification for a single user-defined observation platform type
@@ -78,10 +78,10 @@ module letkf_obs
      character(len=:), allocatable :: name_long
      !! longer more descriptive name of platform type
    contains
-     procedure :: print => platdef_print     
+     procedure :: print => platdef_print
   end type platdef
 
-  
+
 
   type, abstract :: obsio
      !! Abstract base class for observation file reading and writing.
@@ -92,17 +92,17 @@ module letkf_obs
    contains
      procedure(I_obsio_init), deferred :: init
      procedure(I_obsio_write), deferred :: write
-     !! write a list of observatiosn to the given file     
+     !! write a list of observatiosn to the given file
      procedure(I_obsio_read),  deferred :: read
      !! read a list of observatiosn from the given file
   end type obsio
-  
+
   abstract interface
      subroutine I_obsio_init(self)
        import obsio
-       class(obsio) :: self       
+       class(obsio) :: self
      end subroutine I_obsio_init
-     
+
      subroutine I_obsio_write(self, file, obs, iostat)
        !! interface for procedures to write observation data
        import obsio
@@ -122,11 +122,11 @@ module letkf_obs
        import dp
        class(obsio) :: self
        character(len=*), intent(in) :: file
-       
+
        type(observation),allocatable, intent(out) :: obs(:)
        real(dp), allocatable, intent(out) :: obs_innov(:)
        integer,  allocatable, intent(out) :: obs_qc(:)
-       
+
        integer, optional, intent(out) :: iostat
      end subroutine I_obsio_read
   end interface
@@ -143,10 +143,10 @@ module letkf_obs
   integer,  protected, allocatable          :: obs_qc(:)
   real(dp), protected, allocatable          :: obs_ohx(:,:)
   real(dp), protected, allocatable          :: obs_ohx_mean(:)
-  
+
   !------------------------------------------------------------
 
-  
+
 contains
 
 
@@ -165,18 +165,18 @@ contains
        print *, '  observation definition file: "', trim(obsdef_file),'"'
        print *, '  platform    definition file: "', trim(platdef_file),'"'
        print *, '  I/O format: ???'
-       print *, ''       
+       print *, ''
     end if
-    
+
     call obsdef_read(obsdef_file)
     call platdef_read(platdef_file)
-    
+
   end subroutine letkf_obs_init
 
 
 
   subroutine letkf_obs_read(reader)
-    !! parallel read in of observation    
+    !! parallel read in of observation
     class(obsio), intent(in) :: reader
     !! abstract reader class
 
@@ -184,8 +184,8 @@ contains
     integer :: i, j
     integer :: timer, timer2, timer3, timer4
 
-    character(len=1024) :: filename    
-    
+    character(len=1024) :: filename
+
     integer, allocatable :: obs_qc_l(:,:)
 
     type(observation), allocatable :: obs_t(:)
@@ -202,7 +202,7 @@ contains
     timer2 = timer_init("obs read I/O")
     timer3 = timer_init("obs read MPI", timer_sync)
     timer4 = timer_init("obs kd_init")
-    
+
     call timer_start(timer)
 
     if (pe_isroot) then
@@ -215,14 +215,15 @@ contains
 
     ! parallel read of the observation innovation files for each ensemble member
     !! @TODO un-hardcode this
+
     do i=1,size(ens_list)
-       write (filename, '(A,I0.3,A)') 'data/obsop/2005070300_atm',ens_list(i),'.dat'
+       write (filename, '(A,I0.4,A)') 'INPUT/obsop/',ens_list(i),'.dat'
 
        ! read the file
        !TODO, not the most efficient, general observation information is not
        ! needed with every single ensemble member, this should be in a separate
        ! file, with each ens member file only containing the obs space value and qc
-       call timer_start(timer2)       
+       call timer_start(timer2)
        call reader%read(filename, obs_t, obs_ohx_t, obs_qc_t)
        call timer_stop(timer2)
 
@@ -231,8 +232,9 @@ contains
           allocate(obs_list(size(obs_t)))
           obs_list = obs_t
           allocate(obs_ohx( mem, size(obs_ohx_t)))
-          allocate(obs_ohx_mean( size(obs_ohx_t)))          
+          allocate(obs_ohx_mean( size(obs_ohx_t)))
           allocate(obs_qc_l( mem, size(obs_qc_t)))
+          obs_qc_l = 1
        end if
 
        ! copy the per ensemble member innovation and qc
@@ -245,11 +247,11 @@ contains
        deallocate(obs_qc_t)
     end do
 
-    
+
     ! distribute the qc and innovation values
     ! TODO, using MPI_SUM is likely inefficient, do this another way
 
-    call timer_start(timer3)    
+    call timer_start(timer3)
     call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
     call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
     call timer_stop(timer3)
@@ -282,30 +284,30 @@ contains
 
     !TODO: keep track of invalid obs or plat IDs
     !TODO: set qc < 0 for invalid obs or plat IDs
-    
+
     ! add locations to the kd-tree
     ! TODO: dont add obs to the tree that have a bad QC value
     allocate(obs_lons(size(obs_list)))
     allocate(obs_lats(size(obs_list)))
     do i=1,size(obs_list)
        obs_lons(i) = obs_list(i)%lon
-       obs_lats(i) = obs_list(i)%lat       
+       obs_lats(i) = obs_list(i)%lat
     end do
-    
+
     call timer_start(timer4)
 
     call kd_init(obs_tree, obs_lons, obs_lats)
     call timer_stop(timer4)
     deallocate(obs_lons)
     deallocate(obs_lats)
-    
+
     ! print statistics about the observations
     if (pe_isroot) then
        print '(I11,A)', size(obs_list), " observations loaded"
 
        allocate(obstat_count (size(obsdef_list)+1,  4))
        allocate(obplat_count (size(platdef_list)+1, 4))
-       
+
        obstat_count = 0
        obplat_count = 0
 
@@ -326,7 +328,7 @@ contains
           !    print *, obs_ohx(:,i)
           !    print *,""
           ! end if
-          
+
           ! count by obs type
           do j=1,size(obsdef_list)
              if (obs_list(i)%id == obsdef_list(j)%id) then
@@ -353,7 +355,7 @@ contains
        ! print for counts by obs type
        print *, ""
        print '(4A10,A12)', '','total','bad-obop','bad-qc','good'
-       print *, '         --------------------------------------------'       
+       print *, '         --------------------------------------------'
        do i=1,size(obstat_count,1)
           if (obstat_count(i,1) == 0) cycle
           if (i < size(obstat_count,1)) then
@@ -363,45 +365,45 @@ contains
                   obstat_count(i,2), '(',real(obstat_count(i,2))/obstat_count(i,1)*100, ')%'
           else
              print '(A10,I10,3A10,A)', 'unknown', obstat_count(i,1),'X','X','0',' (  0.0)%'
-             
+
           end if
        end do
 
        ! print stats for counts by plat type
        print *, ""
        print '(4A10,A12)', '','total','bad-obop','bad-qc','good'
-       print *, '         --------------------------------------------'       
+       print *, '         --------------------------------------------'
        do i=1,size(obplat_count,1)
           if (obplat_count(i,1) == 0) cycle
           if (i < size(obplat_count,1)) then
              print '(A10,I10, 2I10, I10,A2,F5.1,A)',&
                   platdef_list(i)%name_short, obplat_count(i,1), &
-                  obplat_count(i,3), obplat_count(i,4),&                  
+                  obplat_count(i,3), obplat_count(i,4),&
                   obplat_count(i,2), '(',real(obplat_count(i,2))/obplat_count(i,1)*100, ')%'
 
           else
              print '(A10,I10,3A10,A)', 'unknown', obplat_count(i,1),'X','X','0',' (  0.0)%'
           end if
        end do
-       
+
        !cleanup
        deallocate(obstat_count)
        deallocate(obplat_count)
     end if
-    
+
 
     call timer_stop(timer)
   end subroutine letkf_obs_read
 
 
-  
+
   ! ============================================================
-  ! ============================================================    
-  subroutine obsdef_read(file)    
+  ! ============================================================
+  subroutine obsdef_read(file)
     character(len=*), intent(in) :: file
 
     integer :: unit, pos, iostat
-    character(len=1024) :: line, s_tmp
+    character(len=1024) :: line
     logical :: ex
     type(obsdef) :: new_ob
     integer, parameter :: MAX_OBSDEF = 1024
@@ -410,7 +412,7 @@ contains
     integer :: i,j
 
     if (pe_isroot) then
-       print *, ''       
+       print *, ''
        print *, ""
        print *, "Observation Definition File"
        print *, "------------------------------------------------------------"
@@ -425,7 +427,7 @@ contains
     end if
 
     obsdef_list_tmp_len = 0
-    
+
     ! open it up for reading
     open(newunit=unit, file=file, action='read')
     do while (1==1)
@@ -442,7 +444,7 @@ contains
        do i = 1, len(line)
           if (line(i:i) == char(9)) line(i:i) = ' '
        end do
-       
+
        ! ignore comments
        line = adjustl(line)
        if (line(1:1) == '#') cycle
@@ -478,9 +480,9 @@ contains
           print *, 'MAX_OBSDEF = ',MAX_OBSDEF
           stop 1
        end if
-       obsdef_list_tmp(obsdef_list_tmp_len) = new_ob         
+       obsdef_list_tmp(obsdef_list_tmp_len) = new_ob
     end do
-    
+
     close (unit)
     allocate(obsdef_list(obsdef_list_tmp_len))
     obsdef_list = obsdef_list_tmp(1:obsdef_list_tmp_len)
@@ -521,9 +523,9 @@ contains
 
 
 
-  
+
   ! ============================================================
-  ! ============================================================    
+  ! ============================================================
   subroutine platdef_read(file)
     character(len=*), intent(in) :: file
     integer :: unit, pos, iostat
@@ -536,11 +538,11 @@ contains
     integer :: i,j
 
     if (pe_isroot) then
-       print *, ''       
+       print *, ''
        print *, ""
        print *, "Platform Definition File"
        print *, "------------------------------------------------------------"
-       print *, 'Reading file "',trim(file),'" ...'       
+       print *, 'Reading file "',trim(file),'" ...'
     end if
 
     ! make sure the file exists
@@ -551,7 +553,7 @@ contains
     end if
 
     platdef_list_tmp_len = 0
-    
+
     ! open it up for reading
     open(newunit=unit, file=file, action='read')
     do while (1==1)
@@ -567,15 +569,15 @@ contains
        ! convert tabs to spaces
        do i = 1, len(line)
           if (line(i:i) == char(9)) line(i:i) = ' '
-       end do       
-       
+       end do
+
        ! ignore comments
        line = adjustl(line)
        if (line(1:1) == '#') cycle
 
        ! ignore empty lines
        if (len(trim(adjustl(line))) == 0) cycle
-          
+
        ! read ID
        line = adjustl(line)
        pos = findspace(line)
@@ -601,7 +603,7 @@ contains
        end if
        platdef_list_tmp(platdef_list_tmp_len) = new_plat
     end do
-    
+
     close (unit)
     allocate(platdef_list(platdef_list_tmp_len))
     platdef_list = platdef_list_tmp(1:platdef_list_tmp_len)
@@ -635,15 +637,15 @@ contains
           i = i + 1
        end do
     end if
-    
+
     ! all done
-    if (pe_isroot)    print *, ""    
+    if (pe_isroot)    print *, ""
   end subroutine platdef_read
 
 
 
   ! ============================================================
-  ! ============================================================  
+  ! ============================================================
   function obsdef_getbyid(id) result(res)
     !! returns information about an observation type given its id number.
     !! An error is thrown if the id is not found
@@ -665,10 +667,10 @@ contains
     res = obsdef_list(i)
   end function obsdef_getbyid
 
-  
+
 
   ! ============================================================
-  ! ============================================================    
+  ! ============================================================
   function obsdef_getbyname(name) result(res)
     character(len=*), intent(in) :: name
     type(obsdef) :: res
@@ -693,7 +695,7 @@ contains
 
 
   ! ============================================================
-  ! ============================================================    
+  ! ============================================================
   function platdef_getbyid(id) result(res)
     integer, intent(in) :: id
     type(platdef) :: res
@@ -703,7 +705,7 @@ contains
     i = 1
     do while(i <= size(platdef_list))
        if (platdef_list(i)%id == id) exit
-       i = i + 1       
+       i = i + 1
     end do
     !!@todo return an error code instead
     if (i > size(platdef_list)) then
@@ -717,7 +719,7 @@ contains
 
 
   ! ============================================================
-  ! ============================================================    
+  ! ============================================================
   function platdef_getbyname(name) result(res)
     character(len=*), intent(in) :: name
     type(platdef) :: res
@@ -739,10 +741,10 @@ contains
     res = platdef_list(i)
   end function platdef_getbyname
 
-  
+
 
   ! ============================================================
-  ! ============================================================  
+  ! ============================================================
   subroutine obsdef_print(ob)
     class(obsdef), intent(in) :: ob
     print "(I6,A10,A10,A5,A)", ob%id, ob%name_short, &
@@ -752,7 +754,7 @@ contains
 
 
   ! ============================================================
-  ! ============================================================    
+  ! ============================================================
   subroutine platdef_print(plat)
     class(platdef), intent(in) :: plat
     print "(I6,A10,A5,A)", plat%id, plat%name_short, &

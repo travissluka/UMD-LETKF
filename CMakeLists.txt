@@ -11,14 +11,15 @@ include_directories( "/usr/lib64/gfortran/modules")
 #  CACHE STRING "Select which configuration to build.")
 #set_property ( CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES} )
 
+set(CMAKE_BUILD_TYPE Release)
 enable_language( Fortran )
 include ( "cmake/pickFortranCompilerFlags.cmake" )
 include ( "cmake/checkOutOfSource.cmake" )
-#add_definitions(-Wall)
-#add_definitions(-fcheck=all)
-#add_definitions(-g)
-#add_definitions(-O0)
-set(CMAKE_BUILD_TYPE Release)
+
+add_definitions(-Wall)
+add_definitions(-fcheck=all)
+add_definitions(-g)
+add_definitions(-O3)
 
 ## setup project files, dependencies, install locations
 ## ------------------------------------------------------------
@@ -35,17 +36,19 @@ set ( INSTALL_MOD_DIR ${PACKAGE_NAME}-foo/lib )
 LIST(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/)
 
 find_package(MPI REQUIRED)
-include_directories(${MPI_INCLUDE_PATH})
-include_directories($ENV{MPI_FORTRAN_MOD_DIR})
+include_directories(${MPI_Fortran_INCLUDE_PATH})
 
 find_package(LAPACK REQUIRED)
+
 set(NETCDF_F77 "YES")
 find_package(NetCDF REQUIRED)
-find_package(OpenMP_Fortran)
+include_directories(${NETCDF_INCLUDES})
+#find_package(OpenMP_Fortran)
 
 
 ## build shared library
-file( GLOB LETKF_LIB_SRCS  "src/*.f90" )
+## ------------------------------------------------------------
+file( GLOB LETKF_LIB_SRCS  "src/module/*.f90" )
 set( LIB_NAME ${CMAKE_PROJECT_NAME})
 add_library( ${LIB_NAME} SHARED ${LETKF_LIB_SRCS} )
 set_target_properties( ${LIB_NAME}
@@ -55,17 +58,12 @@ set_target_properties( ${LIB_NAME}
 )
 
 
-## build test executables
-enable_testing()
-file( GLOB LETKF_TEST_SRCS "src_test/*.f90" )
-foreach( test_source_file ${LETKF_TEST_SRCS} )
-  string( REPLACE ".f90" "" test_name ${test_source_file} )
-  string( FIND  ${test_name} "/" pos REVERSE )
-  math( EXPR pos "${pos}+1" )
-  string( SUBSTRING ${test_name} ${pos} -1 test_name )
-  set( test_name test_${test_name} )
-  add_executable( ${test_name} ${test_source_file} )
-  target_link_libraries( ${test_name} ${LIB_NAME} )
-  target_link_libraries( ${test_name} ${LAPACK_LIBRARIES} )
-  add_test(${test_name} ${test_name})
-endforeach( test_source_file ${LETKF_TEST_SRCS} )
+## build driver
+## ------------------------------------------------------------
+file( GLOB LETKF_DRIV_SRCS "src/driver/*.f90" )
+set( DRIVER_NAME letkfdriver)
+add_executable( ${DRIVER_NAME} ${LETKF_DRIV_SRCS})
+target_link_libraries( ${DRIVER_NAME} ${LIB_NAME} )
+target_link_libraries( ${DRIVER_NAME} ${NETCDF_LIBRARIES_F77})
+target_link_libraries( ${DRIVER_NAME} ${MPI_Fortran_LIBRARIES} )
+target_link_libraries( ${DRIVER_NAME} ${LAPACK_LIBRARIES})

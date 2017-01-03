@@ -1,13 +1,13 @@
 &letkf_settings
- mem = 50
+ mem = 12
  obsqc_maxstd = 3.0
 /
 
 
 &grid_def
- grid_x = 192
- grid_y = 94
- grid_z = 64
+ grid_x = 720
+ grid_y = 410
+ grid_z = 40
  statedef_file = "statedef.cfg"
 /
 

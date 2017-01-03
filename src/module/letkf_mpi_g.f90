@@ -1,9 +1,9 @@
 module letkf_mpi_g
   use mpi
-  use global
-  
+  use letkf_common
+
   implicit none
-  
+
   integer, save :: pe_root, pe_rank, pe_size
   integer, save :: mpi_comm_letkf
 
@@ -17,8 +17,8 @@ module letkf_mpi_g
   integer, save, allocatable :: ens_map(:)
   !! for each index MEM, the number of the PE
   !! respsonsible for its I/O
-  
-  
+
+
   integer, save, allocatable :: ij_list(:)
   !! A list of grid point locations that this process
   !! is responsible for doing core LETKF algorithm on
@@ -26,11 +26,8 @@ module letkf_mpi_g
 
 
   real, allocatable, save :: load_weights(:)
-  
+
   integer, allocatable, save :: scatterv_count(:)
   integer, allocatable, save :: scatterv_displ(:)
 
-
-  logical, save :: autotune
-  character(len=:), allocatable, save :: autotune_outfile
 end module letkf_mpi_g

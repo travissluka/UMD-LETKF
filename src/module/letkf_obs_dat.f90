@@ -1,13 +1,13 @@
 module letkf_obs_dat
+  use letkf_common
   use letkf_obs
   use letkf_mpi
-  use global
-  
+
   implicit none
   private
 
   public :: obsio_dat
-  
+
   !------------------------------------------------------------
 
   type, extends(obsio) :: obsio_dat
@@ -28,7 +28,7 @@ contains
     self%extension   = "dat"
   end subroutine obsio_dat_init
 
-  
+
   subroutine obsio_dat_write(self, file, obs, iostat)
     class(obsio_dat) :: self
     character(len=*), intent(in) :: file
@@ -37,7 +37,7 @@ contains
 
     if (present(iostat)) iostat = 0
     print *, "ERROR: did not write ",trim(file), &
-         " this method not yet implemented"    
+         " this method not yet implemented"
     stop 1
   end subroutine obsio_dat_write
 
@@ -48,9 +48,10 @@ contains
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
     real(dp), allocatable, intent(out) :: obs_innov(:)
-    integer,  allocatable, intent(out) :: obs_qc(:)    
+    integer,  allocatable, intent(out) :: obs_qc(:)
     integer, optional, intent(out) :: iostat
 
+    logical :: ex
     integer :: filesize, unit, i
     real(kind=4) :: record(10)
 
@@ -60,6 +61,14 @@ contains
     allocate( obs_innov(filesize/4/12) )
     allocate( obs_qc(filesize/4/12) )
 
+    ! make sure th at the desired file exists
+    inquire(file=file, exist=ex)
+    if(.not. ex) then
+       print *, "ERROR: Unable to open observation file ",trim(file)
+       stop 1
+    end if
+
+    ! open the file and read in observations
     open(newunit=unit, file=file, form='unformatted', access='sequential', action='read')
     do i = 1, size(obs)
        read(unit) record
@@ -76,11 +85,11 @@ contains
 
        !TODO: temporary, remove this
        if (obs(i)%id == 1100) obs_innov(i) = obs_innov(i) / 100.0
-       if (obs_qc(i) == 0) then
-          obs_qc(i) = 1
-       else
-          obs_qc(i) = 0
-       end if
+!       if (obs_qc(i) == 0) then
+!          obs_qc(i) = 1
+!       else
+!          obs_qc(i) = 0
+!       end if
     end do
     close(unit)
 
@@ -88,5 +97,5 @@ contains
     if (present(iostat)) iostat = 1
   end subroutine obsio_dat_read
 
-  
+
 end module letkf_obs_dat

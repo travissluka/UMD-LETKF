@@ -13,15 +13,14 @@ contains
     real :: loc_gc
     real :: c
     real :: abs_z, z_c
-    real :: zcp
-    
+
     c = L / sqrt(0.3)
     abs_z = abs(z)
     z_c = abs_z / c
-    
+
     if (abs_z >= 2*c) then
        loc_gc = 0.0
-    elseif (abs_z < 2*c .and. abs_z > c) then     
+    elseif (abs_z < 2*c .and. abs_z > c) then
        loc_gc = &
             (1.0/12.0)*z_c**5 - 0.5*z_c**4 + &
             (5.0/8.0)*z_c**3 + (5.0/3.0)*z_c**2 &
@@ -33,7 +32,7 @@ contains
     end if
   end function loc_gc
 
-  
+
   pure function loc_gaus(z, L)
     real, intent(in) :: z, L
     real :: loc_gaus
