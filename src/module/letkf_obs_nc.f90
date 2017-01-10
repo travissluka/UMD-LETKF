@@ -1,12 +1,12 @@
 module letkf_obs_nc
-  use letkf_common
-  use letkf_obs
+  use letkf_obs_I
+
   use netcdf
 
-
   implicit none
-
   private
+
+  integer, parameter :: dp = kind(0.0)
 
   ! public types
   public :: obsio_nc

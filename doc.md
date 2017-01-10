@@ -8,10 +8,13 @@ author: Travis Sluka
 email: tsluka@umd.edu
 github: https://github.com/travissluka
 graph: true
+sort: permission
 source: false
 display: public
 display: protected
 display: private
+extra_mods: netcdf : http://www.unidata.ucar.edu/software/netcdf/docs
+page_dir: doc_src/pages
 ---
 
 Brief Description

@@ -11,7 +11,7 @@ include_directories( "/usr/lib64/gfortran/modules")
 #  CACHE STRING "Select which configuration to build.")
 #set_property ( CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES} )
 
-set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Release)
 enable_language( Fortran )
 include ( "cmake/pickFortranCompilerFlags.cmake" )
 include ( "cmake/checkOutOfSource.cmake" )

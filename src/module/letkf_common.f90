@@ -9,6 +9,8 @@ module letkf_common
 
   ! set by mpi module
   logical :: isroot = .true.
+  integer :: mpi_comm_letkf
+  integer :: pe_root, pe_rank, pe_size
 
   ! the following are read in from namelists
   integer :: mem

@@ -4,52 +4,31 @@ module letkf_obs
   use letkf_common
   use kdtree
   use str
+
+  use letkf_obs_I
+  use letkf_obs_nc
+  use letkf_obs_dat
+
+
   implicit none
   private
 
   ! public subroutines
   public :: letkf_obs_init
   public :: letkf_obs_read
+  public :: letkf_obs_get
 
   ! public types
-  public :: observation
-  public :: obsio, I_obsio_write, I_obsio_read
   public :: obsdef, obsdef_list
   public :: obsdef_read,  obsdef_getbyname,  obsdef_getbyid
   public :: platdef, platdef_list
   public :: platdef_read, platdef_getbyname, platdef_getbyid
 
   ! protected variables
-  public :: obs_ohx, obs_list, obs_tree, obs_qc, obs_ohx_mean
+  public :: obs_ohx, obs_list, obs_qc, obs_ohx_mean
 
+  class(obsio), public, allocatable :: obsio_class
   !------------------------------------------------------------
-
-
-
-  type observation
-     !! information for a single observation
-     integer :: id = -1
-     !! observation type id, as specified in the `obsdef` configuration file.
-     !! A value of -1 indicates no observation data has been read in.
-     integer :: plat
-     !! Platform type id, as specified in the `platdef` configuration file.
-     real(dp) :: lat
-     !! Latitude (degrees)
-     real(dp) :: lon
-     !! Longitude (degrees)
-     real(dp) :: depth
-     !! Depth, in whatever units is appropriate for the domain.
-     !! If this is a 2D observation, this value is ignored.
-     real(dp) :: time
-     !! Time (hours) from base time
-     real(dp) :: val
-     !! Observation value
-     real(dp) :: err
-     !! standard deviation of observation error
-!     integer :: qc
-     !! Quality control flag. ( 0 = no errors, > 0 removed by obs op, < 0
-     !! removed by LETKF qc
-  end type observation
 
 
 
@@ -82,56 +61,6 @@ module letkf_obs
   end type platdef
 
 
-
-  type, abstract :: obsio
-     !! Abstract base class for observation file reading and writing.
-     !! All user-defined, and built-in, obs file I/O modules for
-     !! specific file types should be built from a class extending this
-     character(len=1024) :: description
-     character(len=10)   :: extension
-   contains
-     procedure(I_obsio_init), deferred :: init
-     procedure(I_obsio_write), deferred :: write
-     !! write a list of observatiosn to the given file
-     procedure(I_obsio_read),  deferred :: read
-     !! read a list of observatiosn from the given file
-  end type obsio
-
-  abstract interface
-     subroutine I_obsio_init(self)
-       import obsio
-       class(obsio) :: self
-     end subroutine I_obsio_init
-
-     subroutine I_obsio_write(self, file, obs, iostat)
-       !! interface for procedures to write observation data
-       import obsio
-       import observation
-       class(obsio) :: self
-       character(len=*), intent(in)   :: file
-       !! filename to write observations to
-       type(observation), intent(in) :: obs(:)
-       !! list of 1 or more observatiosn to write
-       integer, optional, intent(out) :: iostat
-     end subroutine I_obsio_write
-
-     subroutine I_obsio_read(self, file, obs, obs_innov, obs_qc, iostat)
-       !! interface for procedures to load observation data
-       import observation
-       import obsio
-       import dp
-       class(obsio) :: self
-       character(len=*), intent(in) :: file
-
-       type(observation),allocatable, intent(out) :: obs(:)
-       real(dp), allocatable, intent(out) :: obs_innov(:)
-       integer,  allocatable, intent(out) :: obs_qc(:)
-
-       integer, optional, intent(out) :: iostat
-     end subroutine I_obsio_read
-  end interface
-
-
   !------------------------------------------------------------
   type(obsdef), protected, allocatable ::  obsdef_list(:)
   !! list of all observation types
@@ -149,6 +78,15 @@ module letkf_obs
 
 contains
 
+  subroutine letkf_obs_get(slat, slon, sradius, rpoints, rdistance, rnum)
+    real,    intent(in)    :: slat, slon, sradius
+    integer, intent(inout) :: rpoints(:)
+    real,    intent(inout) :: rdistance(:)
+    integer, intent(out)   :: rnum
+    call kd_search_radius(obs_tree, (/slon*1.0e0, slat*1.0e0/), sradius, rpoints, rdistance, rnum, .false.)
+  end subroutine letkf_obs_get
+
+
 
   subroutine letkf_obs_init(obsdef_file, platdef_file)
     character(len=*), optional, intent(in) :: obsdef_file
@@ -158,13 +96,16 @@ contains
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
 
-    if (pe_isroot) then
+    allocate(obsio_dat :: obsio_class)
+    call obsio_class%init()
+
+    if (isroot) then
        print *, ''
        print *, 'LETKF observation configuration files'
        print *, '------------------------------------------------------------'
        print *, '  observation definition file: "', trim(obsdef_file),'"'
        print *, '  platform    definition file: "', trim(platdef_file),'"'
-       print *, '  I/O format: ???'
+       print *, '  I/O format: ',trim(obsio_class%description)
        print *, ''
     end if
 
@@ -180,7 +121,6 @@ contains
     class(obsio), intent(in) :: reader
     !! abstract reader class
 
-    integer :: ierr
     integer :: i, j
     integer :: timer, timer2, timer3, timer4
 
@@ -205,7 +145,7 @@ contains
 
     call timer_start(timer)
 
-    if (pe_isroot) then
+    if (isroot) then
        print *, ""
        print *, "Reading Observations"
        print *, "============================================================"
@@ -250,10 +190,13 @@ contains
 
     ! distribute the qc and innovation values
     ! TODO, using MPI_SUM is likely inefficient, do this another way
-
     call timer_start(timer3)
-    call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
-    call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
+    call letkf_mpi_obs(obs_ohx, obs_qc_l)
+!    real(dp), allocatable :: obs_ohx_t(:)
+!    integer, allocatable :: obs_qc_t(:)
+
+!    call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
+!    call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
     call timer_stop(timer3)
 
 
@@ -302,7 +245,7 @@ contains
     deallocate(obs_lats)
 
     ! print statistics about the observations
-    if (pe_isroot) then
+    if (isroot) then
        print '(I11,A)', size(obs_list), " observations loaded"
 
        allocate(obstat_count (size(obsdef_list)+1,  4))
@@ -411,7 +354,7 @@ contains
     integer :: obsdef_list_tmp_len
     integer :: i,j
 
-    if (pe_isroot) then
+    if (isroot) then
        print *, ''
        print *, ""
        print *, "Observation Definition File"
@@ -488,7 +431,7 @@ contains
     obsdef_list = obsdef_list_tmp(1:obsdef_list_tmp_len)
 
     ! write summary
-    if (pe_isroot) then
+    if (isroot) then
        print *, 'obs defined = ', size(obsdef_list)
        print "(A6,A10,A10,A5,A)", "ID", "NAME", "UNITS", "","FULL NAME"
        do pos=1, size(obsdef_list)
@@ -497,7 +440,7 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    if (pe_isroot) then
+    if (isroot) then
        i = 1
        do while(i < size(obsdef_list))
           j = i + 1
@@ -518,7 +461,7 @@ contains
     end if
 
     ! all done
-    if (pe_isroot)    print *, ""
+    if (isroot)    print *, ""
   end subroutine obsdef_read
 
 
@@ -537,7 +480,7 @@ contains
     integer :: platdef_list_tmp_len
     integer :: i,j
 
-    if (pe_isroot) then
+    if (isroot) then
        print *, ''
        print *, ""
        print *, "Platform Definition File"
@@ -609,7 +552,7 @@ contains
     platdef_list = platdef_list_tmp(1:platdef_list_tmp_len)
 
     ! write summary
-    if (pe_isroot) then
+    if (isroot) then
        print *, 'platforms defined = ', size(platdef_list)
        print "(A6,A10,A5,A)", "ID", "NAME", "","DESCRIPTION"
        do pos=1, size(platdef_list)
@@ -618,7 +561,7 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    if (pe_isroot) then
+    if (isroot) then
        i = 1
        do while(i < size(platdef_list))
           j = i + 1
@@ -639,7 +582,7 @@ contains
     end if
 
     ! all done
-    if (pe_isroot)    print *, ""
+    if (isroot)    print *, ""
   end subroutine platdef_read
 
 

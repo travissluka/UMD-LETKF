@@ -1,5 +1,8 @@
 module letkf_loc
   implicit none
+  private
+
+  public :: loc_gc, loc_gaus
 
 contains
 

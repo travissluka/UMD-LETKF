@@ -1,12 +1,12 @@
 module letkf_obs_dat
-  use letkf_common
-  use letkf_obs
-  use letkf_mpi
+  use letkf_obs_I
 
   implicit none
   private
 
   public :: obsio_dat
+
+  integer, parameter :: dp = kind(0.0)
 
   !------------------------------------------------------------
 
@@ -35,6 +35,10 @@ contains
     type(observation), intent(in) :: obs(:)
     integer, optional, intent(out) :: iostat
 
+    ! meaningless statement to avoid warning that "self" isn't used
+    self%extension = self%extension
+    if(size(obs) == size(obs)) continue
+
     if (present(iostat)) iostat = 0
     print *, "ERROR: did not write ",trim(file), &
          " this method not yet implemented"
@@ -54,6 +58,9 @@ contains
     logical :: ex
     integer :: filesize, unit, i
     real(kind=4) :: record(10)
+
+    ! meaningless statement to avoid warning that "self" isn't used
+    self%extension = self%extension
 
     ! determine the number of observations that will be read in
     inquire(file=file, size=filesize)

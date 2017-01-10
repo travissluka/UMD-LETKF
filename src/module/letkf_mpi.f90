@@ -1,12 +1,50 @@
 module letkf_mpi
-  use mpi
+
   use letkf_common
-  use timing
-  use letkf_mpi_g
+  use mpi
 
   implicit none
+  private
+
+  public :: letkf_mpi_init, letkf_mpi_init2, letkf_mpi_end
+  public :: letkf_mpi_obs
+  public :: ens_list, ens_idx
+
+  ! public variables
+  ! ------------------------------
+  integer,public, allocatable :: ens_map(:)
+    !! for each index MEM, the number of the PE
+    !! respsonsible for its I/O
+  integer, public :: ij_count
+  integer, public, allocatable :: scatterv_count(:)
+  integer, public, allocatable :: scatterv_displ(:)
+
+
+  ! private variables
+  ! ------------------------------
+  integer, allocatable :: ens_list(:)
+    !! A list of ensemble numbers (from 0 to MEM) that this
+    !! process is responsible for the I/O
+  integer :: ens_count
+  integer, allocatable :: ij_list(:)
+    !! A list of grid point locations that this process
+    !! is responsible for doing core LETKF algorithm on
+  real, allocatable :: load_weights(:)
+
+
 
 contains
+
+
+  subroutine letkf_mpi_obs(ohx, qc)
+    real(dp), intent(inout) :: ohx(:,:)
+    integer,  intent(inout) :: qc(:,:)
+    integer :: ierr
+
+    !TODO, this is inefficient
+    call mpi_allreduce(mpi_in_place, ohx, mem*size(ohx,2), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
+    call mpi_allreduce(mpi_in_place, qc, mem*size(ohx,2), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
+  end subroutine letkf_mpi_obs
 
 
   function ens_idx(m)
@@ -41,7 +79,7 @@ contains
     call mpi_comm_size(mpi_comm_letkf, pe_size, ierr)
     call mpi_comm_rank(mpi_comm_letkf, pe_rank, ierr)
 
-    pe_isroot = pe_root == pe_rank
+    isroot = pe_root == pe_rank
 
 
   end subroutine letkf_mpi_init
@@ -60,7 +98,7 @@ contains
     ! determine which ensemble members number this PE should deal with
     ! ----------------------------------------
     prev = 0
-    if (pe_isroot) then
+    if (isroot) then
        print *, ""
        print '(A)', "ensemble member I/O list:"
     end if
@@ -81,7 +119,7 @@ contains
        end do
 
        ! if root proc, print out info about each PE
-       if (pe_isroot) then
+       if (isroot) then
           if (count > 1) then
              print '(A5,I4,A,I4,A,I4,A,I4)', "proc", i,' is I/O for ',count,' ensemble member(s): ', prev+1, ' to ',count+prev
           else if (count == 1) then
@@ -98,7 +136,7 @@ contains
 
     ! determine how many gridpoints this PE should deal with
     ! ----------------------------------------
-    if (pe_isroot) print *, ""
+    if (isroot) print *, ""
 
     ! determine the process load weights
     allocate(load_weights(pe_size))
@@ -107,7 +145,7 @@ contains
 
 
     ! calculate actual numer of gridpoints to use
-    if (pe_isroot) then
+    if (isroot) then
        print *, ""
        print "(A)", "gridpoint assignment list:"
     end if
@@ -128,7 +166,7 @@ contains
        scatterv_count(i+1) = count
        scatterv_displ(i+1) = prev
 
-       if (pe_isroot) then
+       if (isroot) then
           print '(A5,I4,A,I7,A,I7,A,I7)', "proc",i,' calcs for', count,' grid points: ',prev+1,' to ',prev+count
        end if
        prev = prev+count
