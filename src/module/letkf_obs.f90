@@ -24,7 +24,6 @@ module letkf_obs
   public :: platdef, platdef_list
   public :: platdef_read, platdef_getbyname, platdef_getbyid
 
-  ! protected variables
   public :: obs_ohx, obs_list, obs_qc, obs_ohx_mean
 
   class(obsio), public, allocatable :: obsio_class
@@ -60,7 +59,7 @@ module letkf_obs
      procedure :: print => platdef_print
   end type platdef
 
-
+  ! protected variables
   !------------------------------------------------------------
   type(obsdef), protected, allocatable ::  obsdef_list(:)
   !! list of all observation types
@@ -73,6 +72,7 @@ module letkf_obs
   real(dp), protected, allocatable          :: obs_ohx(:,:)
   real(dp), protected, allocatable          :: obs_ohx_mean(:)
 
+  real :: obsqc_maxstd
   !------------------------------------------------------------
 
 
@@ -95,10 +95,40 @@ contains
     character(len=*), optional, intent(in) :: platdef_file
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
+    character(len=:), allocatable :: reader
 
-    allocate(obsio_dat :: obsio_class)
+    namelist /letkf_obs/ obsqc_maxstd, reader
+
+    if (isroot) then
+       print *, new_line('a'), &
+            new_line('a'), '============================================================', &
+            new_line('a'), ' letkf_obs_init() : ', &
+            new_line('a'), '============================================================'
+    end if
+
+
+    ! read in our section of the namelist
+    allocate(character(1024) :: reader)
+    open(90, file=nml_filename)
+    read(90, nml=letkf_obs)
+    close(90)
+    reader = trim(reader)
+    if (isroot) then
+       print letkf_obs
+    end if
+
+    ! determine the io class to create
+    if (reader == 'dat') then
+       allocate(obsio_dat :: obsio_class)
+    else if( reader == 'nc') then
+       allocate(obsio_nc :: obsio_class)
+    else
+       print *, 'ERROR, unkown obsio class "',reader,'"'
+       stop 1
+    end if
     call obsio_class%init()
 
+    ! read in additional configuration files
     if (isroot) then
        print *, ''
        print *, 'LETKF observation configuration files'
@@ -108,9 +138,11 @@ contains
        print *, '  I/O format: ',trim(obsio_class%description)
        print *, ''
     end if
-
     call obsdef_read(obsdef_file)
     call platdef_read(platdef_file)
+
+    ! read in the observations
+    call letkf_obs_read(obsio_class)
 
   end subroutine letkf_obs_init
 
@@ -148,7 +180,7 @@ contains
     if (isroot) then
        print *, ""
        print *, "Reading Observations"
-       print *, "============================================================"
+       print *, "------------------------------------------------------------"
        print *, "  obsio class: ", trim(reader%description)
        print *, ""
     end if
@@ -189,14 +221,8 @@ contains
 
 
     ! distribute the qc and innovation values
-    ! TODO, using MPI_SUM is likely inefficient, do this another way
     call timer_start(timer3)
     call letkf_mpi_obs(obs_ohx, obs_qc_l)
-!    real(dp), allocatable :: obs_ohx_t(:)
-!    integer, allocatable :: obs_qc_t(:)
-
-!    call mpi_allreduce(mpi_in_place, obs_ohx, mem*size(obs_list), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
-!    call mpi_allreduce(mpi_in_place, obs_qc_l , mem*size(obs_list), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
     call timer_stop(timer3)
 
 

@@ -2,7 +2,7 @@ module letkf_state_I
   implicit none
   private
 
-  public :: statedef
+!  public :: statedef
   public :: stateio
   public :: slab
 
@@ -10,13 +10,13 @@ module letkf_state_I
   !! ------------------------------------------------------------
 
 
-  type statedef
-     character(len=:), allocatable :: name_short
-     character(len=:), allocatable :: name_long
-     character(len=:), allocatable :: file_field
-     character(len=:), allocatable :: units
-     integer                       :: levels
-  end type statedef
+  ! type statedef
+  !    character(len=:), allocatable :: name_short
+  !    character(len=:), allocatable :: name_long
+  !    character(len=:), allocatable :: file_field
+  !    character(len=:), allocatable :: units
+  !    integer                       :: levels
+  ! end type statedef
 
 
   !! ------------------------------------------------------------

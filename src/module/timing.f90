@@ -1,11 +1,12 @@
 module timing
-  use letkf_common
+!  use letkf_common
   use mpi
 
 
   implicit none
   private
 
+  public :: timing_init
   public :: timer_init, timer_start, timer_stop
   public :: timer_print, timer_gather
   public :: gettimer
@@ -26,7 +27,28 @@ module timing
   integer, save :: active_timers = 0
   type(timer_obj), save  :: timer_objs(max_timers)
 
+
+  integer :: mp_comm, mp_root, mp_rank, mp_size
 contains
+
+  subroutine timing_init(comm, root)
+    integer, intent(in) :: comm
+    integer, intent(in) :: root
+    integer :: ierr
+    mp_root = root
+    mp_comm = comm
+    call mpi_comm_rank(mp_comm, mp_rank, ierr)
+    if(ierr /= 0) then
+       print *,"ERROR in timing_init"
+       stop 1
+    end if
+    call mpi_comm_size(mp_comm, mp_size, ierr)
+    if(ierr /= 0) then
+       print *,"ERROR in timing_init"
+       stop 1
+    end if
+  end subroutine timing_init
+
 
 
   !############################################################
@@ -86,7 +108,7 @@ contains
     end if
 
     if ( iand(timer_objs(id)%flags, TIMER_SYNC) > 0)then
-       call mpi_barrier(mpi_comm_letkf, ierr)
+       call mpi_barrier(mp_comm, ierr)
     end if
 
     call system_clock(timer_objs(id)%tick)
@@ -126,8 +148,7 @@ contains
     !! todo, error checking on valid timer id
     call system_clock(count_rate=timer_rate)
     t0 = real(timer_objs(id)%total_ticks) / real(timer_rate)
-    call mpi_allgather(t0, 1, mpi_real, &
-         times, 1, mpi_real, mpi_comm_letkf, ierr)
+    call mpi_allgather(t0, 1, mpi_real, times, 1, mpi_real, mp_comm, ierr)
   end subroutine timer_gather
 
   !############################################################
@@ -138,11 +159,11 @@ contains
     integer(kind=8) :: timer_rate
     integer :: ierr
 
-    if (isroot) then
+    if (mp_root == mp_rank) then
        print *,""
        print *,"Timing:"
        print *,"============================================================"
-       print '(A,I4,A)',"calculating timer statistics across ", pe_size," processes..."
+       print '(A,I4,A)',"calculating timer statistics across ", mp_size," processes..."
        print *,""
        print '(A15,4A10)',"","ave","min","max", "std"
 
@@ -154,15 +175,15 @@ contains
     do while (i <= active_timers)
        t = real(timer_objs(i)%total_ticks)/real(timer_rate)
 
-       call mpi_reduce   (t, tmin, 1, mpi_real, mpi_min, pe_root, mpi_comm_letkf, ierr)
-       call mpi_reduce   (t, tmax, 1, mpi_real, mpi_max, pe_root, mpi_comm_letkf, ierr)
-       call mpi_allreduce(t, tave, 1, mpi_real, mpi_sum,    mpi_comm_letkf, ierr)
-       tave = tave / pe_size
+       call mpi_reduce   (t, tmin, 1, mpi_real, mpi_min, mp_root, mp_comm, ierr)
+       call mpi_reduce   (t, tmax, 1, mpi_real, mpi_max, mp_root, mp_comm, ierr)
+       call mpi_allreduce(t, tave, 1, mpi_real, mpi_sum,          mp_comm, ierr)
+       tave = tave / mp_size
        tdif2 = (t-tave)*(t-tave)
-       call mpi_reduce (tdif2, tdif2g, 1, mpi_real, mpi_sum, pe_root, mpi_comm_letkf, ierr)
+       call mpi_reduce (tdif2, tdif2g, 1, mpi_real, mpi_sum, mp_root, mp_comm, ierr)
 
-       if (isroot) then
-          tdif2g = sqrt(tdif2g/pe_size)
+       if (mp_root == mp_rank) then
+          tdif2g = sqrt(tdif2g/mp_size)
           print '(A15,4F10.3)', trim(timer_objs(i)%name), tave, tmin, tmax, tdif2g
        end if
 

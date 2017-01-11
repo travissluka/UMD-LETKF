@@ -6,9 +6,12 @@ module letkf_mpi
   implicit none
   private
 
-  public :: letkf_mpi_init, letkf_mpi_init2, letkf_mpi_end
-  public :: letkf_mpi_obs
-  public :: ens_list, ens_idx
+  public :: letkf_mpi_preinit, letkf_mpi_init, letkf_mpi_end
+
+  public :: letkf_mpi_obs, letkf_mpi_grd2ij, letkf_mpi_ij2grd
+  public :: letkf_mpi_ens2ij, letkf_mpi_ij2ens
+
+  public :: ens_list !, ens_idx
 
   ! public variables
   ! ------------------------------
@@ -32,8 +35,74 @@ module letkf_mpi
   real, allocatable :: load_weights(:)
 
 
+  integer, public :: pe_rank, pe_size, pe_root
+  integer, public :: mpi_comm_letkf
 
 contains
+
+  subroutine letkf_mpi_ens2ij(ens, ij)
+    real, intent(in)    :: ens(:,:,:,:)
+    real, intent(inout) :: ij(:,:,:)
+    integer :: ierr, i ,m
+    do m=1,mem
+       do i=1,size(ens,3)
+          call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
+               ij(:,i,m), ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
+          if(ierr /= 0) then
+             print *, "ERROR: with letkf_mpi_ens2ij",ierr
+             stop 1
+          end if
+       end do
+    end do
+  end subroutine letkf_mpi_ens2ij
+
+
+
+  subroutine letkf_mpi_ij2ens(ij, ens)
+    real, intent(in)    :: ij(:,:,:)
+    real, intent(inout) :: ens(:,:,:,:)
+    integer :: ierr, i, m
+    do m=1,mem
+       do i=1,size(ens,3)
+          call mpi_gatherv(ij(:,i,m), ij_count, mpi_real,&
+               ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real,&
+               ens_map(m), mpi_comm_letkf, ierr)
+          if(ierr /= 0) then
+             print *, "ERROR: with letkf_mpi_ij2ens",ierr
+             stop 1
+          end if
+       end do
+    end do
+  end subroutine letkf_mpi_ij2ens
+
+
+
+  subroutine letkf_mpi_grd2ij(grd, ij)
+    real, intent(in) :: grd(:,:)
+    real, intent(inout) :: ij(:)
+    integer :: ierr
+    call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_real, &
+         ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    if(ierr /= 0) then
+       print *, "ERROR: with letkf_mpi_grd2ij",ierr
+       stop 1
+    end if
+  end subroutine letkf_mpi_grd2ij
+
+
+
+  subroutine letkf_mpi_ij2grd(ij, grd)
+    real, intent(in)    :: ij(:)
+    real, intent(inout) :: grd(:,:)
+    integer :: ierr
+    call mpi_gatherv(ij, ij_count, mpi_real, &
+         grd, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    if(ierr /= 0) then
+       print *, "ERROR: with letkf_mpi_ij2grd", ierr
+       stop 1
+    end if
+  end subroutine letkf_mpi_ij2grd
+
 
 
   subroutine letkf_mpi_obs(ohx, qc)
@@ -65,7 +134,7 @@ contains
 
 
   !############################################################
-  subroutine letkf_mpi_init()
+  subroutine letkf_mpi_preinit()
     integer :: ierr
 
     call mpi_init(ierr)
@@ -82,17 +151,24 @@ contains
     isroot = pe_root == pe_rank
 
 
-  end subroutine letkf_mpi_init
+  end subroutine letkf_mpi_preinit
 
 
 
   !############################################################
-  subroutine letkf_mpi_init2(mem, grid_ij)
+  subroutine letkf_mpi_init(mem, grid_ij)
     integer, intent(in) :: mem
     integer, intent(in) :: grid_ij
     integer :: i, j
     integer :: count, prev
 
+
+    if(isroot) then
+       print *, new_line('a'), &
+            new_line('a'), '============================================================', &
+            new_line('a'), ' letkf_mpi_init() : ', &
+            new_line('a'), '============================================================'
+    end if
     allocate (ens_map(mem))
 
     ! determine which ensemble members number this PE should deal with
@@ -172,7 +248,7 @@ contains
        prev = prev+count
     end do
 
-  end subroutine letkf_mpi_init2
+  end subroutine letkf_mpi_init
 
 
 

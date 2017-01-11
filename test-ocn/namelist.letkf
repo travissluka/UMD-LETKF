@@ -1,6 +1,14 @@
 &letkf_settings
  mem = 5
+ grid_nx = 720
+ grid_ny = 410
+/
+
+
+&letkf_obs
+ reader = 'dat'
  obsqc_maxstd = 3.0
+
 /
 
 
@@ -13,9 +21,9 @@
 /
 
 
-&mpi_settings
- autotune = F
- autotune_infile = "loadbalance.cfg",
- autotune_outfile = "loadbalance.cfg",
- autotune_alpha = 0.0
-/
+!&mpi_settings
+! autotune = F
+! autotune_infile = "loadbalance.cfg",
+! autotune_outfile = "loadbalance.cfg",
+! autotune_alpha = 0.0
+!/

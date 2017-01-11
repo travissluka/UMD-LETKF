@@ -1,5 +1,4 @@
 program test
-  use netcdf
   use letkf
 
 
