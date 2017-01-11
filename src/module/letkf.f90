@@ -116,7 +116,7 @@ contains
     ! all done, cleanup
     call timer_stop(t_total)
     call timer_print()
-    call letkf_mpi_end()
+    call letkf_mpi_final()
 
   end subroutine letkf_driver_run
 
