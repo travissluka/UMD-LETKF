@@ -2,7 +2,6 @@ module letkf_state
   !! performs I/O for the background and analysis states
   !!
   ! library modules
-  use letkf_common
   use letkf_mpi
   use letkf_state_I
   use letkf_state_generic
@@ -14,9 +13,13 @@ module letkf_state
 
   ! public module variables
   integer, public  :: grid_nx
+    !! number of grid points in the x direction
   integer, public  :: grid_ny
+    !! number of grid points in the y direction
   integer, public, protected :: grid_nz
+    !! number of vertical levels for 3D variables
   integer, public, protected :: grid_ns
+    !! total number of 2D grid slices. This is equal to grid_nz*num_3D_vars + num_2D_vars
   real,    public, protected, allocatable :: lat_ij(:), lon_ij(:)
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
   real,    public, protected, allocatable :: bkg_mean_ij(:,:)
@@ -36,9 +39,13 @@ contains
 
 
   !============================================================
-  subroutine letkf_state_init()
+  subroutine letkf_state_init(nml_filename)
     !! Initialize the state vector by reading in the background ensemble
     !! and distributing across cores
+
+    character(len=*), intent(in) :: nml_filename
+      !! filename of namelist to read in for the ***grid_def*** section
+
     real, allocatable :: gues(:,:,:,:)
     real, allocatable :: wrk(:,:,:)
     real, allocatable :: lat(:,:), lon(:,:)
@@ -49,7 +56,7 @@ contains
 
     namelist /grid_def/ grid_nx, grid_ny, grid_nz, grid_ns
 
-    if(isroot) then
+    if(pe_isroot) then
        print *, new_line('a'), &
             new_line('a'), '============================================================',&
             new_line('a'), 'letkf_state_init() : ',&
@@ -60,7 +67,7 @@ contains
     open(newunit=unit, file=nml_filename)
     read(unit, nml=grid_def)
     close(unit)
-    if (isroot) then
+    if (pe_isroot) then
        print grid_def
     end if
 
@@ -74,7 +81,7 @@ contains
 
 
     ! read in the background members that our process is responsible for
-     if (isroot) then
+     if (pe_isroot) then
         print *, ""
         print *, "Reading ensemble background"
         print *, "------------------------------------------------------------"
@@ -91,7 +98,7 @@ contains
 
 
      ! scatter grids to mpi procs
-     if (isroot) print *, "Scattering across procs..."
+     if (pe_isroot) print *, "Scattering across procs..."
      allocate(bkg_ij(ij_count, grid_ns, mem))
      allocate(bkg_mean_ij(ij_count, grid_ns))
      allocate(bkg_sprd_ij(ij_count, grid_ns))
@@ -109,7 +116,7 @@ contains
 
 
      ! caculate mean / spread
-     if (isroot) print *, "Calculating background mean / spread..."
+     if (pe_isroot) print *, "Calculating background mean / spread..."
      bkg_mean_ij = sum(bkg_ij, 3) / mem
      bkg_sprd_ij = 0
      do m = 1,mem
@@ -124,11 +131,11 @@ contains
      do i = 1,grid_ns
         call letkf_mpi_ij2grd(bkg_mean_ij(:,i), wrk(:,:,i))
      end do
-     if (isroot) call stateio_class%write('OUTPUT/bkg_mean.nc', wrk)
+     if (pe_isroot) call stateio_class%write('OUTPUT/bkg_mean.nc', wrk)
      do i = 1,grid_ns
         call letkf_mpi_ij2grd(bkg_sprd_ij(:,i), wrk(:,:,i))
      end do
-     if (isroot) call stateio_class%write('OUTPUT/bkg_sprd.nc', wrk)
+     if (pe_isroot) call stateio_class%write('OUTPUT/bkg_sprd.nc', wrk)
      deallocate(wrk)
 
 

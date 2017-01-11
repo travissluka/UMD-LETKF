@@ -1,24 +1,31 @@
 module letkf_mpi
-
-  use letkf_common
+  !! MPI handler, handles scattering and gathering of state grids and ensemble members
   use mpi
 
   implicit none
   private
 
   public :: letkf_mpi_preinit, letkf_mpi_init, letkf_mpi_final
-
   public :: letkf_mpi_obs, letkf_mpi_grd2ij, letkf_mpi_ij2grd
   public :: letkf_mpi_ens2ij, letkf_mpi_ij2ens
+  public :: ens_list
 
-  public :: ens_list !, ens_idx
+
+  integer, parameter :: dp = kind(0.0)
+
+
+  integer, public :: mem
+    !! Number of ensemble members
 
   ! public variables
   ! ------------------------------
   integer,public, allocatable :: ens_map(:)
     !! for each index MEM, the number of the PE
     !! respsonsible for its I/O
+
   integer, public :: ij_count
+    !! Number of grid points the current process is responsible for handling
+
   integer, public, allocatable :: scatterv_count(:)
   integer, public, allocatable :: scatterv_displ(:)
 
@@ -26,24 +33,46 @@ module letkf_mpi
   ! private variables
   ! ------------------------------
   integer, allocatable :: ens_list(:)
-    !! A list of ensemble numbers (from 0 to MEM) that this
-    !! process is responsible for the I/O
+    !! lists which process is responsible for the I/O for
+    !! each ensemble member number.
+    !! ***Size is ([[letkf_mpi:mem]])***
+
   integer :: ens_count
+    !! number of ensemble members for which is process is responsible for the I/O
+
   integer, allocatable :: ij_list(:)
     !! A list of grid point locations that this process
     !! is responsible for doing core LETKF algorithm on
+
   real, allocatable :: load_weights(:)
 
 
   integer, public :: pe_rank, pe_size, pe_root
+  logical, public :: pe_isroot
   integer, public :: mpi_comm_letkf
+
+
 
 contains
 
+
+
   subroutine letkf_mpi_ens2ij(ens, ij)
+    !! takes ensemble members read in by 1 or more process and distributes
+    !! to all processes. Afterward each process will have all ensemble members for a
+    !! subset of grid points.
+
     real, intent(in)    :: ens(:,:,:,:)
+      !! The ensemble members this given process is responsible for loading in.
+      !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
+      !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
+
     real, intent(inout) :: ij(:,:,:)
+      !! The gridpoints this given process is responsible for computing.
+      !! ***Shape is ([[letkf_mpi:ijcount]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+
     integer :: ierr, i ,m
+
     do m=1,mem
        do i=1,size(ens,3)
           call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
@@ -59,9 +88,21 @@ contains
 
 
   subroutine letkf_mpi_ij2ens(ij, ens)
+    !! Takes gridpoints that are scattered across the processors and
+    !! combines them and sends individual whole ensemble members to the processors
+    !! responsible for saving them
+
     real, intent(in)    :: ij(:,:,:)
+      !! The gridpoints this given process is responsible for computing.
+      !! *** Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+
     real, intent(inout) :: ens(:,:,:,:)
+      !! The ensemble members this given process is responsible for loading in.
+      !! *** Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
+      !!  [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+
     integer :: ierr, i, m
+
     do m=1,mem
        do i=1,size(ens,3)
           call mpi_gatherv(ij(:,i,m), ij_count, mpi_real,&
@@ -78,9 +119,19 @@ contains
 
 
   subroutine letkf_mpi_grd2ij(grd, ij)
+    !! Takes a single grid on the root process and distributes
+    !! portions of it to the worker processes
+
     real, intent(in) :: grd(:,:)
+      !! The 2D grid to send.
+      !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]])***
+
     real, intent(inout) :: ij(:)
+      !! The gridpoints this process is responsible for using.
+      !! ***Shape is ([[letkf_mpi:ij_count]])***
+
     integer :: ierr
+
     call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_real, &
          ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
     if(ierr /= 0) then
@@ -117,11 +168,13 @@ contains
 
 
   function ens_idx(m)
+    !! Get the global ensemble number of the m-th member this process is responsible for.
+    !! Returns -1 if m is out of bounds, or this process does not have any members to load
     integer, intent(in) :: m
+      !! the \(m^{th}\) ensemble member this process is responsible for handling for I/O.
+      !! ***Range is [1, [[letkf_mpi:ens_count]] ]***
     integer ::  ens_idx
-
     integer :: i
-
     do i=1,ens_count
        if (ens_list(i) == m) then
           ens_idx = i
@@ -148,7 +201,7 @@ contains
     call mpi_comm_size(mpi_comm_letkf, pe_size, ierr)
     call mpi_comm_rank(mpi_comm_letkf, pe_rank, ierr)
 
-    isroot = pe_root == pe_rank
+    pe_isroot = pe_root == pe_rank
 
 
   end subroutine letkf_mpi_preinit
@@ -163,7 +216,7 @@ contains
     integer :: count, prev
 
 
-    if(isroot) then
+    if(pe_isroot) then
        print *, new_line('a'), &
             new_line('a'), '============================================================', &
             new_line('a'), ' letkf_mpi_init() : ', &
@@ -174,7 +227,7 @@ contains
     ! determine which ensemble members number this PE should deal with
     ! ----------------------------------------
     prev = 0
-    if (isroot) then
+    if (pe_isroot) then
        print *, ""
        print '(A)', "ensemble member I/O list:"
     end if
@@ -195,7 +248,7 @@ contains
        end do
 
        ! if root proc, print out info about each PE
-       if (isroot) then
+       if (pe_isroot) then
           if (count > 1) then
              print '(A5,I4,A,I4,A,I4,A,I4)', "proc", i,' is I/O for ',count,' ensemble member(s): ', prev+1, ' to ',count+prev
           else if (count == 1) then
@@ -212,7 +265,7 @@ contains
 
     ! determine how many gridpoints this PE should deal with
     ! ----------------------------------------
-    if (isroot) print *, ""
+    if (pe_isroot) print *, ""
 
     ! determine the process load weights
     allocate(load_weights(pe_size))
@@ -221,7 +274,7 @@ contains
 
 
     ! calculate actual numer of gridpoints to use
-    if (isroot) then
+    if (pe_isroot) then
        print *, ""
        print "(A)", "gridpoint assignment list:"
     end if
@@ -242,7 +295,7 @@ contains
        scatterv_count(i+1) = count
        scatterv_displ(i+1) = prev
 
-       if (isroot) then
+       if (pe_isroot) then
           print '(A5,I4,A,I7,A,I7,A,I7)', "proc",i,' calcs for', count,' grid points: ',prev+1,' to ',prev+count
        end if
        prev = prev+count
@@ -263,7 +316,7 @@ contains
     call mpi_reduce(mem, mem_sum, 1, mpi_real, mpi_sum, pe_root, mpi_comm_letkf, ierr)
     mem_avg = mem_sum / pe_size
 
-    if(isroot) then
+    if(pe_isroot) then
        print *, new_line('a'), &
             new_line('a'), "------------------------------------------------------------",&
             new_line('a'), "Memory hiwater mark: "

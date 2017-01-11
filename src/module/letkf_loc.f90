@@ -1,4 +1,5 @@
 module letkf_loc
+  !! observation localization routines
   implicit none
   private
 

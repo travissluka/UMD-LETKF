@@ -1,6 +1,6 @@
 module letkf
+  !! main entry point for the LETKF library
   use timing
-  use letkf_common
   use letkf_obs
   use letkf_mpi
   use letkf_core
@@ -14,6 +14,8 @@ module letkf
   public :: letkf_driver_run
 
 
+  character(len=1024) :: nml_filename = "namelist.letkf"
+
 
 contains
 
@@ -23,7 +25,7 @@ contains
     !! Initialize the LETKF module. This must be called before anything else.
     call letkf_mpi_preinit()
     call timing_init(mpi_comm_letkf, pe_root)
-    if (isroot) then
+    if (pe_isroot) then
        print "(A)", "============================================================"
        print "(A)", " Universal Multi-Domain Local Ensemble Transform Kalman Filter"
        print "(A)", " (UMD-LETKF)"
@@ -41,7 +43,7 @@ contains
     real, allocatable :: wrk2(:,:,:,:)
 
     character(len=1024) :: filename
-    integer :: t_total, t_init, t_letkf
+    integer :: t_total, t_init, t_letkf, t_output, timer
     integer :: unit
     integer :: m, i
 
@@ -50,24 +52,40 @@ contains
 
     ! Initialize timers
     t_total = timer_init("Total")
-    t_init = timer_init("Initialization")
+
     call timer_start(t_total)
-    call timer_start(t_init)
 
 
     ! read in main section of the  namelist
     open(newunit=unit, file=nml_filename)
     read(unit, nml=letkf_settings)
     close(unit)
-    if (isroot) then
+    if (pe_isroot) then
        print letkf_settings
     end if
 
 
     ! initialize individual modules
+    t_init  = timer_init("(init) ", TIMER_SYNC)
+    call timer_start(t_init)
+
+    ! mpi
     call letkf_mpi_init(mem, grid_nx*grid_ny)
-    call letkf_obs_init("obsdef.cfg", "platdef.cfg")
-    call letkf_state_init()
+
+    ! observations
+
+    timer = timer_init("  obs")
+    call timer_start(timer)
+    call letkf_obs_init(nml_filename, "obsdef.cfg", "platdef.cfg")
+    call timer_stop(timer)
+
+    ! background state
+    timer = timer_init("  bg_read")
+    call timer_start(timer)
+    call letkf_state_init(nml_filename)
+    call timer_stop(timer)
+
+    ! LETKFcore
     call letkf_core_init(mem)
     call timer_stop(t_init)
 
@@ -77,34 +95,39 @@ contains
 
 
     ! run LETKF core
-    if(isroot) then
+    t_letkf = timer_init("(solve)", TIMER_SYNC)
+    if(pe_isroot) then
        print *, new_line('a'),&
             new_line('a'), '============================================================',&
             new_line('a'), '    Running LETKF core',&
             new_line('a'), '============================================================'
     end if
-    t_letkf = timer_init("loop", TIMER_SYNC)
+
     call timer_start(t_letkf)
+    if(pe_isroot) print *, "Beginning core solver.."
     call letkf_do_letkf()
     call timer_stop(t_letkf)
 
 
+    t_output = timer_init("(output)", TIMER_SYNC)
+    call timer_start(t_output)
+    if(pe_isroot) print *, "Writing analysis mean / spread..."
     ! gather the analysis mean/sprd and write out
     allocate(wrk(grid_nx, grid_ny, grid_ns))
     do i=1,grid_ns
        call letkf_mpi_ij2grd(ana_mean_ij(:,i), wrk(:,:,i))
     end do
-    if (isroot) call stateio_class%write('OUTPUT/ana_mean.nc', wrk)
+    if (pe_isroot) call stateio_class%write('OUTPUT/ana_mean.nc', wrk)
     do i=1,grid_ns
        call letkf_mpi_ij2grd(ana_sprd_ij(:,i), wrk(:,:,i))
     end do
-    if (isroot) call stateio_class%write('OUTPUT/ana_mean.nc', wrk)
+    if (pe_isroot) call stateio_class%write('OUTPUT/ana_sprd.nc', wrk)
     deallocate(wrk)
 
 
     ! write the analysis ensemble members
     allocate(wrk2(grid_nx, grid_ny, grid_ns, size(ens_list)))
-    if(isroot) print *, "Writing analysis ensemble members..."
+    if(pe_isroot) print *, "Writing analysis ensemble members..."
     call letkf_mpi_ij2ens(ana_ij, wrk2)
     do m=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m),'.nc'
@@ -112,6 +135,7 @@ contains
     end do
     deallocate(wrk2)
 
+    call timer_stop(t_output)
 
     ! all done, cleanup
     call timer_stop(t_total)
@@ -145,9 +169,9 @@ contains
     allocate(wrk1( grid_ns, mem))
     allocate(wrk2( grid_ns, mem))
 
-    timer1 = timer_init("obs search")
-    timer2 = timer_init("letkf_core_solve")
-    timer3 = timer_init("letkf_core trans")
+    timer1 = timer_init("  obs_search")
+    timer2 = timer_init("  core_solve")
+    timer3 = timer_init("  core_trans")
 
     ana_ij = 0
 

@@ -1,8 +1,5 @@
 module timing
-!  use letkf_common
   use mpi
-
-
   implicit none
   private
 
@@ -15,21 +12,24 @@ module timing
   integer, parameter, public :: TIMER_SYNC = 1
 
   type timer_obj
-     integer(kind=8):: total_ticks
-     integer(kind=8):: tick
+     integer(kind=8)     :: total_ticks
+     integer(kind=8)     :: tick
      character(len=1024) :: name
      integer :: flags
      integer :: grain
   end type timer_obj
 
-
   integer, parameter :: max_timers = 1024
-  integer, save :: active_timers = 0
-  type(timer_obj), save  :: timer_objs(max_timers)
-
-
+  integer            :: active_timers = 0
+  type(timer_obj)    :: timer_objs(max_timers)
   integer :: mp_comm, mp_root, mp_rank, mp_size
+
+
+
 contains
+
+
+
 
   subroutine timing_init(comm, root)
     integer, intent(in) :: comm
@@ -151,6 +151,8 @@ contains
     call mpi_allgather(t0, 1, mpi_real, times, 1, mpi_real, mp_comm, ierr)
   end subroutine timer_gather
 
+
+
   !############################################################
   subroutine timer_print
     integer :: i
@@ -164,11 +166,9 @@ contains
        print *,"Timing:"
        print *,"============================================================"
        print '(A,I4,A)',"calculating timer statistics across ", mp_size," processes..."
-       print *,""
-       print '(A15,4A10)',"","ave","min","max", "std"
-
+       print *, ""
+       print '(A18,4A10)',"","ave","min","max", "std"
     end if
-
 
     call system_clock(count_rate=timer_rate)
     i = 1
@@ -184,13 +184,11 @@ contains
 
        if (mp_root == mp_rank) then
           tdif2g = sqrt(tdif2g/mp_size)
-          print '(A15,4F10.3)', trim(timer_objs(i)%name), tave, tmin, tmax, tdif2g
+          print '(A,A18,4F10.2)', " ",timer_objs(i)%name, tave, tmin, tmax, tdif2g
        end if
 
        i = i +1
     end do
-
-
   end subroutine timer_print
 
 

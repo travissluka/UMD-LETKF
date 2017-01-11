@@ -1,17 +1,16 @@
 module letkf_obs
   use letkf_mpi
-  use timing
-  use letkf_common
   use kdtree
-  use str
 
   use letkf_obs_I
   use letkf_obs_nc
   use letkf_obs_dat
 
-
   implicit none
   private
+
+
+  integer, parameter :: dp = kind(0.0)
 
   ! public subroutines
   public :: letkf_obs_init
@@ -88,7 +87,9 @@ contains
 
 
 
-  subroutine letkf_obs_init(obsdef_file, platdef_file)
+  subroutine letkf_obs_init(nml_filename, obsdef_file, platdef_file)
+    character(len=*), optional, intent(in) :: nml_filename
+
     character(len=*), optional, intent(in) :: obsdef_file
     !! observation definition file to read in. By default `letkf.obsdef`
     !! will be used.
@@ -99,7 +100,7 @@ contains
 
     namelist /letkf_obs/ obsqc_maxstd, reader
 
-    if (isroot) then
+    if (pe_isroot) then
        print *, new_line('a'), &
             new_line('a'), '============================================================', &
             new_line('a'), ' letkf_obs_init() : ', &
@@ -113,7 +114,7 @@ contains
     read(90, nml=letkf_obs)
     close(90)
     reader = trim(reader)
-    if (isroot) then
+    if (pe_isroot) then
        print letkf_obs
     end if
 
@@ -129,7 +130,7 @@ contains
     call obsio_class%init()
 
     ! read in additional configuration files
-    if (isroot) then
+    if (pe_isroot) then
        print *, ''
        print *, 'LETKF observation configuration files'
        print *, '------------------------------------------------------------'
@@ -154,7 +155,6 @@ contains
     !! abstract reader class
 
     integer :: i, j
-    integer :: timer, timer2, timer3, timer4
 
     character(len=1024) :: filename
 
@@ -170,14 +170,8 @@ contains
     real(dp), allocatable :: obs_lons(:), obs_lats(:)
     integer :: cnt
 
-    timer  = timer_init("obs read", TIMER_SYNC)
-    timer2 = timer_init("obs read I/O")
-    timer3 = timer_init("obs read MPI", timer_sync)
-    timer4 = timer_init("obs kd_init")
 
-    call timer_start(timer)
-
-    if (isroot) then
+    if (pe_isroot) then
        print *, ""
        print *, "Reading Observations"
        print *, "------------------------------------------------------------"
@@ -195,9 +189,7 @@ contains
        !TODO, not the most efficient, general observation information is not
        ! needed with every single ensemble member, this should be in a separate
        ! file, with each ens member file only containing the obs space value and qc
-       call timer_start(timer2)
        call reader%read(filename, obs_t, obs_ohx_t, obs_qc_t)
-       call timer_stop(timer2)
 
        ! create the obs storage if it hasn't already been done
        if (.not. allocated(obs_list)) then
@@ -221,9 +213,7 @@ contains
 
 
     ! distribute the qc and innovation values
-    call timer_start(timer3)
     call letkf_mpi_obs(obs_ohx, obs_qc_l)
-    call timer_stop(timer3)
 
 
     ! calculate the combined QC
@@ -263,15 +253,14 @@ contains
        obs_lats(i) = obs_list(i)%lat
     end do
 
-    call timer_start(timer4)
 
+    ! initialize the kd tree
     call kd_init(obs_tree, obs_lons, obs_lats)
-    call timer_stop(timer4)
     deallocate(obs_lons)
     deallocate(obs_lats)
 
     ! print statistics about the observations
-    if (isroot) then
+    if (pe_isroot) then
        print '(I11,A)', size(obs_list), " observations loaded"
 
        allocate(obstat_count (size(obsdef_list)+1,  4))
@@ -360,8 +349,6 @@ contains
        deallocate(obplat_count)
     end if
 
-
-    call timer_stop(timer)
   end subroutine letkf_obs_read
 
 
@@ -380,7 +367,7 @@ contains
     integer :: obsdef_list_tmp_len
     integer :: i,j
 
-    if (isroot) then
+    if (pe_isroot) then
        print *, ''
        print *, ""
        print *, "Observation Definition File"
@@ -423,17 +410,17 @@ contains
 
        ! read ID
        line = adjustl(line)
-       pos = findspace(line)
+       pos = scan(line, ' ')
        read(line(1:pos), *) new_ob%id
 
        ! read short name
        line = adjustl(line(pos+1:))
-       pos = findspace(line)
+       pos = scan(line, ' ')
        new_ob%name_short = toupper(trim(line(:pos-1)))
 
        ! read units
        line = adjustl(line(pos+1:))
-       pos = findspace(line)
+       pos = scan(line, ' ')
        new_ob%units = trim(line(:pos-1))
 
        ! read long name
@@ -457,7 +444,7 @@ contains
     obsdef_list = obsdef_list_tmp(1:obsdef_list_tmp_len)
 
     ! write summary
-    if (isroot) then
+    if (pe_isroot) then
        print *, 'obs defined = ', size(obsdef_list)
        print "(A6,A10,A10,A5,A)", "ID", "NAME", "UNITS", "","FULL NAME"
        do pos=1, size(obsdef_list)
@@ -466,7 +453,7 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    if (isroot) then
+    if (pe_isroot) then
        i = 1
        do while(i < size(obsdef_list))
           j = i + 1
@@ -487,7 +474,7 @@ contains
     end if
 
     ! all done
-    if (isroot)    print *, ""
+    if (pe_isroot)    print *, ""
   end subroutine obsdef_read
 
 
@@ -506,7 +493,7 @@ contains
     integer :: platdef_list_tmp_len
     integer :: i,j
 
-    if (isroot) then
+    if (pe_isroot) then
        print *, ''
        print *, ""
        print *, "Platform Definition File"
@@ -549,12 +536,12 @@ contains
 
        ! read ID
        line = adjustl(line)
-       pos = findspace(line)
+       pos = scan(line, ' ')
        read(line(1:pos), *) new_plat%id
 
        ! read short name
        line = adjustl(line(pos+1:))
-       pos = findspace(line)
+       pos = scan(line, ' ')
        new_plat%name_short = toupper(trim(line(:pos-1)))
 
        ! read long name
@@ -578,7 +565,7 @@ contains
     platdef_list = platdef_list_tmp(1:platdef_list_tmp_len)
 
     ! write summary
-    if (isroot) then
+    if (pe_isroot) then
        print *, 'platforms defined = ', size(platdef_list)
        print "(A6,A10,A5,A)", "ID", "NAME", "","DESCRIPTION"
        do pos=1, size(platdef_list)
@@ -587,7 +574,7 @@ contains
     end if
 
     ! check for duplicate ID / short name
-    if (isroot) then
+    if (pe_isroot) then
        i = 1
        do while(i < size(platdef_list))
           j = i + 1
@@ -608,7 +595,7 @@ contains
     end if
 
     ! all done
-    if (isroot)    print *, ""
+    if (pe_isroot)    print *, ""
   end subroutine platdef_read
 
 
@@ -731,5 +718,33 @@ contains
   end subroutine platdef_print
 
 
+  function toupper(in_str) result(out_str)
+    character(*), intent(in) :: in_str
+    character(len(in_str)) :: out_str
+    integer :: i
+    integer, parameter :: offset = 32
+
+    out_str = in_str
+    do i = 1, len(out_str)
+       if (out_str(i:i) >= "a" .and. out_str(i:i) <= "z") then
+          out_str(i:i) = achar(iachar(out_str(i:i)) - offset)
+       end if
+    end do
+  end function toupper
+
+
+  function tolower(in_str) result(out_str)
+    character(*), intent(in) :: in_str
+    character(len(in_str)) :: out_str
+    integer :: i
+    integer, parameter :: offset = 32
+
+    out_str = in_str
+    do i = 1, len(out_str)
+       if (out_str(i:i) >= "A" .and. out_str(i:i) <= "Z") then
+          out_str(i:i) = achar(iachar(out_str(i:i)) + offset)
+       end if
+    end do
+  end function tolower
 
 end module letkf_obs
