@@ -1,7 +1,8 @@
 &letkf_settings
- mem = 5
+ mem = 10
  grid_nx = 720
  grid_ny = 410
+ grid_ns = 80
 /
 
 

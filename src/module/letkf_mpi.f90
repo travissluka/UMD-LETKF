@@ -52,6 +52,7 @@ module letkf_mpi
   integer, public :: mpi_comm_letkf
 
 
+  integer :: grid_nx, grid_ny, grid_ns
 
 contains
 
@@ -62,27 +63,33 @@ contains
     !! to all processes. Afterward each process will have all ensemble members for a
     !! subset of grid points.
 
-    real, intent(in)    :: ens(:,:,:,:)
+    real, intent(in)    :: ens(grid_nx, grid_ny, grid_ns, mem)
       !! The ensemble members this given process is responsible for loading in.
       !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
       !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
 
-    real, intent(inout) :: ij(:,:,:)
+    real, intent(inout) :: ij(mem, grid_ns, ij_count)
       !! The gridpoints this given process is responsible for computing.
-      !! ***Shape is ([[letkf_mpi:ijcount]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
 
     integer :: ierr, i ,m
+    real :: wrk(ij_count,grid_ns,mem)
 
     do m=1,mem
        do i=1,size(ens,3)
+!          call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
+!               ij(:,i,m), ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
           call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
-               ij(:,i,m), ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
+               wrk(:,i,m), ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
           if(ierr /= 0) then
              print *, "ERROR: with letkf_mpi_ens2ij",ierr
              stop 1
           end if
        end do
     end do
+!    ij = reshape(wrk, (/ij_count, grid_ns, mem/),order=(/1,2,3/))
+    ij = reshape(wrk, (/mem, grid_ns, ij_count/), order=(/3,2,1/))
+
   end subroutine letkf_mpi_ens2ij
 
 
@@ -122,11 +129,11 @@ contains
     !! Takes a single grid on the root process and distributes
     !! portions of it to the worker processes
 
-    real, intent(in) :: grd(:,:)
+    real, intent(in) :: grd(grid_nx, grid_ny)
       !! The 2D grid to send.
       !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]])***
 
-    real, intent(inout) :: ij(:)
+    real, intent(inout) :: ij(ij_count)
       !! The gridpoints this process is responsible for using.
       !! ***Shape is ([[letkf_mpi:ij_count]])***
 
@@ -143,8 +150,8 @@ contains
 
 
   subroutine letkf_mpi_ij2grd(ij, grd)
-    real, intent(in)    :: ij(:)
-    real, intent(inout) :: grd(:,:)
+    real, intent(in)    :: ij(ij_count)
+    real, intent(inout) :: grd(grid_nx, grid_ny)
     integer :: ierr
     call mpi_gatherv(ij, ij_count, mpi_real, &
          grd, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
@@ -209,12 +216,15 @@ contains
 
 
   !############################################################
-  subroutine letkf_mpi_init(mem, grid_ij)
+  subroutine letkf_mpi_init(mem, nx, ny, ns)
     integer, intent(in) :: mem
-    integer, intent(in) :: grid_ij
+    integer, intent(in) :: nx, ny, ns
     integer :: i, j
     integer :: count, prev
 
+    grid_nx=nx
+    grid_ny=ny
+    grid_ns=ns
 
     if(pe_isroot) then
        print *, new_line('a'), &
@@ -282,8 +292,8 @@ contains
     allocate(scatterv_displ(pe_size))
     prev = 0
     do i=0, pe_size-1
-       count = nint(grid_ij * load_weights(i+1))
-       if (i == pe_size-1) count = grid_ij - prev
+       count = nint(grid_nx*grid_ny * load_weights(i+1))
+       if (i == pe_size-1) count = grid_nx*grid_ny - prev
 
        if (i == pe_rank) then
           ij_count = count

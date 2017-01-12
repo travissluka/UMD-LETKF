@@ -16,17 +16,26 @@ module letkf_state
     !! number of grid points in the x direction
   integer, public  :: grid_ny
     !! number of grid points in the y direction
+  integer, public  :: grid_ns
+    !! total number of 2D grid slices. This is equal to grid_nz*num_3D_vars + num_2D_vars
   integer, public, protected :: grid_nz
     !! number of vertical levels for 3D variables
-  integer, public, protected :: grid_ns
-    !! total number of 2D grid slices. This is equal to grid_nz*num_3D_vars + num_2D_vars
-  real,    public, protected, allocatable :: lat_ij(:), lon_ij(:)
+  real,    public, protected, allocatable :: lat_ij(:)
+    !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
+  real,    public, protected, allocatable :: lon_ij(:)
+    !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
   real,    public, protected, allocatable :: bkg_mean_ij(:,:)
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
   real,    public, protected, allocatable :: bkg_sprd_ij(:,:)
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
   real,    public,            allocatable :: ana_ij(:,:,:)
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
   real,    public,            allocatable :: ana_mean_ij(:,:)
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
   real,    public,            allocatable :: ana_sprd_ij(:,:)
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
 
 
   ! private module variables
@@ -48,11 +57,12 @@ contains
 
     real, allocatable :: gues(:,:,:,:)
     real, allocatable :: wrk(:,:,:)
+    real, allocatable :: wrk2(:)
     real, allocatable :: lat(:,:), lon(:,:)
 
     integer :: unit
     character(len=1024) :: filename
-    integer :: m, i
+    integer :: m, i, j
 
     namelist /grid_def/ grid_nx, grid_ny, grid_nz, grid_ns
 
@@ -80,6 +90,7 @@ contains
     call stateio_class%latlon(lat,lon)
 
 
+
     ! read in the background members that our process is responsible for
      if (pe_isroot) then
         print *, ""
@@ -99,12 +110,12 @@ contains
 
      ! scatter grids to mpi procs
      if (pe_isroot) print *, "Scattering across procs..."
-     allocate(bkg_ij(ij_count, grid_ns, mem))
-     allocate(bkg_mean_ij(ij_count, grid_ns))
-     allocate(bkg_sprd_ij(ij_count, grid_ns))
-     allocate(ana_ij(ij_count, grid_ns, mem))
-     allocate(ana_mean_ij(ij_count, grid_ns))
-     allocate(ana_sprd_ij(ij_count, grid_ns))
+     allocate(bkg_ij(mem, grid_ns,ij_count))
+     allocate(bkg_mean_ij(grid_ns, ij_count))
+     allocate(bkg_sprd_ij(grid_ns, ij_count))
+     allocate(ana_ij(mem, grid_ns, ij_count))
+     allocate(ana_mean_ij(grid_ns, ij_count))
+     allocate(ana_sprd_ij(grid_ns, ij_count))
      allocate(lon_ij(ij_count))
      allocate(lat_ij(ij_count))
      call letkf_mpi_ens2ij(gues, bkg_ij)
@@ -117,27 +128,31 @@ contains
 
      ! caculate mean / spread
      if (pe_isroot) print *, "Calculating background mean / spread..."
-     bkg_mean_ij = sum(bkg_ij, 3) / mem
+     bkg_mean_ij = sum(bkg_ij, 1) / mem
      bkg_sprd_ij = 0
-     do m = 1,mem
-        bkg_ij(:,:,m) = bkg_ij(:,:,m) - bkg_mean_ij
-        bkg_sprd_ij = bkg_sprd_ij + bkg_ij(:,:,m)*bkg_ij(:,:,m)
+     do i=1,grid_ns
+        do j=1,ij_count
+           bkg_ij(:,i,j) = bkg_ij(:,i,j) - bkg_mean_ij(i,j)
+           bkg_sprd_ij(i,j) =  sqrt(dot_product(bkg_ij(:,i,j),bkg_ij(:,i,j)) / mem)
+        end do
      end do
-     bkg_sprd_ij = sqrt(bkg_sprd_ij/mem)
 
 
      ! save the mean / spread out to files
      allocate(wrk(grid_nx, grid_ny, grid_ns))
+     allocate(wrk2(ij_count))
      do i = 1,grid_ns
-        call letkf_mpi_ij2grd(bkg_mean_ij(:,i), wrk(:,:,i))
+        wrk2 = bkg_mean_ij(i,:)
+        call letkf_mpi_ij2grd(wrk2, wrk(:,:,i))
      end do
      if (pe_isroot) call stateio_class%write('OUTPUT/bkg_mean.nc', wrk)
      do i = 1,grid_ns
-        call letkf_mpi_ij2grd(bkg_sprd_ij(:,i), wrk(:,:,i))
+        wrk2 = bkg_sprd_ij(i,:)
+        call letkf_mpi_ij2grd(wrk2, wrk(:,:,i))
      end do
      if (pe_isroot) call stateio_class%write('OUTPUT/bkg_sprd.nc', wrk)
      deallocate(wrk)
-
+     deallocate(wrk2)
 
   end subroutine letkf_state_init
 

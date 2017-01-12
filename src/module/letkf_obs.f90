@@ -733,18 +733,18 @@ contains
   end function toupper
 
 
-  function tolower(in_str) result(out_str)
-    character(*), intent(in) :: in_str
-    character(len(in_str)) :: out_str
-    integer :: i
-    integer, parameter :: offset = 32
+  ! function tolower(in_str) result(out_str)
+  !   character(*), intent(in) :: in_str
+  !   character(len(in_str)) :: out_str
+  !   integer :: i
+  !   integer, parameter :: offset = 32
 
-    out_str = in_str
-    do i = 1, len(out_str)
-       if (out_str(i:i) >= "A" .and. out_str(i:i) <= "Z") then
-          out_str(i:i) = achar(iachar(out_str(i:i)) + offset)
-       end if
-    end do
-  end function tolower
+  !   out_str = in_str
+  !   do i = 1, len(out_str)
+  !      if (out_str(i:i) >= "A" .and. out_str(i:i) <= "Z") then
+  !         out_str(i:i) = achar(iachar(out_str(i:i)) + offset)
+  !      end if
+  !   end do
+  ! end function tolower
 
 end module letkf_obs

@@ -39,15 +39,16 @@ contains
 
 
   subroutine letkf_driver_run()
-    real, allocatable :: wrk(:,:,:)
-    real, allocatable :: wrk2(:,:,:,:)
+    real, allocatable :: wrk1(:)
+    real, allocatable :: wrk3(:,:,:)
+    real, allocatable :: wrk4(:,:,:,:)
 
     character(len=1024) :: filename
     integer :: t_total, t_init, t_letkf, t_output, timer
     integer :: unit
     integer :: m, i
 
-    namelist /letkf_settings/ mem, grid_nx, grid_ny
+    namelist /letkf_settings/ mem, grid_nx, grid_ny, grid_ns
 
 
     ! Initialize timers
@@ -70,7 +71,7 @@ contains
     call timer_start(t_init)
 
     ! mpi
-    call letkf_mpi_init(mem, grid_nx*grid_ny)
+    call letkf_mpi_init(mem, grid_nx, grid_ny, grid_ns)
 
     ! observations
 
@@ -108,32 +109,35 @@ contains
     call letkf_do_letkf()
     call timer_stop(t_letkf)
 
-
     t_output = timer_init("(output)", TIMER_SYNC)
     call timer_start(t_output)
     if(pe_isroot) print *, "Writing analysis mean / spread..."
     ! gather the analysis mean/sprd and write out
-    allocate(wrk(grid_nx, grid_ny, grid_ns))
+    allocate(wrk3(grid_nx, grid_ny, grid_ns))
+    allocate(wrk1(ij_count))
     do i=1,grid_ns
-       call letkf_mpi_ij2grd(ana_mean_ij(:,i), wrk(:,:,i))
+       wrk1 = ana_mean_ij(i,:)
+       call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
-    if (pe_isroot) call stateio_class%write('OUTPUT/ana_mean.nc', wrk)
+    if (pe_isroot) call stateio_class%write('OUTPUT/ana_mean.nc', wrk3)
     do i=1,grid_ns
-       call letkf_mpi_ij2grd(ana_sprd_ij(:,i), wrk(:,:,i))
+       wrk1 = ana_sprd_ij(i,:)
+       call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
-    if (pe_isroot) call stateio_class%write('OUTPUT/ana_sprd.nc', wrk)
-    deallocate(wrk)
+    if (pe_isroot) call stateio_class%write('OUTPUT/ana_sprd.nc', wrk3)
+    deallocate(wrk3)
+    deallocate(wrk1)
 
 
     ! write the analysis ensemble members
-    allocate(wrk2(grid_nx, grid_ny, grid_ns, size(ens_list)))
+    allocate(wrk4(grid_nx, grid_ny, grid_ns, size(ens_list)))
     if(pe_isroot) print *, "Writing analysis ensemble members..."
-    call letkf_mpi_ij2ens(ana_ij, wrk2)
+    call letkf_mpi_ij2ens(ana_ij, wrk4)
     do m=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m),'.nc'
-       call stateio_class%write(filename, wrk2(:,:,:,m))
+       call stateio_class%write(filename, wrk4(:,:,:,m))
     end do
-    deallocate(wrk2)
+    deallocate(wrk4)
 
     call timer_stop(t_output)
 
@@ -162,12 +166,8 @@ contains
     integer :: timer1, timer2, n, timer3
     integer :: i
 
-    real, allocatable:: wrk1(:,:), wrk2(:,:)
     real :: loc_h
 
-
-    allocate(wrk1( grid_ns, mem))
-    allocate(wrk2( grid_ns, mem))
 
     timer1 = timer_init("  obs_search")
     timer2 = timer_init("  core_solve")
@@ -175,8 +175,12 @@ contains
 
     ana_ij = 0
 
+    ! perform analysis at each grid point
+    ! ------------------------------
     do ij=1,ij_count
        ! search for all observations in a given radius of this gridpoint
+       !TODO, do the KD tree call once to get all possible obs to be used by a grid BLOCK
+       !
        call timer_start(timer1)
        call letkf_obs_get(lat_ij(ij), lon_ij(ij), 1000.0e3, rpoints, rdistance, rnum)
        call timer_stop(timer1)
@@ -206,7 +210,6 @@ contains
 
        ! if there are still good quality observations to assimilate, do so
        if (ob_cnt > 0) then
-
           ! main LETKF equations
           call timer_start(timer2)
           call letkf_core_solve(&
@@ -214,43 +217,32 @@ contains
                dep(:ob_cnt), 1.0e0, trans)
           call timer_stop(timer2)
 
-          ! calculate the ensemble increments
+          ! calculate the ensemble increments by applying the trans matrix
+          !TODO, if not doing vertical localization, do all grid_ns layers at once
           call timer_start(timer3)
-          !!@todo is there anyway to call sgemm without needing to copy in/out of
-          !! the wrk1/wrk2 arrays (anal/gues need to be copied anyway, even if by compiler
-          !! because they are being sliced from the front, somewhat faster on gfortran if
-          !! i copy myself in a preallocated array)
-          !! this might not be necessary with better intel compiler, which should do everythinh on the stack
-          wrk1(:,:) = bkg_ij(ij,:,:)
-          call sgemm('n','n', grid_ns, mem, mem, &
-               1.0e0, wrk1(:,:), grid_ns, &
-               trans, mem, 0.0e0, wrk2(:,:), grid_ns)
-          ana_ij(ij,:,:) = wrk2(:,:)
-
+          do i=1,grid_ns
+             call sgemm('n','n', 1, mem, mem, 1.0e0, bkg_ij(:,i,ij),&
+                  1, trans, mem, 0.0e0, ana_ij(:,i,ij), 1)
+          end do
           call timer_stop(timer3)
        else
-          ana_ij(ij,:,:) = bkg_ij(ij,:,:)
+          ana_ij(:,:, ij) = bkg_ij(:,:,ij)
        end if
 
+       ! add mean back to analysis
+       do i=1,grid_ns
+          ana_ij(:,i,ij) = ana_ij(:,i,ij) + bkg_mean_ij(i,ij)
+       end do
+       ana_mean_ij(:, ij) = sum(ana_ij(:,:,ij),1)/mem
+
+       ! calculate analysis spread
+       do i = 1, grid_ns
+          ana_sprd_ij(i,ij) = sqrt(&
+               dot_product(ana_ij(:,i,ij)-ana_mean_ij(i,ij),ana_ij(:,i,ij)-ana_mean_ij(i,ij)) /mem)
+       end do
+
     end do
 
-    ! add the mean back to the analysis
-    do i=1,mem
-       ana_ij(:,:,i) = ana_ij(:,:,i) + bkg_mean_ij
-    end do
-    ana_mean_ij = sum(ana_ij,3) / mem
-
-    !calculate spread
-    ana_sprd_ij = 0
-    do i=1,mem
-       ana_sprd_ij = ana_sprd_ij + &
-            (ana_ij(:,:,i) - ana_mean_ij) * &
-            (ana_ij(:,:,i) - ana_mean_ij)
-    end do
-    ana_sprd_ij = sqrt(ana_sprd_ij/mem)
-
-    ! done, cleanup
-    deallocate(wrk1, wrk2)
 
   end subroutine letkf_do_letkf
 
