@@ -35,6 +35,7 @@ module letkf_state_I
   type, abstract :: stateio
      !! abstract base class for reading and writing of state files
      character(len=1024)  :: description
+     character(len=16)    :: extension
    contains
      procedure(I_stateio_init),   deferred :: init
      procedure(I_stateio_latlon), deferred :: latlon

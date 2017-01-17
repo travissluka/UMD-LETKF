@@ -162,9 +162,10 @@ contains
     integer :: ierr
 
     if (mp_root == mp_rank) then
-       print *,""
-       print *,"Timing:"
-       print *,"============================================================"
+       print *, new_line('a'),&
+            new_line('a'), "============================================================",&
+            new_line('a'), " Timing",&
+            new_line('a'), "============================================================"
        print '(A,I4,A)',"calculating timer statistics across ", mp_size," processes..."
        print *, ""
        print '(A18,4A10)',"","ave","min","max", "std"

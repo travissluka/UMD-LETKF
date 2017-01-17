@@ -6,6 +6,7 @@ module letkf_obs
   use letkf_obs_nc
   use letkf_obs_dat
 
+  use iso_fortran_env
   implicit none
   private
 
@@ -97,6 +98,7 @@ contains
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
     character(len=:), allocatable :: reader
+    integer :: unit
 
     namelist /letkf_obs/ obsqc_maxstd, reader
 
@@ -110,9 +112,9 @@ contains
 
     ! read in our section of the namelist
     allocate(character(1024) :: reader)
-    open(90, file=nml_filename)
-    read(90, nml=letkf_obs)
-    close(90)
+    open(newunit=unit, file=nml_filename)
+    read(unit, nml=letkf_obs)
+    close(unit)
     reader = trim(reader)
     if (pe_isroot) then
        print letkf_obs
@@ -176,14 +178,17 @@ contains
        print *, "Reading Observations"
        print *, "------------------------------------------------------------"
        print *, "  obsio class: ", trim(reader%description)
-       print *, ""
     end if
 
     ! parallel read of the observation innovation files for each ensemble member
     !! @TODO un-hardcode this
-
+    if (pe_isroot) then
+       print *,""
+       print *, "reading ensemble observation departures..."
+    end if
     do i=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'INPUT/obsop/',ens_list(i),'.dat'
+       print '(A,I5,2A)', " PROC ",pe_rank," is READING file: ", trim(filename)
 
        ! read the file
        !TODO, not the most efficient, general observation information is not
@@ -198,7 +203,9 @@ contains
           allocate(obs_ohx( mem, size(obs_ohx_t)))
           allocate(obs_ohx_mean( size(obs_ohx_t)))
           allocate(obs_qc_l( mem, size(obs_qc_t)))
-          obs_qc_l = 1
+          obs_ohx = 0
+          obs_ohx_mean = 0
+          obs_qc_l = 0
        end if
 
        ! copy the per ensemble member innovation and qc
@@ -211,10 +218,13 @@ contains
        deallocate(obs_qc_t)
     end do
 
+    !todo, need better way of output synchronization
+    flush(output_unit)
+    call sleep(1)
+    call letkf_mpi_barrier()
 
     ! distribute the qc and innovation values
     call letkf_mpi_obs(obs_ohx, obs_qc_l)
-
 
     ! calculate the combined QC
     allocate(obs_qc(size(obs_list)))
@@ -222,7 +232,6 @@ contains
        obs_qc(i) = sum(obs_qc_l(:,i))
     end do
     deallocate(obs_qc_l)
-
 
     ! calculate ohx perturbations
     do i=1,size(obs_list)
@@ -261,6 +270,9 @@ contains
 
     ! print statistics about the observations
     if (pe_isroot) then
+       print *, ""
+       print *, "Observation statistics"
+       print *, "------------------------------------------------------------"
        print '(I11,A)', size(obs_list), " observations loaded"
 
        allocate(obstat_count (size(obsdef_list)+1,  4))

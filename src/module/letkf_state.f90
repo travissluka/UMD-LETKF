@@ -6,6 +6,7 @@ module letkf_state
   use letkf_state_I
   use letkf_state_generic
 
+  use iso_fortran_env
   implicit none
   private
 
@@ -20,6 +21,7 @@ module letkf_state
     !! total number of 2D grid slices. This is equal to grid_nz*num_3D_vars + num_2D_vars
   integer, public, protected :: grid_nz
     !! number of vertical levels for 3D variables
+
   real,    public, protected, allocatable :: lat_ij(:)
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: lon_ij(:)
@@ -69,7 +71,7 @@ contains
     if(pe_isroot) then
        print *, new_line('a'), &
             new_line('a'), '============================================================',&
-            new_line('a'), 'letkf_state_init() : ',&
+            new_line('a'), ' letkf_state_init() : ',&
             new_line('a'), '============================================================'
     end if
 
@@ -94,22 +96,31 @@ contains
     ! read in the background members that our process is responsible for
      if (pe_isroot) then
         print *, ""
-        print *, "Reading ensemble background"
-        print *, "------------------------------------------------------------"
-        print *,"Reading ensemble background ..."
-        print *, "slabs = ", grid_ns
-        print "(A,I6,A,I6,A,I6,A)"," shape = (",grid_nx," x ",grid_ny," x ",grid_nz,")"
+        print *, "Reading ensemble background..."
+        ! print *, "------------------------------------------------------------"
+        ! print *, "slabs = ", grid_ns
+        ! print "(A,I6,A,I6,A,I6,A)"," shape = (",grid_nx," x ",grid_ny," x ",grid_nz,")"
+        ! print *,""
      end if
+
+     ! todo, need a better way to do synchronization
+     flush(output_unit)
+     call sleep(1)
+     call letkf_mpi_barrier()
+
      allocate(gues(grid_nx, grid_ny, grid_ns, size(ens_list)))
      do m=1,size(ens_list)
-        write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m),'.nc'
-        print *, "reading",trim(filename)
+        write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
+        print '(A,I5,3A)', " PROC ",pe_rank," is READING file: ",trim(filename),trim(stateio_class%extension)
         call stateio_class%read(filename, gues(:,:,:,m))
      end do
 
 
      ! scatter grids to mpi procs
-     if (pe_isroot) print *, "Scattering across procs..."
+     if (pe_isroot) then
+        print *,""
+        print *, "Scattering across procs..."
+     end if
      allocate(bkg_ij(mem, grid_ns,ij_count))
      allocate(bkg_mean_ij(grid_ns, ij_count))
      allocate(bkg_sprd_ij(grid_ns, ij_count))
@@ -127,7 +138,10 @@ contains
 
 
      ! caculate mean / spread
-     if (pe_isroot) print *, "Calculating background mean / spread..."
+     if (pe_isroot) then
+        print *,""
+        print *, "Calculating background mean / spread..."
+     end if
      bkg_mean_ij = sum(bkg_ij, 1) / mem
      bkg_sprd_ij = 0
      do i=1,grid_ns
@@ -145,12 +159,20 @@ contains
         wrk2 = bkg_mean_ij(i,:)
         call letkf_mpi_ij2grd(wrk2, wrk(:,:,i))
      end do
-     if (pe_isroot) call stateio_class%write('OUTPUT/bkg_mean.nc', wrk)
+     if (pe_isroot) then
+        write (filename, '(A)') 'OUTPUT/bkg_mean'
+        print '(A,I5,3A)', " PROC ",pe_rank," is WRITING file: ",trim(filename),trim(stateio_class%extension)
+        call stateio_class%write(filename, wrk)
+     end if
      do i = 1,grid_ns
         wrk2 = bkg_sprd_ij(i,:)
         call letkf_mpi_ij2grd(wrk2, wrk(:,:,i))
      end do
-     if (pe_isroot) call stateio_class%write('OUTPUT/bkg_sprd.nc', wrk)
+     if (pe_isroot) then
+        write (filename, '(A)') 'OUTPUT/bkg_sprd'
+        print '(A,I5,3A)', " PROC ",pe_rank," is WRITING file: ",trim(filename),trim(stateio_class%extension)
+        call stateio_class%write(filename, wrk)
+     end if
      deallocate(wrk)
      deallocate(wrk2)
 

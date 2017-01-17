@@ -74,7 +74,6 @@ contains
     call letkf_mpi_init(mem, grid_nx, grid_ny, grid_ns)
 
     ! observations
-
     timer = timer_init("  obs")
     call timer_start(timer)
     call letkf_obs_init(nml_filename, "obsdef.cfg", "platdef.cfg")
@@ -100,7 +99,7 @@ contains
     if(pe_isroot) then
        print *, new_line('a'),&
             new_line('a'), '============================================================',&
-            new_line('a'), '    Running LETKF core',&
+            new_line('a'), ' Running LETKF core',&
             new_line('a'), '============================================================'
     end if
 
@@ -111,7 +110,10 @@ contains
 
     t_output = timer_init("(output)", TIMER_SYNC)
     call timer_start(t_output)
-    if(pe_isroot) print *, "Writing analysis mean / spread..."
+    if(pe_isroot) then
+       print *, ""
+       print *, "Writing analysis mean / spread..."
+    end if
     ! gather the analysis mean/sprd and write out
     allocate(wrk3(grid_nx, grid_ny, grid_ns))
     allocate(wrk1(ij_count))
@@ -119,22 +121,32 @@ contains
        wrk1 = ana_mean_ij(i,:)
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
-    if (pe_isroot) call stateio_class%write('OUTPUT/ana_mean.nc', wrk3)
+    if (pe_isroot) then
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", 'OUTPUT/ana_mean', trim(stateio_class%extension)
+       call stateio_class%write('OUTPUT/ana_mean', wrk3)
+    end if
     do i=1,grid_ns
        wrk1 = ana_sprd_ij(i,:)
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
-    if (pe_isroot) call stateio_class%write('OUTPUT/ana_sprd.nc', wrk3)
+    if (pe_isroot)  then
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", 'OUTPUT/ana_sprd', trim(stateio_class%extension)
+       call stateio_class%write('OUTPUT/ana_sprd', wrk3)
+    end if
     deallocate(wrk3)
     deallocate(wrk1)
 
 
     ! write the analysis ensemble members
     allocate(wrk4(grid_nx, grid_ny, grid_ns, size(ens_list)))
-    if(pe_isroot) print *, "Writing analysis ensemble members..."
+    if(pe_isroot) then
+       print *, ""
+       print *, "Collecting analysis ensemble members..."
+    end if
     call letkf_mpi_ij2ens(ana_ij, wrk4)
     do m=1,size(ens_list)
-       write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m),'.nc'
+       write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m)
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", trim(filename), trim(stateio_class%extension)
        call stateio_class%write(filename, wrk4(:,:,:,m))
     end do
     deallocate(wrk4)
@@ -161,7 +173,7 @@ contains
     real :: rdistance(maxpt)
     integer :: rnum, ob_cnt
 
-    real :: hdxb(maxpt,mem), rdiag(maxpt), rloc(maxpt), dep(maxpt)
+    real :: hdxb(mem,maxpt), rdiag(maxpt), rloc(maxpt), dep(maxpt)
     real :: trans(mem,mem)
     integer :: timer1, timer2, n, timer3
     integer :: i
@@ -201,7 +213,7 @@ contains
 
           ! use this observation
           ob_cnt = ob_cnt + 1
-          hdxb(ob_cnt,:) = obs_ohx(:,n)  !TODO: should hdxb be transposed for efficiency?
+          hdxb(:,ob_cnt) = obs_ohx(:,n)  !TODO: should hdxb be transposed for efficiency?
           rdiag(ob_cnt)  = obs_list(n)%err
           rloc(ob_cnt) = loc_h
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
@@ -212,8 +224,8 @@ contains
        if (ob_cnt > 0) then
           ! main LETKF equations
           call timer_start(timer2)
-          call letkf_core_solve(&
-               hdxb(:ob_cnt,:), rdiag(:ob_cnt), rloc(:ob_cnt),&
+          call letkf_core_solve(ob_cnt,&
+               hdxb(:,:ob_cnt), rdiag(:ob_cnt), rloc(:ob_cnt),&
                dep(:ob_cnt), 1.0e0, trans)
           call timer_stop(timer2)
 

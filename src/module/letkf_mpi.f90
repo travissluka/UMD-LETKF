@@ -9,7 +9,7 @@ module letkf_mpi
   public :: letkf_mpi_obs, letkf_mpi_grd2ij, letkf_mpi_ij2grd
   public :: letkf_mpi_ens2ij, letkf_mpi_ij2ens
   public :: ens_list
-
+  public :: letkf_mpi_barrier
 
   integer, parameter :: dp = kind(0.0)
 
@@ -56,6 +56,15 @@ module letkf_mpi
 
 contains
 
+
+  subroutine  letkf_mpi_barrier()
+    integer :: ierr
+    call mpi_barrier(mpi_comm_letkf, ierr)
+    if(ierr /= 0) then
+       print *, "ERROR: with letkf_mpi_barrier()"
+       stop 1
+    end if
+  end subroutine letkf_mpi_barrier
 
 
   subroutine letkf_mpi_ens2ij(ens, ij)
@@ -166,7 +175,7 @@ contains
   subroutine letkf_mpi_obs(ohx, qc)
     real(dp), intent(inout) :: ohx(:,:)
     integer,  intent(inout) :: qc(:,:)
-    integer :: ierr
+    integer :: ierr, i
 
     !TODO, this is inefficient
     call mpi_allreduce(mpi_in_place, ohx, mem*size(ohx,2), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
@@ -234,12 +243,23 @@ contains
     end if
     allocate (ens_map(mem))
 
+    if(pe_isroot) then
+       print *, ""
+       print '(A,I5)', " MPI processors: ", pe_size
+       if (mpi_comm_letkf == mpi_comm_world) then
+          print *,"MPI communicator: MPI_COMM_WORLD"
+       else
+          print *, "MPI communicator: ",mpi_comm_letkf
+       end if
+
+    end if
+
     ! determine which ensemble members number this PE should deal with
     ! ----------------------------------------
     prev = 0
     if (pe_isroot) then
        print *, ""
-       print '(A)', "ensemble member I/O list:"
+       print *, "ensemble member I/O list:"
     end if
     do i=0, pe_size-1
        ! for each proc, determine the number of members required
@@ -286,7 +306,7 @@ contains
     ! calculate actual numer of gridpoints to use
     if (pe_isroot) then
        print *, ""
-       print "(A)", "gridpoint assignment list:"
+       print *, "gridpoint assignment list:"
     end if
     allocate(scatterv_count(pe_size))
     allocate(scatterv_displ(pe_size))
@@ -328,8 +348,9 @@ contains
 
     if(pe_isroot) then
        print *, new_line('a'), &
-            new_line('a'), "------------------------------------------------------------",&
-            new_line('a'), "Memory hiwater mark: "
+            new_line('a'), "============================================================",&
+            new_line('a'), " Max memory usage",&
+            new_line('a'), "============================================================"
        print *, "per core:"
        print '(A,F5.2,A)', "   avg: ",mem_avg," GB"
        print '(A,F5.2,A)', "   min: ",mem_min," GB"
