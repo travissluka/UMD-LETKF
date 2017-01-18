@@ -218,9 +218,31 @@ contains
        deallocate(obs_qc_t)
     end do
 
+    !TODO, this is a temporary work around...
+    !use mpi instead to broadcast the obs_list var from root
+    if(size(ens_list) == 0) then
+       write (filename, '(A,I0.4,A)') 'INPUT/obsop/',1,'.dat'
+       print '(A,I5,2A)', " PROC ",pe_rank," is READING file: ", trim(filename)
+       call reader%read(filename, obs_t, obs_ohx_t, obs_qc_t)
+       if (.not. allocated(obs_list)) then
+          allocate(obs_list(size(obs_t)))
+          obs_list = obs_t
+          allocate(obs_ohx( mem, size(obs_ohx_t)))
+          allocate(obs_ohx_mean( size(obs_ohx_t)))
+          allocate(obs_qc_l( mem, size(obs_qc_t)))
+          obs_ohx = 0
+          obs_ohx_mean = 0
+          obs_qc_l = 0
+       end if
+       deallocate(obs_t)
+       deallocate(obs_ohx_t)
+       deallocate(obs_qc_t)
+    end if
+
+
     !todo, need better way of output synchronization
     flush(output_unit)
-    call sleep(1)
+!    call sleep(1)
     call letkf_mpi_barrier()
 
     ! distribute the qc and innovation values

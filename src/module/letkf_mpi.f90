@@ -82,22 +82,21 @@ contains
       !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
 
     integer :: ierr, i ,m
-    real :: wrk(ij_count,grid_ns,mem)
+    real :: wrk(ij_count)
 
+    ! TODO, is there any way to do this with fewer mpi_scatter calls?
     do m=1,mem
        do i=1,size(ens,3)
-!          call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
-!               ij(:,i,m), ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
           call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
-               wrk(:,i,m), ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
+               wrk, ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
+          ij(m,i,:) = wrk
+
           if(ierr /= 0) then
              print *, "ERROR: with letkf_mpi_ens2ij",ierr
              stop 1
           end if
        end do
     end do
-!    ij = reshape(wrk, (/ij_count, grid_ns, mem/),order=(/1,2,3/))
-    ij = reshape(wrk, (/mem, grid_ns, ij_count/), order=(/3,2,1/))
 
   end subroutine letkf_mpi_ens2ij
 
@@ -108,20 +107,23 @@ contains
     !! combines them and sends individual whole ensemble members to the processors
     !! responsible for saving them
 
-    real, intent(in)    :: ij(:,:,:)
+    real, intent(in) :: ij(mem, grid_ns, ij_count)
       !! The gridpoints this given process is responsible for computing.
-      !! *** Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
 
-    real, intent(inout) :: ens(:,:,:,:)
+    real, intent(inout)    :: ens(grid_nx, grid_ny, grid_ns, mem)
       !! The ensemble members this given process is responsible for loading in.
-      !! *** Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
-      !!  [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
+      !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
 
     integer :: ierr, i, m
+    real :: wrk(ij_count)
 
+    ! TODO, is there any way to do this with fewer mpi_gather calls?
     do m=1,mem
        do i=1,size(ens,3)
-          call mpi_gatherv(ij(:,i,m), ij_count, mpi_real,&
+          wrk = ij(m,i,:)
+          call mpi_gatherv(wrk, ij_count, mpi_real,&
                ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real,&
                ens_map(m), mpi_comm_letkf, ierr)
           if(ierr /= 0) then
@@ -130,6 +132,7 @@ contains
           end if
        end do
     end do
+
   end subroutine letkf_mpi_ij2ens
 
 
@@ -175,8 +178,7 @@ contains
   subroutine letkf_mpi_obs(ohx, qc)
     real(dp), intent(inout) :: ohx(:,:)
     integer,  intent(inout) :: qc(:,:)
-    integer :: ierr, i
-
+    integer :: ierr
     !TODO, this is inefficient
     call mpi_allreduce(mpi_in_place, ohx, mem*size(ohx,2), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
     call mpi_allreduce(mpi_in_place, qc, mem*size(ohx,2), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)

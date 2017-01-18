@@ -44,7 +44,7 @@ contains
     real, allocatable :: wrk4(:,:,:,:)
 
     character(len=1024) :: filename
-    integer :: t_total, t_init, t_letkf, t_output, timer
+    integer :: t_total, t_init, t_letkf, t_output, timer, t_ens, t_ms
     integer :: unit
     integer :: m, i
 
@@ -74,13 +74,13 @@ contains
     call letkf_mpi_init(mem, grid_nx, grid_ny, grid_ns)
 
     ! observations
-    timer = timer_init("  obs")
+    timer = timer_init("  obs", TIMER_SYNC)
     call timer_start(timer)
     call letkf_obs_init(nml_filename, "obsdef.cfg", "platdef.cfg")
     call timer_stop(timer)
 
     ! background state
-    timer = timer_init("  bg_read")
+    timer = timer_init("  state", TIMER_SYNC)
     call timer_start(timer)
     call letkf_state_init(nml_filename)
     call timer_stop(timer)
@@ -95,34 +95,41 @@ contains
 
 
     ! run LETKF core
-    t_letkf = timer_init("(solve)", TIMER_SYNC)
     if(pe_isroot) then
        print *, new_line('a'),&
             new_line('a'), '============================================================',&
             new_line('a'), ' Running LETKF core',&
             new_line('a'), '============================================================'
+       print *, "Beginning core solver.."
     end if
-
+    t_letkf = timer_init("(solve)", TIMER_SYNC)
     call timer_start(t_letkf)
-    if(pe_isroot) print *, "Beginning core solver.."
     call letkf_do_letkf()
     call timer_stop(t_letkf)
 
+
+    ! begin output
     t_output = timer_init("(output)", TIMER_SYNC)
     call timer_start(t_output)
+
+    ! gather the analysis mean/sprd and write out
     if(pe_isroot) then
        print *, ""
        print *, "Writing analysis mean / spread..."
     end if
-    ! gather the analysis mean/sprd and write out
+    t_ms = timer_init("  ana_meansprd", TIMER_SYNC)
+    call timer_start(t_ms)
+
     allocate(wrk3(grid_nx, grid_ny, grid_ns))
     allocate(wrk1(ij_count))
+
     do i=1,grid_ns
        wrk1 = ana_mean_ij(i,:)
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
     if (pe_isroot) then
-       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", 'OUTPUT/ana_mean', trim(stateio_class%extension)
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
+            'OUTPUT/ana_mean', trim(stateio_class%extension)
        call stateio_class%write('OUTPUT/ana_mean', wrk3)
     end if
     do i=1,grid_ns
@@ -130,27 +137,35 @@ contains
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
     if (pe_isroot)  then
-       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", 'OUTPUT/ana_sprd', trim(stateio_class%extension)
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
+            'OUTPUT/ana_sprd', trim(stateio_class%extension)
        call stateio_class%write('OUTPUT/ana_sprd', wrk3)
     end if
+
     deallocate(wrk3)
     deallocate(wrk1)
+    call timer_stop(t_ms)
 
 
     ! write the analysis ensemble members
-    allocate(wrk4(grid_nx, grid_ny, grid_ns, size(ens_list)))
     if(pe_isroot) then
        print *, ""
        print *, "Collecting analysis ensemble members..."
     end if
+    t_ens = timer_init("  ana_ensemble", TIMER_SYNC)
+    call timer_start(t_ens)
+
+    allocate(wrk4(grid_nx, grid_ny, grid_ns, size(ens_list)))
+
     call letkf_mpi_ij2ens(ana_ij, wrk4)
     do m=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m)
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", trim(filename), trim(stateio_class%extension)
        call stateio_class%write(filename, wrk4(:,:,:,m))
     end do
-    deallocate(wrk4)
 
+    deallocate(wrk4)
+    call timer_stop(t_ens)
     call timer_stop(t_output)
 
     ! all done, cleanup

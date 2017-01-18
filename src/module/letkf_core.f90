@@ -79,7 +79,7 @@ contains
 
     ! Pa = [hdxb^T Rinv hdxb + (m-1) I] inv
     do i=1,nbv
-       work1(i,:) = eivec(i,:) / eival
+       work1(:,i) = eivec(:,i) / eival(i)
     end do
     call sgemm('n','t',nbv,nbv,nbv,1.0e0, work1, nbv, eivec,&
          nbv, 0.0e0, pa, nbv)

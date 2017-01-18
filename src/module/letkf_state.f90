@@ -2,6 +2,7 @@ module letkf_state
   !! performs I/O for the background and analysis states
   !!
   ! library modules
+  use timing
   use letkf_mpi
   use letkf_state_I
   use letkf_state_generic
@@ -62,7 +63,7 @@ contains
     real, allocatable :: wrk2(:)
     real, allocatable :: lat(:,:), lon(:,:)
 
-    integer :: unit
+    integer :: unit, tbgscatter, tbgread, tbgms
     character(len=1024) :: filename
     integer :: m, i, j
 
@@ -103,17 +104,22 @@ contains
         ! print *,""
      end if
 
-     ! todo, need a better way to do synchronization
+     ! todo, need a better way to do synchronization,
+     ! sigh, if only this were C, i could just call sleep(0) to force a context switch...
      flush(output_unit)
-     call sleep(1)
-     call letkf_mpi_barrier()
+!     call sleep(1)
+!     call letkf_mpi_barrier()
 
+     ! read in the files
      allocate(gues(grid_nx, grid_ny, grid_ns, size(ens_list)))
+     tbgread = timer_init("    bkg_read", TIMER_SYNC)
+     call timer_start(tbgread)
      do m=1,size(ens_list)
         write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
         print '(A,I5,3A)', " PROC ",pe_rank," is READING file: ",trim(filename),trim(stateio_class%extension)
         call stateio_class%read(filename, gues(:,:,:,m))
      end do
+     call timer_stop(tbgread)
 
 
      ! scatter grids to mpi procs
@@ -129,19 +135,25 @@ contains
      allocate(ana_sprd_ij(grid_ns, ij_count))
      allocate(lon_ij(ij_count))
      allocate(lat_ij(ij_count))
+     tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
+     call timer_start(tbgscatter)
      call letkf_mpi_ens2ij(gues, bkg_ij)
      call letkf_mpi_grd2ij(lon,  lon_ij)
      call letkf_mpi_grd2ij(lat,  lat_ij)
+     call timer_stop(tbgscatter)
      deallocate(gues)
      deallocate(lon)
      deallocate(lat)
 
 
      ! caculate mean / spread
+     tbgms = timer_init("    bkg_meansprd")
+     call timer_start(tbgms)
      if (pe_isroot) then
         print *,""
         print *, "Calculating background mean / spread..."
      end if
+
      bkg_mean_ij = sum(bkg_ij, 1) / mem
      bkg_sprd_ij = 0
      do i=1,grid_ns
@@ -175,6 +187,7 @@ contains
      end if
      deallocate(wrk)
      deallocate(wrk2)
+     call timer_stop(tbgms)
 
   end subroutine letkf_state_init
 

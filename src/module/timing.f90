@@ -185,6 +185,7 @@ contains
 
        if (mp_root == mp_rank) then
           tdif2g = sqrt(tdif2g/mp_size)
+          if (adjustl(timer_objs(i)%name(:1)) == '(') print *, ""
           print '(A,A18,4F10.2)', " ",timer_objs(i)%name, tave, tmin, tmax, tdif2g
        end if
 
