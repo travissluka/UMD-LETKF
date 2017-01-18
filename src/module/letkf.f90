@@ -19,7 +19,7 @@ module letkf
 
   real :: infl_mul = 1.0
   real :: infl_rtps = 0.0
-
+  real :: infl_rtpp = 0.0
 contains
 
 
@@ -52,7 +52,7 @@ contains
     integer :: m, i
 
     namelist /letkf_settings/ mem, grid_nx, grid_ny, grid_ns
-    namelist /letkf_inflation/ infl_rtps, infl_mul
+    namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
 
     ! Initialize timers
     t_total = timer_init("Total")
@@ -76,6 +76,14 @@ contains
     if(pe_isroot) then
        if(infl_rtps > 1.0 .or. infl_rtps < 0.0) then
           print *, "ERROR: illegal value for infl_rtps (should be < 1.0 and >0.0). Value given: ", infl_rtps
+          stop 1
+       end if
+       if(infl_rtpp > 1.0 .or. infl_rtpp < 0.0) then
+          print *, "ERROR: illegal value for infl_rtpp (should be < 1.0 and >0.0). Value given: ", infl_rtpp
+          stop 1
+       end if
+       if(infl_rtpp /= 0.0 .and. infl_rtps /= 0.0) then
+          print *, "ERROR: cannot have both RTPS and RTPP enabled at the same time, check infl_rtpp and infl_rtps"
           stop 1
        end if
        if (infl_mul < 1.0) then
@@ -292,13 +300,20 @@ contains
 
        ! inflation
        ! ------------------------------
-       ! RTPS
+       ! RTPS (relaxation to prior spread)
        if(infl_rtps > 0) then
           do i =1,grid_ns
              if (ana_sprd_ij(i,ij) > 0) then
                 ana_ij(:,i,ij) = ana_ij(:,i,ij) * &
                      (infl_rtps * (bkg_sprd_ij(i,ij)-ana_sprd_ij(i,ij))/ana_sprd_ij(i,ij) + 1)
              end if
+          end do
+       end if
+
+       ! RTPP (relaxation to prior perturbations
+       if(infl_rtpp > 0) then
+          do i=1,grid_ns
+             ana_ij(:,i,ij) = bkg_ij(:,i,ij) * infl_rtpp + (1.0-infl_rtpp)*ana_ij(:,i,ij)
           end do
        end if
 

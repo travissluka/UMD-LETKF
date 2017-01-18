@@ -14,6 +14,7 @@
 /
 
 
+
 !------------------------------------------------------------
 &letkf_obs
 ! Observation input and quality control
@@ -23,11 +24,20 @@
 /
 
 
+
 !------------------------------------------------------------
 &letkf_inflation
 !------------------------------------------------------------
- infl_mul  = 1.0 ! ( >= 1.0),         1.0 is considered OFF
- infl_rtps = 0.9 ! ( >= 0.0, <= 1.0), 0.0 is considered OFF
+! infl_mul  : fixed constant multiplicative inflation
+!             ( >= 1.0)  1.0 is considered OFF
+! infl_rtps : relaxation to prior spread
+!             ( >= 0.0, <= 1.0), 0.0 is considered OFF
+! infl_rtpp : relaxation to prior perturbations
+!             ( >= 0.0, <= 1.0), 0.0 is considered OFF
+!------------------------------------------------------------
+ infl_mul  = 1.0
+ infl_rtps = 0.5
+ infl_rtpp = 0.0
 /
 
 
