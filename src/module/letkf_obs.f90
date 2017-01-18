@@ -239,10 +239,8 @@ contains
        deallocate(obs_qc_t)
     end if
 
-
-    !todo, need better way of output synchronization
     flush(output_unit)
-!    call sleep(1)
+    call system('sleep 0')
     call letkf_mpi_barrier()
 
     ! distribute the qc and innovation values

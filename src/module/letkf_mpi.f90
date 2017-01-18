@@ -282,7 +282,8 @@ contains
        ! if root proc, print out info about each PE
        if (pe_isroot) then
           if (count > 1) then
-             print '(A5,I4,A,I4,A,I4,A,I4)', "proc", i,' is I/O for ',count,' ensemble member(s): ', prev+1, ' to ',count+prev
+             print '(A5,I4,A,I4,A,I4,A,I4)', "proc", i,' is I/O for ',count,&
+                  ' ensemble member(s): ', prev+1, ' to ',count+prev
           else if (count == 1) then
              print '(A5,I4,A,I4)', " proc ", i,' is I/O for    1 ensemble member(s): ', prev+1
           else

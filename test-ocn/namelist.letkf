@@ -1,4 +1,12 @@
+!------------------------------------------------------------
 &letkf_settings
+! Overall variables needed by the LETKF program
+!------------------------------------------------------------
+ ! mem     : number of ensemble members
+ ! grid_nx : size of x dimension of state grid
+ ! grid_ny : size of y dimension of state grid
+ ! grid_ns : number of vertical/variable slabs
+
  mem = 10
  grid_nx = 720
  grid_ny = 410
@@ -6,11 +14,22 @@
 /
 
 
+!------------------------------------------------------------
 &letkf_obs
+! Observation input and quality control
+!------------------------------------------------------------
  reader = 'dat'
  obsqc_maxstd = 3.0
-
 /
+
+
+!------------------------------------------------------------
+&letkf_inflation
+!------------------------------------------------------------
+ infl_mul  = 1.0 ! ( >= 1.0),         1.0 is considered OFF
+ infl_rtps = 0.9 ! ( >= 0.0, <= 1.0), 0.0 is considered OFF
+/
+
 
 
 &grid_def
@@ -18,13 +37,4 @@
  grid_ny = 410
  grid_nz = 40
  grid_ns = 80
-! statedef_file = "statedef.cfg"
 /
-
-
-!&mpi_settings
-! autotune = F
-! autotune_infile = "loadbalance.cfg",
-! autotune_outfile = "loadbalance.cfg",
-! autotune_alpha = 0.0
-!/

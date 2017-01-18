@@ -104,11 +104,9 @@ contains
         ! print *,""
      end if
 
-     ! todo, need a better way to do synchronization,
-     ! sigh, if only this were C, i could just call sleep(0) to force a context switch...
      flush(output_unit)
-!     call sleep(1)
-!     call letkf_mpi_barrier()
+     call system('sleep 0')
+     call letkf_mpi_barrier()
 
      ! read in the files
      allocate(gues(grid_nx, grid_ny, grid_ns, size(ens_list)))

@@ -17,6 +17,9 @@ module letkf
   character(len=1024) :: nml_filename = "namelist.letkf"
 
 
+  real :: infl_mul = 1.0
+  real :: infl_rtps = 0.0
+
 contains
 
 
@@ -49,7 +52,7 @@ contains
     integer :: m, i
 
     namelist /letkf_settings/ mem, grid_nx, grid_ny, grid_ns
-
+    namelist /letkf_inflation/ infl_rtps, infl_mul
 
     ! Initialize timers
     t_total = timer_init("Total")
@@ -60,9 +63,27 @@ contains
     ! read in main section of the  namelist
     open(newunit=unit, file=nml_filename)
     read(unit, nml=letkf_settings)
+    rewind(unit)
+    read(unit, nml=letkf_inflation)
     close(unit)
     if (pe_isroot) then
        print letkf_settings
+       print *, ""
+       print letkf_inflation
+    end if
+
+    !make sure inflation parameters are correct
+    if(pe_isroot) then
+       if(infl_rtps > 1.0 .or. infl_rtps < 0.0) then
+          print *, "ERROR: illegal value for infl_rtps (should be < 1.0 and >0.0). Value given: ", infl_rtps
+          stop 1
+       end if
+       if (infl_mul < 1.0) then
+          print *, "WARNING, infl_mul is < 1.0. Are you sure this is what is intended ??? Value given: ",infl_mul
+       end if
+       if (infl_mul <= 0.0) then
+          print *, "ERROR: illegal value for infl_mul: ",infl_mul
+       end if
     end if
 
 
@@ -93,6 +114,8 @@ contains
     ! ensure output directory is setup right
     call system('mkdir -p OUTPUT')
 
+
+    !------------------------------------------------------------
 
     ! run LETKF core
     if(pe_isroot) then
@@ -228,7 +251,7 @@ contains
 
           ! use this observation
           ob_cnt = ob_cnt + 1
-          hdxb(:,ob_cnt) = obs_ohx(:,n)  !TODO: should hdxb be transposed for efficiency?
+          hdxb(:,ob_cnt) = obs_ohx(:,n)
           rdiag(ob_cnt)  = obs_list(n)%err
           rloc(ob_cnt) = loc_h
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
@@ -256,13 +279,43 @@ contains
           ana_ij(:,:, ij) = bkg_ij(:,:,ij)
        end if
 
-       ! add mean back to analysis
+       ! recenter analysis perturbations on new analysis mean
        do i=1,grid_ns
           ana_ij(:,i,ij) = ana_ij(:,i,ij) + bkg_mean_ij(i,ij)
+          ana_mean_ij(i,ij) = sum(ana_ij(:,i,ij),1)/mem
+          ana_ij(:,i,ij) = ana_ij(:,i,ij) - ana_mean_ij(i,ij)
        end do
-       ana_mean_ij(:, ij) = sum(ana_ij(:,:,ij),1)/mem
+       do i = 1, grid_ns
+          ana_sprd_ij(i,ij) = sqrt(dot_product(ana_ij(:,i,ij),ana_ij(:,i,ij)) /mem)
+       end do
 
-       ! calculate analysis spread
+
+       ! inflation
+       ! ------------------------------
+       ! RTPS
+       if(infl_rtps > 0) then
+          do i =1,grid_ns
+             if (ana_sprd_ij(i,ij) > 0) then
+                ana_ij(:,i,ij) = ana_ij(:,i,ij) * &
+                     (infl_rtps * (bkg_sprd_ij(i,ij)-ana_sprd_ij(i,ij))/ana_sprd_ij(i,ij) + 1)
+             end if
+          end do
+       end if
+
+       ! constant multiplicative
+       if(infl_mul /= 1.0) then
+          ana_ij(:,:,ij) = ana_ij(:,:,ij) * infl_mul
+       end if
+
+       ! ------------------------------
+
+       !add mean to perturbations
+       do i=1,grid_ns
+          ana_ij(:,i,ij) = ana_ij(:,i,ij) + ana_mean_ij(i,ij)
+       end do
+
+
+       ! recalculate analysis spread
        do i = 1, grid_ns
           ana_sprd_ij(i,ij) = sqrt(&
                dot_product(ana_ij(:,i,ij)-ana_mean_ij(i,ij),ana_ij(:,i,ij)-ana_mean_ij(i,ij)) /mem)
