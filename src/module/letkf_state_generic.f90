@@ -12,10 +12,10 @@ module letkf_state_generic
   type, extends(stateio) :: stateio_generic
    contains
      procedure :: init   => stateio_generic_init
-     procedure :: latlon => stateio_generic_latlon
      procedure :: read   => stateio_generic_read
      procedure :: write  => stateio_generic_write
-
+     procedure :: latlon => stateio_generic_latlon
+     procedure :: mask   => stateio_generic_mask
   end type stateio_generic
 
 
@@ -40,6 +40,22 @@ contains
     call check(nf90_get_var(ncid, varid, lat))
     call check(nf90_close(ncid))
   end subroutine stateio_generic_latlon
+
+
+
+  subroutine stateio_generic_mask(self, mask)
+    class(stateio_generic) :: self
+    real, intent(inout) :: mask(:,:)
+    integer :: ncid, varid
+
+    ! pointless statement to prevent "self" not used warnings
+    self%description = self%description
+
+    call check(nf90_open('INPUT/grid_spec.nc', nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, 'wet', varid))
+    call check(nf90_get_var(ncid, varid, mask))
+    call check(nf90_close(ncid))
+  end subroutine stateio_generic_mask
 
 
 

@@ -27,6 +27,7 @@ module letkf_state
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: lon_ij(:)
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
+  real,    public, protected, allocatable :: mask_ij(:)
 
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
     !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
@@ -63,7 +64,7 @@ contains
     real, allocatable :: gues(:,:,:,:)
     real, allocatable :: wrk(:,:,:)
     real, allocatable :: wrk2(:)
-    real, allocatable :: lat(:,:), lon(:,:)
+    real, allocatable :: lat(:,:), lon(:,:), mask(:,:)
 
     integer :: unit, tbgscatter, tbgread, tbgms
     character(len=1024) :: filename
@@ -90,10 +91,11 @@ contains
     !create the state io class, and initialize
     allocate(stateio_generic :: stateio_class)
     call stateio_class%init(grid_nx, grid_ny, grid_nz)
-    allocate(lat(grid_nx,grid_ny))
+    allocate(lat(grid_nx, grid_ny))
     allocate(lon(grid_nx, grid_ny))
     call stateio_class%latlon(lat,lon)
-
+    allocate(mask(grid_nx, grid_ny))
+    call stateio_class%mask(mask)
 
 
     ! read in the background members that our process is responsible for
@@ -135,11 +137,13 @@ contains
      allocate(ana_sprd_ij(grid_ns, ij_count))
      allocate(lon_ij(ij_count))
      allocate(lat_ij(ij_count))
+     allocate(mask_ij(ij_count))
      tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
      call timer_start(tbgscatter)
      call letkf_mpi_ens2ij(gues, bkg_ij)
      call letkf_mpi_grd2ij(lon,  lon_ij)
      call letkf_mpi_grd2ij(lat,  lat_ij)
+     call letkf_mpi_grd2ij(mask, mask_ij)
      call timer_stop(tbgscatter)
      deallocate(gues)
      deallocate(lon)

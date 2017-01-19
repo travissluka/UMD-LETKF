@@ -54,6 +54,8 @@ module letkf_mpi
 
   integer :: grid_nx, grid_ny, grid_ns
 
+  logical :: interleave = .true.
+
 contains
 
 
@@ -67,12 +69,13 @@ contains
   end subroutine letkf_mpi_barrier
 
 
+
   subroutine letkf_mpi_ens2ij(ens, ij)
     !! takes ensemble members read in by 1 or more process and distributes
     !! to all processes. Afterward each process will have all ensemble members for a
     !! subset of grid points.
 
-    real, intent(in)    :: ens(grid_nx, grid_ny, grid_ns, mem)
+    real, intent(in)    :: ens(grid_nx*grid_ny, grid_ns, size(ens_list))
       !! The ensemble members this given process is responsible for loading in.
       !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
       !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
@@ -81,15 +84,30 @@ contains
       !! The gridpoints this given process is responsible for computing.
       !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
 
-    integer :: ierr, i ,m
+    integer :: ierr, s, i, j, m
     real :: wrk(ij_count)
+    real :: wrk2(grid_nx*grid_ny)
+
 
     ! TODO, is there any way to do this with fewer mpi_scatter calls?
     do m=1,mem
-       do i=1,size(ens,3)
-          call mpi_scatterv(ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
-               wrk, ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
-          ij(m,i,:) = wrk
+       do s=1,size(ens,2)
+          if(.not. interleave) then
+             call mpi_scatterv(ens(:,s,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
+                  wrk, ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
+          else
+             if(ens_map(m) == pe_rank) then
+                do i=1,pe_size
+                   do j=1,scatterv_count(i)
+                      wrk2(scatterv_displ(i)+j) = ens((j-1)*pe_size+i,s,ens_idx(m))
+                   end do
+                end do
+             end if
+             call mpi_scatterv(wrk2, scatterv_count, scatterv_displ, mpi_real, &
+                  wrk, ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
+          end if
+
+          ij(m,s,:) = wrk
 
           if(ierr /= 0) then
              print *, "ERROR: with letkf_mpi_ens2ij",ierr
@@ -111,21 +129,35 @@ contains
       !! The gridpoints this given process is responsible for computing.
       !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
 
-    real, intent(inout)    :: ens(grid_nx, grid_ny, grid_ns, mem)
+    real, intent(inout)    :: ens(grid_nx*grid_ny, grid_ns, size(ens_list))
       !! The ensemble members this given process is responsible for loading in.
       !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
       !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
 
-    integer :: ierr, i, m
+    integer :: ierr, s, m, i, j
     real :: wrk(ij_count)
+    real :: wrk2(grid_nx*grid_ny)
 
     ! TODO, is there any way to do this with fewer mpi_gather calls?
     do m=1,mem
-       do i=1,size(ens,3)
-          wrk = ij(m,i,:)
-          call mpi_gatherv(wrk, ij_count, mpi_real,&
-               ens(:,:,i,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real,&
-               ens_map(m), mpi_comm_letkf, ierr)
+       do s=1,size(ens,2)
+          wrk = ij(m,s,:)
+          if(.not. interleave) then
+             call mpi_gatherv(wrk, ij_count, mpi_real,&
+                  ens(:,s,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real,&
+                  ens_map(m), mpi_comm_letkf, ierr)
+          else
+             call mpi_gatherv(wrk, ij_count, mpi_real,&
+                  wrk2, scatterv_count, scatterv_displ, mpi_real,&
+                  ens_map(m), mpi_comm_letkf, ierr)
+             if(ens_map(m) == pe_rank) then
+                do i=1,pe_size
+                   do j=1,scatterv_count(i)
+                      ens((j-1)*pe_size+i,s,ens_idx(m)) = wrk2(scatterv_displ(i)+j)
+                   end do
+                end do
+             end if
+          end if
           if(ierr /= 0) then
              print *, "ERROR: with letkf_mpi_ij2ens",ierr
              stop 1
@@ -141,7 +173,7 @@ contains
     !! Takes a single grid on the root process and distributes
     !! portions of it to the worker processes
 
-    real, intent(in) :: grd(grid_nx, grid_ny)
+    real, intent(in) :: grd(grid_nx*grid_ny)
       !! The 2D grid to send.
       !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]])***
 
@@ -149,10 +181,24 @@ contains
       !! The gridpoints this process is responsible for using.
       !! ***Shape is ([[letkf_mpi:ij_count]])***
 
-    integer :: ierr
+    integer :: ierr,i,j
+    real :: wrk(grid_nx*grid_ny)
 
-    call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_real, &
-         ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    if(.not.interleave) then
+       call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_real, &
+            ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    else
+       if (pe_isroot) then
+          do i=1,pe_size
+             do j=1,scatterv_count(i)
+                wrk(scatterv_displ(i)+j) = grd((j-1)*pe_size+i)
+             end do
+          end do
+       end if
+       call mpi_scatterv(wrk, scatterv_count, scatterv_displ, mpi_real, &
+            ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    end if
+
     if(ierr /= 0) then
        print *, "ERROR: with letkf_mpi_grd2ij",ierr
        stop 1
@@ -163,10 +209,27 @@ contains
 
   subroutine letkf_mpi_ij2grd(ij, grd)
     real, intent(in)    :: ij(ij_count)
-    real, intent(inout) :: grd(grid_nx, grid_ny)
-    integer :: ierr
-    call mpi_gatherv(ij, ij_count, mpi_real, &
-         grd, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    real, intent(inout) :: grd(grid_nx* grid_ny)
+
+    integer :: ierr,i,j
+    real :: wrk(grid_nx*grid_ny)
+
+
+    if(.not.interleave) then
+       call mpi_gatherv(ij, ij_count, mpi_real, &
+            grd, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    else
+       call mpi_gatherv(ij, ij_count, mpi_real, &
+            wrk, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
+       if(pe_isroot) then
+          do i=1,pe_size
+             do j=1,scatterv_count(i)
+                grd((j-1)*pe_size+i) = wrk(scatterv_displ(i)+j)
+             end do
+          end do
+       end if
+    end if
+
     if(ierr /= 0) then
        print *, "ERROR: with letkf_mpi_ij2grd", ierr
        stop 1
@@ -208,6 +271,8 @@ contains
   subroutine letkf_mpi_preinit()
     integer :: ierr
 
+
+
     call mpi_init(ierr)
 
     ! rightn now all processes are used for the LETKF,
@@ -227,11 +292,15 @@ contains
 
 
   !############################################################
-  subroutine letkf_mpi_init(mem, nx, ny, ns)
+  subroutine letkf_mpi_init(filename, mem, nx, ny, ns)
     integer, intent(in) :: mem
     integer, intent(in) :: nx, ny, ns
+    character(len=*), intent(in) :: filename
     integer :: i, j
-    integer :: count, prev
+    integer :: count, prev, unit
+
+
+    namelist /letkf_mpi/ interleave
 
     grid_nx=nx
     grid_ny=ny
@@ -243,6 +312,15 @@ contains
             new_line('a'), ' letkf_mpi_init() : ', &
             new_line('a'), '============================================================'
     end if
+
+    ! read in namelist
+    open(newunit=unit, file=filename)
+    read(unit, nml=letkf_mpi)
+    close(unit)
+    if (pe_isroot) then
+       print letkf_mpi
+    end if
+
     allocate (ens_map(mem))
 
     if(pe_isroot) then

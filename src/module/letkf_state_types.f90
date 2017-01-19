@@ -38,9 +38,10 @@ module letkf_state_I
      character(len=16)    :: extension
    contains
      procedure(I_stateio_init),   deferred :: init
-     procedure(I_stateio_latlon), deferred :: latlon
      procedure(I_stateio_read),   deferred :: read
      procedure(I_stateio_write),  deferred :: write
+     procedure(I_stateio_latlon), deferred :: latlon
+     procedure(I_stateio_mask),   deferred :: mask
   end type stateio
 
   abstract interface
@@ -49,13 +50,6 @@ module letkf_state_I
        class(stateio) :: self
        integer, intent(in) :: x,y,z
      end subroutine I_stateio_init
-
-
-     subroutine I_stateio_latlon(self, lat, lon)
-       import stateio
-       class(stateio) :: self
-       real, intent(inout) :: lat(:,:), lon(:,:)
-     end subroutine I_stateio_latlon
 
      subroutine I_stateio_read(self, filename, state)
        import stateio
@@ -70,6 +64,18 @@ module letkf_state_I
        character(len=*),  intent(in)  :: filename
        real, intent(in)  :: state(:,:,:)
      end subroutine I_stateio_write
+
+     subroutine I_stateio_latlon(self, lat, lon)
+       import stateio
+       class(stateio) :: self
+       real, intent(inout) :: lat(:,:), lon(:,:)
+     end subroutine I_stateio_latlon
+
+     subroutine I_stateio_mask(self, mask)
+       import stateio
+       class(stateio) :: self
+       real, intent(inout) :: mask(:,:)
+     end subroutine I_stateio_mask
 
   end interface
 

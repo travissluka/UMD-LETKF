@@ -83,7 +83,6 @@ contains
     end if
 
     !make sure inflation parameters are correct
-
     if(pe_isroot) then
        if(loc_hz(1) <=0 .or. loc_hz(2) <= 0) then
           print *, "ERROR: illegal values for loc_hz. ", loc_hz
@@ -115,7 +114,7 @@ contains
     call timer_start(t_init)
 
     ! mpi
-    call letkf_mpi_init(mem, grid_nx, grid_ny, grid_ns)
+    call letkf_mpi_init(nml_filename, mem, grid_nx, grid_ny, grid_ns)
 
     ! observations
     timer = timer_init("  obs", TIMER_SYNC)
@@ -278,6 +277,8 @@ contains
     ! perform analysis at each grid point
     ! ------------------------------
     do ij=1,ij_count
+       !TODO, don't include these gridpoints at all in the mpi ij allocation if the point is masked out
+       if(mask_ij(ij) == 0) cycle
 
        !TODO, use a precomputed cos(lat) grid
        loc_hz_ij = loc_hz(2) + (loc_hz(1)-loc_hz(2))*cos(lat_ij(ij) * pi/180.0)
@@ -310,9 +311,10 @@ contains
           rdiag(ob_cnt)  = obs_list(n)%err
           rloc(ob_cnt) = loc_h
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
+          diag_count_ij(:,ij) = diag_count_ij(:,ij)+loc_h
        end do
 
-       diag_count_ij(:,ij) = ob_cnt
+
 
        ! if there are still good quality observations to assimilate, do so
        if (ob_cnt > 0) then
