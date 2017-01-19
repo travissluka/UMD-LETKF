@@ -51,7 +51,7 @@ contains
     real, allocatable :: wrk4(:,:,:,:)
 
     character(len=1024) :: filename
-    integer :: t_total, t_init, t_letkf, t_output, timer, t_ens, t_ms
+    integer :: t_total, t_init, t_letkf, t_output, timer, t_ens, t_ms, t_ens1, t_ens2
     integer :: unit
     integer :: m, i
 
@@ -60,7 +60,7 @@ contains
     namelist /letkf_localization/ loc_hz
 
     ! Initialize timers
-    t_total = timer_init("Total")
+    t_total = timer_init("Total", TIMER_SYNC)
 
     call timer_start(t_total)
 
@@ -223,19 +223,27 @@ contains
        print *, "Collecting analysis ensemble members..."
     end if
     t_ens = timer_init("  ana_ensemble", TIMER_SYNC)
+    t_ens1 = timer_init("    ana_ens_scatter", TIMER_SYNC)
+    t_ens2 = timer_init("    ana_ens_write", TIMER_SYNC)
     call timer_start(t_ens)
 
     allocate(wrk4(grid_nx, grid_ny, grid_ns, size(ens_list)))
 
+    call timer_start(t_ens1)
     call letkf_mpi_ij2ens(ana_ij, wrk4)
+    call timer_stop(t_ens1)
+
+    call timer_start(t_ens2)
     do m=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m)
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", trim(filename), trim(stateio_class%extension)
        call stateio_class%write(filename, wrk4(:,:,:,m))
     end do
-
+    call timer_stop(t_ens2)
     deallocate(wrk4)
     call timer_stop(t_ens)
+
+    call letkf_mpi_barrier()
     call timer_stop(t_output)
 
     ! all done, cleanup
