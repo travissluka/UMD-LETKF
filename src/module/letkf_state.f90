@@ -27,12 +27,14 @@ module letkf_state
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: lon_ij(:)
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
+
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
     !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
   real,    public, protected, allocatable :: bkg_mean_ij(:,:)
     !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
   real,    public, protected, allocatable :: bkg_sprd_ij(:,:)
     !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
+
   real,    public,            allocatable :: ana_ij(:,:,:)
     !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
   real,    public,            allocatable :: ana_mean_ij(:,:)

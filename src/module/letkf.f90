@@ -20,6 +20,10 @@ module letkf
   real :: infl_mul = 1.0
   real :: infl_rtps = 0.0
   real :: infl_rtpp = 0.0
+
+  real :: loc_hz(2) = (/-1.0,-1.0/)
+
+  real, allocatable :: diag_count_ij(:,:)
 contains
 
 
@@ -53,6 +57,7 @@ contains
 
     namelist /letkf_settings/ mem, grid_nx, grid_ny, grid_ns
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
+    namelist /letkf_localization/ loc_hz
 
     ! Initialize timers
     t_total = timer_init("Total")
@@ -65,15 +70,25 @@ contains
     read(unit, nml=letkf_settings)
     rewind(unit)
     read(unit, nml=letkf_inflation)
+    rewind(unit)
+    read(unit, nml=letkf_localization)
     close(unit)
+    if (loc_hz(2) <= 0) loc_hz(2) = loc_hz(1)
     if (pe_isroot) then
        print letkf_settings
        print *, ""
        print letkf_inflation
+       print *, ""
+       print letkf_localization
     end if
 
     !make sure inflation parameters are correct
+
     if(pe_isroot) then
+       if(loc_hz(1) <=0 .or. loc_hz(2) <= 0) then
+          print *, "ERROR: illegal values for loc_hz. ", loc_hz
+          stop 1
+       end if
        if(infl_rtps > 1.0 .or. infl_rtps < 0.0) then
           print *, "ERROR: illegal value for infl_rtps (should be < 1.0 and >0.0). Value given: ", infl_rtps
           stop 1
@@ -134,6 +149,9 @@ contains
        print *, "Beginning core solver.."
     end if
     t_letkf = timer_init("(solve)", TIMER_SYNC)
+
+    allocate(diag_count_ij(grid_ns,ij_count))
+    diag_count_ij = 0.0
     call timer_start(t_letkf)
     call letkf_do_letkf()
     call timer_stop(t_letkf)
@@ -142,6 +160,9 @@ contains
     ! begin output
     t_output = timer_init("(output)", TIMER_SYNC)
     call timer_start(t_output)
+    allocate(wrk3(grid_nx, grid_ny, grid_ns))
+    allocate(wrk1(ij_count))
+
 
     ! gather the analysis mean/sprd and write out
     if(pe_isroot) then
@@ -151,9 +172,7 @@ contains
     t_ms = timer_init("  ana_meansprd", TIMER_SYNC)
     call timer_start(t_ms)
 
-    allocate(wrk3(grid_nx, grid_ny, grid_ns))
-    allocate(wrk1(ij_count))
-
+    ! ana mean
     do i=1,grid_ns
        wrk1 = ana_mean_ij(i,:)
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
@@ -163,6 +182,8 @@ contains
             'OUTPUT/ana_mean', trim(stateio_class%extension)
        call stateio_class%write('OUTPUT/ana_mean', wrk3)
     end if
+
+    ! ana spread
     do i=1,grid_ns
        wrk1 = ana_sprd_ij(i,:)
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
@@ -172,10 +193,29 @@ contains
             'OUTPUT/ana_sprd', trim(stateio_class%extension)
        call stateio_class%write('OUTPUT/ana_sprd', wrk3)
     end if
+    call timer_stop(t_ms)
+
+
+    ! write out other diagnostics
+    if(pe_isroot) then
+       print *, ""
+       print *, "Writing diagnostics files..."
+    end if
+
+    ! obs count
+    do i=1,grid_ns
+       wrk1=diag_count_ij(i,:)
+       call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
+    end do
+    if(pe_isroot) then
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
+            'OUTPUT/diag_count', trim(stateio_class%extension)
+       call stateio_class%write('OUTPUT/diag_count', wrk3)
+    end if
 
     deallocate(wrk3)
     deallocate(wrk1)
-    call timer_stop(t_ms)
+
 
 
     ! write the analysis ensemble members
@@ -225,7 +265,9 @@ contains
     integer :: i
 
     real :: loc_h
-
+    real :: loc_hz_max
+    real :: loc_hz_ij
+    real, parameter :: pi = 4.0*atan(1.0)
 
     timer1 = timer_init("  obs_search")
     timer2 = timer_init("  core_solve")
@@ -236,11 +278,16 @@ contains
     ! perform analysis at each grid point
     ! ------------------------------
     do ij=1,ij_count
+
+       !TODO, use a precomputed cos(lat) grid
+       loc_hz_ij = loc_hz(2) + (loc_hz(1)-loc_hz(2))*cos(lat_ij(ij) * pi/180.0)
+       loc_hz_max = loc_hz_ij * sqrt(40.0/3.0)
+
        ! search for all observations in a given radius of this gridpoint
        !TODO, do the KD tree call once to get all possible obs to be used by a grid BLOCK
        !
        call timer_start(timer1)
-       call letkf_obs_get(lat_ij(ij), lon_ij(ij), 1000.0e3, rpoints, rdistance, rnum)
+       call letkf_obs_get(lat_ij(ij), lon_ij(ij), loc_hz_max, rpoints, rdistance, rnum)
        call timer_stop(timer1)
 
        ! if there are observations found, process them
@@ -254,7 +301,7 @@ contains
 
           ! calculate observation localization, and
           ! get rid of obs outside of localization radius
-          loc_h = loc_gc(rdistance(i), 100.0e3)
+          loc_h = loc_gc(rdistance(i), loc_hz_ij)
           if (loc_h <= 0 ) cycle
 
           ! use this observation
@@ -265,6 +312,7 @@ contains
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
        end do
 
+       diag_count_ij(:,ij) = ob_cnt
 
        ! if there are still good quality observations to assimilate, do so
        if (ob_cnt > 0) then
