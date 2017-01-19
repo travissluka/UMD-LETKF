@@ -30,3 +30,5 @@ The following library is a rewrite of the local ensemble transform Kalman filter
 [^2]: Miyoshi, T. (2005). Ensemble Kalman Filter Experiments with a Primitive-Equation Global Model. University of Maryland. Retrieved from [http://hdl.handle.net/1903/3046](http://hdl.handle.net/1903/3046)
 
 *[LETKF]: Local Ensemble Transform Kalman Filter
+*[RTPS]: relaxation to prior spread
+*[RTPP]: relaxation to prior perturbations
