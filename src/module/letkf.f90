@@ -145,16 +145,26 @@ contains
             new_line('a'), '============================================================',&
             new_line('a'), ' Running LETKF core',&
             new_line('a'), '============================================================'
-       print *, "Beginning core solver.."
+       print *, "Beginning core solver..."
     end if
-    t_letkf = timer_init("(solve)", TIMER_SYNC)
 
+    t_letkf = timer_init("(solve)", TIMER_SYNC)
     allocate(diag_count_ij(grid_ns,ij_count))
     diag_count_ij = 0.0
     call timer_start(t_letkf)
     call letkf_do_letkf()
     call timer_stop(t_letkf)
 
+    call letkf_mpi_barrier()
+    if(pe_isroot) print *, "LETKF solver completed."
+
+
+    if(pe_isroot) then
+       print *, new_line('a'),&
+            new_line('a'), '============================================================',&
+            new_line('a'), ' Saving Output',&
+            new_line('a'), '============================================================'
+    end if
 
     ! begin output
     t_output = timer_init("(output)", TIMER_SYNC)
@@ -270,6 +280,7 @@ contains
     real :: trans(mem,mem)
     integer :: timer1, timer2, n, timer3
     integer :: i
+    integer, parameter :: progress_bar_size = 45
 
     real :: loc_h
     real :: loc_hz_max
@@ -282,9 +293,34 @@ contains
 
     ana_ij = 0
 
+    
+    ! setup progress bar
+    if(pe_isroot) then
+       write(*,*) ""
+       write(*,"(A)", advance='no')      "           ┌"
+       do i=1,progress_bar_size
+          write(*,"(A)", advance='no')   "─"
+       end do
+       write(*,"(A)") "┐"
+       write(*,"(A)", advance='no')      " progress: │"
+    end if
+
     ! perform analysis at each grid point
     ! ------------------------------
     do ij=1,ij_count
+
+       ! print out progress 
+       if(pe_isroot) then
+          if ( mod(ij,ij_count /progress_bar_size) == 0) then
+             write(*,"(A)", advance='no') "█"
+          end if
+          if (ij == ij_count) then
+             write(*,"(A)") "│"
+             write(*,*) ""
+          end if
+       end if
+
+
        !TODO, don't include these gridpoints at all in the mpi ij allocation if the point is masked out
        if(mask_ij(ij) == 0) cycle
 
@@ -319,7 +355,7 @@ contains
           rdiag(ob_cnt)  = obs_list(n)%err
           rloc(ob_cnt) = loc_h
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
-          diag_count_ij(:,ij) = diag_count_ij(:,ij)+loc_h
+          diag_count_ij(:,ij) = diag_count_ij(:,ij)+1!loc_h
        end do
 
 

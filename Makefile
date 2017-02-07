@@ -1,4 +1,4 @@
-.PHONY: build doc test clean all
+.PHONY: build doc test clean all debug
 
 all: build
 
@@ -7,7 +7,11 @@ clean:
 
 build:
 	mkdir -p build
-	cd build; cmake ../ -DCMAKE_BUILD_TYPE=Debug; make
+	cd build; cmake ../src -DCMAKE_BUILD_TYPE=Release; make --no-print-directory
+
+debug: 
+	mkdir -p build
+	cd build; cmake ../src -DCMAKE_BUILD_TYPE=Debug; make --no-print-directory
 
 test: build
 	cd build; make test

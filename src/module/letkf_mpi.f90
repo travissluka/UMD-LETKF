@@ -1,6 +1,8 @@
 module letkf_mpi
   !! MPI handler, handles scattering and gathering of state grids and ensemble members
+
   use mpi
+  use iso_fortran_env
 
   implicit none
   private
@@ -59,13 +61,18 @@ module letkf_mpi
 contains
 
 
-  subroutine  letkf_mpi_barrier()
+  subroutine  letkf_mpi_barrier(syncio)
     integer :: ierr
+    logical, optional :: syncio
+
     call mpi_barrier(mpi_comm_letkf, ierr)
-    if(ierr /= 0) then
-       print *, "ERROR: with letkf_mpi_barrier()"
-       stop 1
+
+    if(present(syncio) .and. syncio) then
+       flush(output_unit)
+       call system('usleep 1')
+       call mpi_barrier(mpi_comm_letkf, ierr)
     end if
+    
   end subroutine letkf_mpi_barrier
 
 
@@ -239,12 +246,14 @@ contains
 
 
   subroutine letkf_mpi_obs(ohx, qc)
-    real(dp), intent(inout) :: ohx(:,:)
-    integer,  intent(inout) :: qc(:,:)
+    real(dp), intent(inout)           :: ohx(:,:)
+    integer,  intent(inout), optional :: qc(:,:)
     integer :: ierr
     !TODO, this is inefficient
     call mpi_allreduce(mpi_in_place, ohx, mem*size(ohx,2), mpi_real, mpi_sum, mpi_comm_letkf, ierr)
-    call mpi_allreduce(mpi_in_place, qc, mem*size(ohx,2), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
+    if(present(qc)) then
+       call mpi_allreduce(mpi_in_place, qc, mem*size(ohx,2), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
+    end if
   end subroutine letkf_mpi_obs
 
 

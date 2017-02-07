@@ -1,31 +1,40 @@
+!! author: Travis Sluka
+!! category: support
+!! Kd-tree creation and search methods
+
 module kdtree
-  !! author: Travis Sluka
-  !! category: support
-  !!
   !! A lon/lat based 3D kd tree for fast retrieval of points.
   !!
   !! Initialization of the tree via [[kd_init]] creates a 3d tree
-  !! with points converted into x/y/z space. Points can then be retrieved
+  !! with points converted into x/y/z space. Once the tree is constructed
+  !! points can then be retrieved in \(O(\log n)\) time
   !! either by a point and max radius ([[kd_search_radius]]), or by a point and
   !! the number of desired closest points to return ([[kd_search_nnearest]])
+  !!
   !!
   !! @note Algorithm derived from Numerical Recipes, 2007
   !!
   !! @todo Allow for specification of MINDIV during initialization.
   !! Different trees might require different values here
+  !!
+  !! @todo fix bug where crashes on init if too few observations
+  !!
+  !! @todo ensure all distance calculations have been optimized (e.g.
+  !!   precomupted cos sin of lat/lon)
 
   implicit none
   private
 
+
+  ! public module methods
+  !------------------------------------------------------------
   public :: kd_root, kd_init
   public :: kd_search_radius, kd_search_nnearest
 
 
-  ! parameters
-  ! ------------------------------------------------------------
-
+  ! private module parameters
+  !------------------------------------------------------------
   integer, parameter :: dp=kind(0.0)
-
   !! double definition
 
   integer, parameter :: kd_dim = 3
@@ -45,14 +54,13 @@ module kdtree
   !! radius of earth
 
 
-
   ! custom types
-  ! ------------------------------------------------------------
-
+  !------------------------------------------------------------
   type kd_root
      !! wrapper for all the information needed by the kd-tree after
-     !! creation and during searching. User shouldnt' have to access
-     !! any of these members directly
+     !! creation and during searching. Object is created by [[kd_init]]
+     !! to be used by [[kd_search_radius]] and [[kd_search_nnearest]].
+     !! The User shouldnt' have to access any of these members directly
 
      integer, pointer :: ptindx(:)
      !! array holding pointers to the lat/lon array indexes, this
@@ -99,31 +107,33 @@ module kdtree
 contains
 
 
-  ! public subroutines
-  ! ------------------------------------------------------------
+
+  !================================================================================
+  !================================================================================
+
+
 
   subroutine kd_init(root, lons, lats)
-    !! Initialize a kd-tree structure given a list of lat/lon pairs
+    !! Initialize a kd-tree structure given a list of lat/lon pairs.
+    !! The lons and lats variables are copied internally by the module and so
+    !! can be deleted after calling this subroutine.
 
     type(KD_ROOT), intent(out)  :: root
-    !! the root node of our kd-tree
+    !! the root node of our kd-tree, used by kd_search_nnearest and kd_search_radius
 
     real(dp), intent(in), target :: lats(:)
     !! list of latitudes.
-    !! NOTE: this array should not be altered after calling kd_init
 
     real(dp), intent(in), target :: lons(:)
     !! list of longitudes. These can be within any range.
-    !! NOTE: this array should therefore not be altered after calling kd_init
 
-    ! variables used for kd-tree creation loop... to lazy to document what is what, sorry.
+    ! variables used for kd-tree creation loop... too lazy to document what they all are, sorry.
     integer :: kk, np, ntmp, n, m, nboxes, nowtask, ptlo, pthi
     integer :: tmom, tdim, jbox
     real(dp), pointer :: cp(:)
-    integer, pointer :: hp(:)
+    integer,  pointer :: hp(:)
     real(dp) :: lo(kd_dim), hi(kd_dim)
-    integer :: taskmom(50), taskdim(50)
-
+    integer  :: taskmom(50), taskdim(50)
 
 
     ! generate initial unsorted index array
@@ -138,7 +148,7 @@ contains
     do n=1, size(lons)
        root%pts_ll(n,1) = lons(n)*pi/180.0e0
        root%pts_ll(n,2) = lats(n)*pi/180.0e0
-       root%pts(n,:) = ll2xyz( (/lons(n), lats(n)/) )
+       root%pts(n,:) = ll2xyz( lons(n), lats(n) )
     end do
 
     ! calculate the number of kd boxes needed and create memory for them
@@ -150,13 +160,17 @@ contains
     end do
     nboxes = 2*size(root%ptindx)-ishft(m, -1)
     if (m<nboxes) nboxes = m
-    nboxes = nboxes - 1
     allocate(root%boxes(nboxes))
 
     ! initialize the root box, and put its subdivision on the task list
     lo = (/-1e20, -1e20, -1e20/)
     hi = (/ 1e20,  1e20,  1e20/)
     root%boxes(1) = boxnode(lo,hi,0,0,0,1,size(root%ptindx))
+
+    !if we were give a small list, just quit now, there is nothing to divide
+    if(size(root%ptindx) < MINDIV) return
+
+    !otherwise start splitting up the tree
     jbox = 1
     taskmom(1) = 1
     taskdim(1) = 0
@@ -211,8 +225,12 @@ contains
 
 
 
+  !================================================================================
+  !================================================================================
 
-  subroutine kd_search_radius(root,  s_point, s_radius, r_points, r_distance, r_num, exact)
+
+
+  subroutine kd_search_radius(root,  s_lon, s_lat, s_radius, r_points, r_distance, r_num, exact)
     !! searches for all the points within a given radius.
     !! Maximum number of points to search for depends on the size of "r_points" and "r_distance".
     !! Once these arrays are full the subroutine will exit early.
@@ -220,8 +238,12 @@ contains
     type(kd_root), intent(in) :: root
     !! root node containing all the information about the kd-tree
 
-    real(dp), intent(in) :: s_point(2)
-    !! a lon/lat pair, the location of the center of the search
+
+    real(dp), intent(in) :: s_lat
+    !! The latitude of the center of the search location
+
+    real(dp), intent(in) :: s_lon
+    !! The longitude of the center of the search location
 
     real(dp), intent(in) :: s_radius
     !! the radius (meters) of the search
@@ -229,14 +251,15 @@ contains
     integer, intent(out) :: r_points(:)
     !! the resulting list of points that are found,
     !! this is an array of indexes pointing to the original lat/lon arrays passed into kd_init.
-    !! Array should be same size as "r_distance".
+    !! Array passed in should be the same size as "r_distance".
 
     real(dp), intent(out) :: r_distance(:)
     !! the distance (meters) between each found point and the given search point.
-    !! Array should be same size as "r_points"
+    !! Array passed in should be the same size as "r_points"
 
     integer, intent(out) :: r_num
-    !! the number of resulting points that were found
+    !! the number of resulting points that were found.
+    !! r_points[1:r_num] and r_distance[1:r_num] are populated after calling this subroutine
 
     logical, intent(in), optional :: exact
     !! if true, the exact great circle distances will be calculated (slower). Otherwise
@@ -248,8 +271,8 @@ contains
     ! local variables
     real(dp) :: s_xyz(kd_dim)
     real(dp) :: r, slatr, clatr, lonr
-    integer :: k, i, n, nb, nbold, ntask, jdim, d1, d2
-    integer :: task(task_size)
+    integer  :: k, i, n, nb, nbold, ntask, jdim, d1, d2
+    integer  :: task(task_size)
     type(boxnode), pointer :: boxes(:)
 
     boxes => root%boxes
@@ -262,7 +285,7 @@ contains
     end if
 
     ! convert search point to x/y/z
-    s_xyz = ll2xyz(s_point)
+    s_xyz = ll2xyz(s_lon, s_lat)
 
     ! find the smallest box that completely contains the bounds of the search point
     nb = 1
@@ -286,9 +309,9 @@ contains
     r_num = 0
 
     ! convert search point to radians
-    clatr = cos(s_point(2)*pi/180.0)
-    slatr = sin(s_point(2)*pi/180.0)
-    lonr  = s_point(1) * pi/180.0
+    clatr = cos(s_lat*pi/180.0)
+    slatr = sin(s_lat*pi/180.0)
+    lonr  = s_lon * pi/180.0
 
     do while(ntask /= 0)
        k = task(ntask)
@@ -350,15 +373,22 @@ contains
 
 
 
-  subroutine kd_search_nnearest(root,  s_point, s_num, r_points, r_distance, r_num, exact)
+  !================================================================================
+  !================================================================================
+
+
+
+  pure subroutine kd_search_nnearest(root, s_lon, s_lat, s_num, r_points, r_distance, r_num, exact)
     !! selects the "s_num" points in the kd tree that are nearest the search point.
-    !!
 
     type(kd_root), intent(in) :: root
     !! root node containing all the information about the kd-tree
 
-    real(dp), intent(in) :: s_point(2)
-    !! a lon/lat pair, the location of the center of the search
+    real(dp), intent(in) :: s_lon
+    !! The longitude of the center of the search location
+
+    real(dp), intent(in) :: s_lat
+    !! The latitude of the center of the search location
 
     integer, intent(in) :: s_num
     !! the max number of points to find,
@@ -386,17 +416,17 @@ contains
     integer  :: nn(s_num)
     !! array if point indexes, paired with heap array entries
 
-    integer :: kp, i, n, ntask, k
+    integer  :: kp, i, n, ntask, k
     real(dp) :: d
     real(dp) :: s_xyz(kd_dim)
-    integer :: task(task_size)
+    integer  :: task(task_size)
     real(dp) :: slatr, clatr, lonr
 
     ! set all entries in the heap to a really big number
     dn = 1e20
 
     ! convert search point to xyz
-    s_xyz = ll2xyz(s_point)
+    s_xyz = ll2xyz(s_lon, s_lat)
 
     ! find the smallest mother box with enough points to initialize the heap
     kp = kd_locate(root, s_xyz)
@@ -405,9 +435,9 @@ contains
     end do
 
     ! convert search point to radians
-    clatr = cos(s_point(2)*pi/180.0)
-    slatr = sin(s_point(2)*pi/180.0)
-    lonr  = s_point(1) * pi/180.0
+    clatr = cos(s_lat*pi/180.0)
+    slatr = sin(s_lat*pi/180.0)
+    lonr  = s_lon * pi/180.0
 
     ! initialize the heap with the "s_num" closest points
     do i = root%boxes(kp)%ptlo, root%boxes(kp)%pthi
@@ -490,8 +520,10 @@ contains
 
 
 
-  ! private subroutines and functions
-  ! ------------------------------------------------------------
+  !================================================================================
+  !================================================================================
+
+
 
   pure function kd_locate(root, point)
     !! given an arbitrary point, return the index of which kdtree box it is in
@@ -522,6 +554,11 @@ contains
 
     kd_locate = nb
   end function kd_locate
+
+
+
+  !================================================================================
+  !================================================================================
 
 
 
@@ -577,6 +614,11 @@ contains
 
 
 
+  !================================================================================
+  !================================================================================
+
+
+
   pure subroutine swap(a1, a2)
     !! Convenience function to swap two array indices
     integer, intent(inout) :: a1, a2
@@ -588,20 +630,30 @@ contains
 
 
 
-  pure function ll2xyz(ll)
+  !================================================================================
+  !================================================================================
+
+
+
+  pure function ll2xyz(lon, lat)
     !! convert a point in longitude/latitude into x/y/z coordinates
 
-    real(dp), intent(in) :: ll(2)
+    real(dp), intent(in) :: lon, lat
     !! logitude/latidue
 
     real(dp) :: ll2xyz(3)
     !! resulting x/y/z (meters)
 
-    ll2xyz(1) = re * cos(ll(2)*pi/180.0) * cos(ll(1)*pi/180.0)
-    ll2xyz(2) = re * cos(ll(2)*pi/180.0) * sin(ll(1)*pi/180.0)
-    ll2xyz(3) = re * sin(ll(2)*pi/180.0)
+    ll2xyz(1) = re * cos(lat*pi/180.0) * cos(lon*pi/180.0)
+    ll2xyz(2) = re * cos(lat*pi/180.0) * sin(lon*pi/180.0)
+    ll2xyz(3) = re * sin(lat*pi/180.0)
 
   end function ll2xyz
+
+
+
+  !================================================================================
+  !================================================================================
 
 
 
@@ -625,6 +677,11 @@ contains
 
 
 
+  !================================================================================
+  !================================================================================
+
+
+
   pure function dist_gc(lon1, clat1, slat1, lon2, lat2)
     !! calculate the great circle distance between two points
     real(dp), intent(in) :: lon1, clat1, slat1, lon2, lat2
@@ -633,6 +690,11 @@ contains
     dist_gc = re * acos(min(slat1*sin(lat2) + clat1*cos(lat2) * cos( (lon2-lon1)), 1.0))
 
   end function dist_gc
+
+
+
+  !================================================================================
+  !================================================================================
 
 
 
@@ -654,8 +716,12 @@ contains
     end do
 
     dist_box = sqrt(dd)
-
   end function dist_box
+
+
+
+  !================================================================================
+  !================================================================================
 
 
 
@@ -685,5 +751,9 @@ contains
     heap(jold) = a
     ndx(jold) = ia
   end subroutine sift_down
+
+
+
+  !================================================================================
 
 end module kdtree

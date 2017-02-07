@@ -28,7 +28,9 @@
 &letkf_obs
 ! Observation input and quality control
 !------------------------------------------------------------
- reader = 'dat'
+ obs_test = T
+
+ reader = 'dat' 
  obsqc_maxstd = 3.0
 /
 

@@ -6,7 +6,6 @@ module letkf_obs
   use letkf_obs_nc
   use letkf_obs_dat
 
-  use iso_fortran_env
   implicit none
   private
 
@@ -17,6 +16,7 @@ module letkf_obs
   public :: letkf_obs_init
   public :: letkf_obs_read
   public :: letkf_obs_get
+  public :: letkf_obs_gentest
 
   ! public types
   public :: obsdef, obsdef_list
@@ -25,6 +25,8 @@ module letkf_obs
   public :: platdef_read, platdef_getbyname, platdef_getbyid
 
   public :: obs_ohx, obs_list, obs_qc, obs_ohx_mean
+
+  logical, public :: obs_test = .false.
 
   class(obsio), public, allocatable :: obsio_class
   !------------------------------------------------------------
@@ -67,10 +69,13 @@ module letkf_obs
   !! list of all platform types for observations
 
   type(kd_root), protected                  :: obs_tree
-  type(observation), protected, allocatable :: obs_list(:)
   integer,  protected, allocatable          :: obs_qc(:)
-  real(dp), protected, allocatable          :: obs_ohx(:,:)
-  real(dp), protected, allocatable          :: obs_ohx_mean(:)
+
+  ! TODO, only letkf_state needs to write to these, create
+  ! an accessor method so that these can stay protected
+  type(observation), allocatable :: obs_list(:)
+  real(dp), allocatable          :: obs_ohx(:,:)
+  real(dp), allocatable          :: obs_ohx_mean(:)
 
   real :: obsqc_maxstd
   !------------------------------------------------------------
@@ -78,29 +83,40 @@ module letkf_obs
 
 contains
 
+
+  ! ===============================================================================
+  ! ================================================================================
   subroutine letkf_obs_get(slat, slon, sradius, rpoints, rdistance, rnum)
     real,    intent(in)    :: slat, slon, sradius
     integer, intent(inout) :: rpoints(:)
     real,    intent(inout) :: rdistance(:)
     integer, intent(out)   :: rnum
-    call kd_search_radius(obs_tree, (/slon*1.0e0, slat*1.0e0/), sradius, rpoints, rdistance, rnum, .false.)
+    call kd_search_radius(obs_tree, slon*1.0e0, slat*1.0e0, sradius, rpoints, rdistance, rnum, .false.)
   end subroutine letkf_obs_get
 
 
 
+
+  ! ================================================================================
+  ! ================================================================================
   subroutine letkf_obs_init(nml_filename, obsdef_file, platdef_file)
     character(len=*), optional, intent(in) :: nml_filename
 
     character(len=*), optional, intent(in) :: obsdef_file
     !! observation definition file to read in. By default `letkf.obsdef`
     !! will be used.
+
     character(len=*), optional, intent(in) :: platdef_file
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
-    character(len=:), allocatable :: reader
-    integer :: unit
 
-    namelist /letkf_obs/ obsqc_maxstd, reader
+    character(len=:), allocatable :: reader
+    integer :: unit, i
+
+    real(dp), allocatable :: obs_lons(:), obs_lats(:)
+
+    namelist /letkf_obs/ obs_test, reader, obsqc_maxstd
+
 
     if (pe_isroot) then
        print *, new_line('a'), &
@@ -121,56 +137,209 @@ contains
     end if
 
     ! determine the io class to create
-    if (reader == 'dat') then
-       allocate(obsio_dat :: obsio_class)
-    else if( reader == 'nc') then
-       allocate(obsio_nc :: obsio_class)
-    else
-       print *, 'ERROR, unkown obsio class "',reader,'"'
-       stop 1
+    ! TODO, add in hooks for user defined obsio classes
+    if (.not. obs_test) then
+       if (reader == 'dat') then
+          allocate(obsio_dat :: obsio_class)
+       else if( reader == 'nc') then
+          allocate(obsio_nc :: obsio_class)
+       else
+          print *, 'ERROR, unkown obsio class "',reader,'"'
+          stop 1
+       end if
+       call obsio_class%init()
     end if
-    call obsio_class%init()
 
-    ! read in additional configuration files
+
+    ! read in additional configuration files defining observation
+    ! and platform types
     if (pe_isroot) then
        print *, ''
        print *, 'LETKF observation configuration files'
        print *, '------------------------------------------------------------'
        print *, '  observation definition file: "', trim(obsdef_file),'"'
        print *, '  platform    definition file: "', trim(platdef_file),'"'
-       print *, '  I/O format: ',trim(obsio_class%description)
+       if (.not. obs_test) &
+            print *, '  I/O format: ',trim(obsio_class%description)
        print *, ''
     end if
     call obsdef_read(obsdef_file)
     call platdef_read(platdef_file)
 
-    ! read in the observations
-    call letkf_obs_read(obsio_class)
 
+    ! read in the observations, or generate test observations
+    if (obs_test) then
+       call obs_test_read()       
+    else
+       call letkf_obs_read(obsio_class)
+    end if
+
+
+    ! add observations to the kd tree
+    allocate(obs_lons(size(obs_list)))
+    allocate(obs_lats(size(obs_list)))
+    do i=1,size(obs_list)
+       obs_lons(i) = obs_list(i)%lon
+       obs_lats(i) = obs_list(i)%lat
+    end do
+    call kd_init(obs_tree, obs_lons, obs_lats)
+    deallocate(obs_lons)
+    deallocate(obs_lats)
+
+    call obs_stats_print()
   end subroutine letkf_obs_init
 
 
 
+
+  ! ================================================================================
+  ! ================================================================================
+  subroutine obs_test_read()
+    integer :: nobs, i, unit, iostat, pos
+    logical :: ex
+    character(len=1024) :: line
+    type(obsdef) :: od
+    type(platdef) :: pd
+    character(len=1024), parameter :: file = "obstest.cfg"
+
+    integer, parameter :: obs_max = 10
+    integer :: obs_cnt = 0
+    type(observation) :: obs_t(obs_max)
+
+
+    if (pe_isroot) then
+       print *, ''
+       print *, 'Test observations configuration'
+       print *, '------------------------------------------------------------'
+       print *, 'Reading file "',trim(file),'" ...'
+    end if
+
+    ! make sure the file exists
+    inquire(file=file, exist=ex)
+    if(.not.ex) then
+       print*, 'ERROR: file does not exist: "', trim(file), '"'
+       stop 1
+    end if
+
+    ! open file for reading
+    open(newunit=unit, file=file, action='read')    
+    do while(.true.)
+       ! read a new line
+       read(unit, '(A)', iostat=iostat) line
+       if(iostat<0) exit
+       if (iostat > 0) then
+          print *, 'ERROR: problem reading file'
+          stop 1
+       end if
+
+       ! convert tabs to spaces
+       do i=1,len(line)
+          if(line(i:i) == char(9)) line(i:i) = ' '
+       end do
+
+       ! ignore comments / empty lines
+       line=adjustl(line)
+       if(line(1:1) == '#') cycle
+       if(len(trim(adjustl(line))) == 0) cycle
+
+       ! process the given observation
+       if(obs_cnt == obs_max) then
+          if(pe_isroot) then
+             print *, "WARNING: max test observation count of reached, ignoring rest of ", &
+                  "observations in the cfg file"
+             print *, "  obs_max: ",obs_max
+          end if
+          exit
+       end if
+       obs_cnt = obs_cnt + 1
+       
+       line=adjustl(line)
+       pos=scan(line,' ')
+       od = obsdef_getbyname(line(1:pos))
+       obs_t(obs_cnt)%id = od%id
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       pd = platdef_getbyname(line(1:pos))
+       obs_t(obs_cnt)%plat = pd%id
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       read(line(1:pos),*) obs_t(obs_cnt)%lon
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       read(line(1:pos),*) obs_t(obs_cnt)%lat
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       read(line(1:pos),*) obs_t(obs_cnt)%depth
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       read(line(1:pos),*) obs_t(obs_cnt)%time
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       read(line(1:pos),*) obs_t(obs_cnt)%val
+
+       line=adjustl(line(pos+1:))
+       pos=scan(line,' ')
+       read(line(1:pos),*) obs_t(obs_cnt)%err
+    end do
+
+    if(pe_isroot) print *, obs_cnt,"test observations defined"
+    
+    ! read in the positions / types of observations
+    allocate(obs_list(obs_cnt))
+    allocate(obs_ohx_mean(obs_cnt))
+    allocate(obs_ohx(mem, obs_cnt))
+    allocate(obs_qc(obs_cnt))    
+    obs_list=obs_t(:obs_cnt)    
+    obs_ohx_mean(:) = 0
+    do i=1,mem
+       obs_ohx(i,:) = 0
+    end do
+    obs_qc(:) = 0
+   
+  end subroutine obs_test_read
+
+
+
+
+  ! ================================================================================
+  ! ================================================================================
+  subroutine letkf_obs_gentest()
+
+    if (pe_isroot) then
+       print *, ''
+       print *, 'letkf_obs_gentest() : generating test observatiosn'
+       print *, '------------------------------------------------------------'
+       PRINT *, "TODO: populate the test observations with read in bkg"
+    end if   
+
+
+  end subroutine letkf_obs_gentest
+
+
+
+  ! ================================================================================
+  ! ================================================================================
+
   subroutine letkf_obs_read(reader)
     !! parallel read in of observation
+    !! afterwards obs_list, obs_ohx, obs_ohx_mean, obs_qc will be populated
+
     class(obsio), intent(in) :: reader
     !! abstract reader class
 
-    integer :: i, j
-
+    integer :: i
     character(len=1024) :: filename
 
-    integer, allocatable :: obs_qc_l(:,:)
-
     type(observation), allocatable :: obs_t(:)
-    real(dp), allocatable :: obs_ohx_t(:)
-    integer, allocatable :: obs_qc_t(:)
-
-    integer, allocatable :: obstat_count(:,:)
-    integer, allocatable :: obplat_count(:,:)
-
-    real(dp), allocatable :: obs_lons(:), obs_lats(:)
-    integer :: cnt
+    real(dp),          allocatable :: obs_ohx_t(:)
+    integer,           allocatable :: obs_qc_t(:)
+    integer,           allocatable :: obs_qc_l(:,:)
 
 
     if (pe_isroot) then
@@ -180,14 +349,24 @@ contains
        print *, "  obsio class: ", trim(reader%description)
     end if
 
+
     ! parallel read of the observation innovation files for each ensemble member
     !! @TODO un-hardcode this
     if (pe_isroot) then
        print *,""
        print *, "reading ensemble observation departures..."
     end if
+
+
+    ! console output synchronization
+    ! (needed because individual mpi processes are about to output to console)
+    call letkf_mpi_barrier(syncio=.true.)
+
+
+    ! each mpi proc loads in its resepective observation file
     do i=1,size(ens_list)
-       write (filename, '(A,I0.4,A)') 'INPUT/obsop/',ens_list(i),'.dat'
+       write (filename, '(A,I0.4,3A)') 'INPUT/obsop/',ens_list(i),'.'&
+            ,trim(reader%extension)
        print '(A,I5,2A)', " PROC ",pe_rank," is READING file: ", trim(filename)
 
        ! read the file
@@ -239,12 +418,14 @@ contains
        deallocate(obs_qc_t)
     end if
 
-    flush(output_unit)
-    call system('sleep 0')
-    call letkf_mpi_barrier()
+
+    ! console output synchronization
+    call letkf_mpi_barrier(syncio=.true.)
+
 
     ! distribute the qc and innovation values
     call letkf_mpi_obs(obs_ohx, obs_qc_l)
+
 
     ! calculate the combined QC
     allocate(obs_qc(size(obs_list)))
@@ -252,6 +433,7 @@ contains
        obs_qc(i) = sum(obs_qc_l(:,i))
     end do
     deallocate(obs_qc_l)
+
 
     ! calculate ohx perturbations
     do i=1,size(obs_list)
@@ -270,23 +452,19 @@ contains
        end if
     end do
 
-    !TODO: keep track of invalid obs or plat IDs
-    !TODO: set qc < 0 for invalid obs or plat IDs
 
-    ! add locations to the kd-tree
-    ! TODO: dont add obs to the tree that have a bad QC value
-    allocate(obs_lons(size(obs_list)))
-    allocate(obs_lats(size(obs_list)))
-    do i=1,size(obs_list)
-       obs_lons(i) = obs_list(i)%lon
-       obs_lats(i) = obs_list(i)%lat
-    end do
+    !TODO: sort so that bad qc obs are moved to the end of the arrays
+  end subroutine letkf_obs_read
 
 
-    ! initialize the kd tree
-    call kd_init(obs_tree, obs_lons, obs_lats)
-    deallocate(obs_lons)
-    deallocate(obs_lats)
+
+
+  ! ================================================================================
+  ! ================================================================================
+  subroutine obs_stats_print()
+    integer, allocatable :: obstat_count(:,:)
+    integer, allocatable :: obplat_count(:,:)
+    integer :: cnt, i, j
 
     ! print statistics about the observations
     if (pe_isroot) then
@@ -310,14 +488,6 @@ contains
           else
              cnt = 4
           end if
-
-          ! if (obs_list(i)%id == 1220 .and. obs_qc(i) < 0) then
-          !    print *, obs_qc(i)
-          !    print *, obs_ohx_mean(i)
-          !    print *, obs_list(i)
-          !    print *, obs_ohx(:,i)
-          !    print *,""
-          ! end if
 
           ! count by obs type
           do j=1,size(obsdef_list)
@@ -381,12 +551,12 @@ contains
        deallocate(obplat_count)
     end if
 
-  end subroutine letkf_obs_read
+  end subroutine obs_stats_print
 
 
 
-  ! ============================================================
-  ! ============================================================
+  ! ================================================================================
+  ! ================================================================================
   subroutine obsdef_read(file)
     character(len=*), intent(in) :: file
 
@@ -511,9 +681,9 @@ contains
 
 
 
+  ! ================================================================================
+  ! ================================================================================
 
-  ! ============================================================
-  ! ============================================================
   subroutine platdef_read(file)
     character(len=*), intent(in) :: file
     integer :: unit, pos, iostat
@@ -632,8 +802,9 @@ contains
 
 
 
-  ! ============================================================
-  ! ============================================================
+  ! ================================================================================
+  ! ================================================================================
+
   function obsdef_getbyid(id) result(res)
     !! returns information about an observation type given its id number.
     !! An error is thrown if the id is not found
@@ -657,24 +828,27 @@ contains
 
 
 
-  ! ============================================================
-  ! ============================================================
+  !================================================================================
+  !================================================================================
+
   function obsdef_getbyname(name) result(res)
     character(len=*), intent(in) :: name
+
+    character(len=1024) :: name2
     type(obsdef) :: res
 
     integer :: i
 
-    !!@todo convert to upper case first
+    name2 = toupper(name)
     i = 1
     do while (i <= size(obsdef_list))
-       if (obsdef_list(i)%name_short == trim(name)) exit
+       if (obsdef_list(i)%name_short == trim(name2)) exit
        i = i + 1
     end do
     !!@todo return an error code instead?
     if (i > size(obsdef_list)) then
-       print *, "ERROR: search ofr observation definition for ",&
-            name, " failed."
+       print *, "ERROR: search for observation definition for ",&
+            trim(name2), " failed."
        stop 1
     end if
     res = obsdef_list(i)
@@ -710,19 +884,21 @@ contains
   ! ============================================================
   function platdef_getbyname(name) result(res)
     character(len=*), intent(in) :: name
+
+    character(len=1024) :: name2
     type(platdef) :: res
 
     integer :: i
 
     i = 1
-    !!@todo convert name to upper case first
+    name2=toupper(name)
     do while(i <= size(platdef_list))
-       if(platdef_list(i)%name_short == trim(name)) exit
+       if(platdef_list(i)%name_short == trim(name2)) exit
        i = i+1
     end do
     !!@todo return an error code instead
     if(i> size(platdef_list)) then
-       print *, "ERROR: search for platform definition for ",name,&
+       print *, "ERROR: search for platform definition for ",trim(name2),&
             " failed"
        stop 1
     end if
