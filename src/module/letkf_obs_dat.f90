@@ -11,23 +11,40 @@ module letkf_obs_dat
   !------------------------------------------------------------
 
   type, extends(obsio) :: obsio_dat
+     !! class to read and write observations in a raw dat format
    contains
-     procedure :: init => obsio_dat_init
-     procedure :: write => obsio_dat_write
-     procedure :: read => obsio_dat_read
+     procedure :: get_name => obsio_get_name
+     procedure :: get_desc => obsio_get_desc
+     procedure :: write    => obsio_dat_write
+     procedure :: read     => obsio_dat_read
   end type obsio_dat
 
 
 contains
 
 
-  subroutine obsio_dat_init(self)
+  
+  function obsio_get_name(self)
     class(obsio_dat) :: self
+    character(:), allocatable :: obsio_get_name
+    obsio_get_name = "LETKF_DAT"
 
-    self%description = "raw observation I/O"
-    self%extension   = "dat"
-  end subroutine obsio_dat_init
+    ! pointless statement to get rid of unused argument warning
+    self%i = self%i
+  end function obsio_get_name
 
+
+
+  function obsio_get_desc(self)
+    class(obsio_dat) :: self
+    character(:), allocatable :: obsio_get_desc
+    obsio_get_desc = "raw observation I/O"
+
+    ! pointless statement to get rid of unused argument warning
+    self%i = self%i    
+  end function obsio_get_desc
+
+  
 
   subroutine obsio_dat_write(self, file, obs, iostat)
     class(obsio_dat) :: self
@@ -35,8 +52,9 @@ contains
     type(observation), intent(in) :: obs(:)
     integer, optional, intent(out) :: iostat
 
-    ! meaningless statement to avoid warning that "self" isn't used
-    self%extension = self%extension
+    ! pointless statement to get rid of unused argument warning
+    self%i = self%i
+
     if(size(obs) == size(obs)) continue
 
     if (present(iostat)) iostat = 0
@@ -59,8 +77,8 @@ contains
     integer :: filesize, unit, i
     real(kind=4) :: record(10)
 
-    ! meaningless statement to avoid warning that "self" isn't used
-    self%extension = self%extension
+    ! pointless statement to get rid of unused argument warning
+    self%i = self%i
 
     ! determine the number of observations that will be read in
     inquire(file=file, size=filesize)

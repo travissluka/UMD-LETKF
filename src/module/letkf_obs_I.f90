@@ -6,7 +6,7 @@ module letkf_obs_I
 
   ! public types
   public :: observation
-  public :: obsio, I_obsio_write, I_obsio_read
+  public :: obsio, obsioptr
 
 
 
@@ -41,22 +41,32 @@ module letkf_obs_I
      !! Abstract base class for observation file reading and writing.
      !! All user-defined, and built-in, obs file I/O modules for
      !! specific file types should be built from a class extending this
-     character(len=1024) :: description
-     character(len=10)   :: extension
+     integer :: i ! don't worry about this
    contains
-     procedure(I_obsio_init), deferred :: init
-     procedure(I_obsio_write), deferred :: write
+     procedure(I_obsio_getstr),  deferred :: get_name
+     procedure(I_obsio_getstr),  deferred :: get_desc
+     procedure(I_obsio_write),   deferred :: write
      !! write a list of observatiosn to the given file
-     procedure(I_obsio_read),  deferred :: read
+     procedure(I_obsio_read),    deferred :: read
      !! read a list of observatiosn from the given file
   end type obsio
 
   abstract interface
+
+     
+     function I_obsio_getstr(self)
+       import obsio
+       class(obsio) :: self
+       character(:), allocatable :: I_obsio_getstr
+     end function I_obsio_getstr
+
+     
      subroutine I_obsio_init(self)
        import obsio
        class(obsio) :: self
      end subroutine I_obsio_init
 
+     
      subroutine I_obsio_write(self, file, obs, iostat)
        !! interface for procedures to write observation data
        import obsio
@@ -69,6 +79,7 @@ module letkf_obs_I
        integer, optional, intent(out) :: iostat
      end subroutine I_obsio_write
 
+     
      subroutine I_obsio_read(self, file, obs, obs_innov, obs_qc, iostat)
        !! interface for procedures to load observation data
        import observation
@@ -85,6 +96,10 @@ module letkf_obs_I
      end subroutine I_obsio_read
   end interface
 
+
+  type obsioptr
+     class(obsio), pointer :: p
+  end type obsioptr
 
 
 end module letkf_obs_I

@@ -15,15 +15,9 @@ module letkf_state
   public :: letkf_state_init
 
   ! public module variables
-  integer, public  :: grid_nx
-    !! number of grid points in the x direction
-  integer, public  :: grid_ny
-    !! number of grid points in the y direction
-  integer, public  :: grid_ns
-    !! total number of 2D grid slices. This is equal to grid_nz*num_3D_vars + num_2D_vars
+  ! ------------------------------------------------------------
   integer, public, protected :: grid_nz
     !! number of vertical levels for 3D variables
-
   real,    public, protected, allocatable :: lat_ij(:)
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: lon_ij(:)
@@ -31,18 +25,18 @@ module letkf_state
   real,    public, protected, allocatable :: mask_ij(:)
 
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]] ) ***
   real,    public, protected, allocatable :: bkg_mean_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
   real,    public, protected, allocatable :: bkg_sprd_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
 
   real,    public,            allocatable :: ana_ij(:,:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]] ) ***
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]] ) ***
   real,    public,            allocatable :: ana_mean_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
   real,    public,            allocatable :: ana_sprd_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_state:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
 
 
   ! private module variables
@@ -81,9 +75,6 @@ contains
     real    :: r_distance(1)
     
 
-
-    namelist /grid_def/ grid_nx, grid_ny, grid_nz, grid_ns
-
     if(pe_isroot) then
        print *, new_line('a'), &
             new_line('a'), '============================================================',&
@@ -92,12 +83,12 @@ contains
     end if
 
     ! read in our section of the namelist
-    open(newunit=unit, file=nml_filename)
-    read(unit, nml=grid_def)
-    close(unit)
-    if (pe_isroot) then
-       print grid_def
-    end if
+!    open(newunit=unit, file=nml_filename)
+!    read(unit, nml=grid_def)
+!    close(unit)
+!    if (pe_isroot) then
+!       print grid_def
+!    end if
 
 
     !create the state io class, and initialize

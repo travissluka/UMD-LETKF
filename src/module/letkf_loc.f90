@@ -10,7 +10,7 @@ contains
   pure function loc_gc(z, L)
     !! Gaspari-Cohn localization function
     !! Possibly faster than the Gaussian function, depending on computer architecture.
-    !! Similar shape to Gaussian, except it is compact, goes to 0 at (\ L sqrt( 0.3) \ )
+    !! Similar shape to Gaussian, except it is compact, goes to 0 at (\ 2L sqrt( 0.3) \ )
     real, intent(in) :: z
     real, intent(in) :: L
     !! (\ e^(0.5) \)

@@ -17,7 +17,7 @@ module letkf_mpi
 
 
   integer, public :: mem
-    !! Number of ensemble members
+  !! Number of ensemble members
 
   ! public variables
   ! ------------------------------
@@ -25,12 +25,24 @@ module letkf_mpi
     !! for each index MEM, the number of the PE
     !! respsonsible for its I/O
 
-  integer, public :: ij_count
+  integer, public, protected :: ij_count
     !! Number of grid points the current process is responsible for handling
 
-  integer, public, allocatable :: scatterv_count(:)
-  integer, public, allocatable :: scatterv_displ(:)
+  integer, public, protected :: grid_nx
+    !! number of grid points in the x direction (longitude usually)  
 
+  integer, public, protected :: grid_ny
+    !! number of grid points in the y direction (latitude usually)  
+
+  integer, public, protected :: grid_ns
+    !! total number of 2d slices. This is equal to grid_nz *num_3d_vars + num_2d_vars
+
+  integer, public, protected :: pe_rank, pe_size, pe_root
+  logical, public, protected :: pe_isroot
+  integer, public, protected :: mpi_comm_letkf
+
+
+  
 
   ! private variables
   ! ------------------------------
@@ -46,20 +58,17 @@ module letkf_mpi
     !! A list of grid point locations that this process
     !! is responsible for doing core LETKF algorithm on
 
-  real, allocatable :: load_weights(:)
-
-
-  integer, public :: pe_rank, pe_size, pe_root
-  logical, public :: pe_isroot
-  integer, public :: mpi_comm_letkf
-
-
-  integer :: grid_nx, grid_ny, grid_ns
+  integer, allocatable :: scatterv_count(:)
+  integer, allocatable :: scatterv_displ(:)
 
   logical :: interleave = .true.
 
+
+
+  
 contains
 
+  
 
   subroutine  letkf_mpi_barrier(syncio)
     integer :: ierr
@@ -84,12 +93,12 @@ contains
 
     real, intent(in)    :: ens(grid_nx*grid_ny, grid_ns, size(ens_list))
       !! The ensemble members this given process is responsible for loading in.
-      !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
-      !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:grid_nx]], [[letkf_mpi:grid_ny]],
+      !!    [[letkf_mpi:grid_ny]], [[letkf_mpi:mem]])***
 
     real, intent(inout) :: ij(mem, grid_ns, ij_count)
       !! The gridpoints this given process is responsible for computing.
-      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]])***
 
     integer :: ierr, s, i, j, m
     real :: wrk(ij_count)
@@ -134,12 +143,12 @@ contains
 
     real, intent(in) :: ij(mem, grid_ns, ij_count)
       !! The gridpoints this given process is responsible for computing.
-      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_state:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]])***
 
     real, intent(inout)    :: ens(grid_nx*grid_ny, grid_ns, size(ens_list))
       !! The ensemble members this given process is responsible for loading in.
-      !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]],
-      !!    [[letkf_state:grid_ny]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:grid_nx]], [[letkf_mpi:grid_ny]],
+      !!    [[letkf_mpi:grid_ny]], [[letkf_mpi:mem]])***
 
     integer :: ierr, s, m, i, j
     real :: wrk(ij_count)
@@ -182,7 +191,7 @@ contains
 
     real, intent(in) :: grd(grid_nx*grid_ny)
       !! The 2D grid to send.
-      !! ***Shape is ([[letkf_state:grid_nx]], [[letkf_state:grid_ny]])***
+      !! ***Shape is ([[letkf_mpi:grid_nx]], [[letkf_mpi:grid_ny]])***
 
     real, intent(inout) :: ij(ij_count)
       !! The gridpoints this process is responsible for using.
@@ -301,19 +310,16 @@ contains
 
 
   !############################################################
-  subroutine letkf_mpi_init(filename, mem, nx, ny, ns)
-    integer, intent(in) :: mem
-    integer, intent(in) :: nx, ny, ns
+  subroutine letkf_mpi_init(filename)
     character(len=*), intent(in) :: filename
     integer :: i, j
     integer :: count, prev, unit
 
+    real, allocatable :: load_weights(:)
 
-    namelist /letkf_mpi/ interleave
 
-    grid_nx=nx
-    grid_ny=ny
-    grid_ns=ns
+    namelist /letkf_mpi/ mem, grid_nx, grid_ny, grid_ns,interleave
+
 
     if(pe_isroot) then
        print *, new_line('a'), &
@@ -388,16 +394,13 @@ contains
     if (pe_isroot) print *, ""
 
     ! determine the process load weights
+    ! TODO: remove load weights... this was leftover from a previous failed idea
     allocate(load_weights(pe_size))
     load_weights = 1.0
     load_weights = load_weights / sum(load_weights)
 
 
     ! calculate actual numer of gridpoints to use
-    if (pe_isroot) then
-       print *, ""
-       print *, "gridpoint assignment list:"
-    end if
     allocate(scatterv_count(pe_size))
     allocate(scatterv_displ(pe_size))
     prev = 0
@@ -414,12 +417,22 @@ contains
        end if
        scatterv_count(i+1) = count
        scatterv_displ(i+1) = prev
-
-       if (pe_isroot) then
-          print '(A5,I4,A,I7,A,I7,A,I7)', "proc",i,' calcs for', count,' grid points: ',prev+1,' to ',prev+count
-       end if
        prev = prev+count
     end do
+    deallocate(load_weights)
+
+    
+    if (pe_isroot) then
+       print *, ""
+       print *, "gridpoint assignment balancing:"
+       i = minval(scatterv_count)
+       j = maxval(scatterv_count)
+       if (i==j) then
+          print *, " all procs assigned ",i,"gridpoints"
+       else
+          print *, " all procs assigned between ",i,"and",j,"gridpoints"
+       end if
+    end if
 
   end subroutine letkf_mpi_init
 

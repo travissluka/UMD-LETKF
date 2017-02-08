@@ -24,6 +24,9 @@ module letkf
   real :: loc_hz(2) = (/-1.0,-1.0/)
 
   real, allocatable :: diag_count_ij(:,:)
+
+
+  
 contains
 
 
@@ -36,7 +39,7 @@ contains
        print "(A)", "============================================================"
        print "(A)", " Universal Multi-Domain Local Ensemble Transform Kalman Filter"
        print "(A)", " (UMD-LETKF)"
-       print "(A)", " version 0.0.0"
+       print "(A)", " version 0.1.0"
        print "(A)", " Travis Sluka (tsluka@umd.edu, travis.sluka@noaa.gov)"
        print "(A)", "============================================================"
        print "(A)", ""
@@ -55,7 +58,6 @@ contains
     integer :: unit
     integer :: m, i
 
-    namelist /letkf_settings/ mem, grid_nx, grid_ny, grid_ns
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
     namelist /letkf_localization/ loc_hz
 
@@ -67,16 +69,12 @@ contains
 
     ! read in main section of the  namelist
     open(newunit=unit, file=nml_filename)
-    read(unit, nml=letkf_settings)
-    rewind(unit)
     read(unit, nml=letkf_inflation)
     rewind(unit)
     read(unit, nml=letkf_localization)
     close(unit)
     if (loc_hz(2) <= 0) loc_hz(2) = loc_hz(1)
     if (pe_isroot) then
-       print letkf_settings
-       print *, ""
        print letkf_inflation
        print *, ""
        print letkf_localization
@@ -114,7 +112,7 @@ contains
     call timer_start(t_init)
 
     ! mpi
-    call letkf_mpi_init(nml_filename, mem, grid_nx, grid_ny, grid_ns)
+    call letkf_mpi_init(nml_filename)
 
     ! observations
     timer = timer_init("  obs", TIMER_SYNC)

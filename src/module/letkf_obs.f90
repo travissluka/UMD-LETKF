@@ -17,6 +17,8 @@ module letkf_obs
   public :: letkf_obs_read
   public :: letkf_obs_get
   public :: letkf_obs_gentest
+  public :: letkf_obs_register
+  
 
   ! public types
   public :: obsdef, obsdef_list
@@ -28,39 +30,40 @@ module letkf_obs
 
   logical, public :: obs_test = .false.
 
-  class(obsio), public, allocatable :: obsio_class
   !------------------------------------------------------------
 
 
 
   type obsdef
      !! The specification for a single user-defined observation type
+     character(len=8) :: name_short     
+       !! short (3-4 characters) name of observation type
      integer :: id
-     !! unique identifier
-     character(len=:), allocatable :: name_short
-     !! short (3-4 characters) name of observation type
-     character(len=:), allocatable :: name_long
-     !! longer more descriptive name
-     character(len=:), allocatable :: units
-   contains
-     procedure :: print => obsdef_print
+       !! unique identifier
+     character(len=8) :: units     
+     character(len=1024) :: name_long
+       !! longer more descriptive name     
+   contains     
+     procedure :: print => obsdef_print     
   end type obsdef
-
 
 
 
   type platdef
      !!specification for a single user-defined observation platform type
+     character(len=8) :: name_short
+       !! short (3-4 character) name of platform type
      integer :: id
-     !! unique id for the platform type
-     character(len=:), allocatable :: name_short
-     !! short (3-4 character) name of platform type
-     character(len=:), allocatable :: name_long
-     !! longer more descriptive name of platform type
-   contains
-     procedure :: print => platdef_print
+       !! unique id for the platform type     
+     character(len=1024):: name_long
+       !! longer more descriptive name of platform type     
+   contains     
+     procedure :: print => platdef_print     
   end type platdef
 
+
+
+  
   ! protected variables
   !------------------------------------------------------------
   type(obsdef), protected, allocatable ::  obsdef_list(:)
@@ -76,8 +79,15 @@ module letkf_obs
   type(observation), allocatable :: obs_list(:)
   real(dp), allocatable          :: obs_ohx(:,:)
   real(dp), allocatable          :: obs_ohx_mean(:)
-
   real :: obsqc_maxstd
+  
+  integer, parameter    :: obsio_reg_max = 100
+  integer               :: obsio_reg_num = 0
+  type(obsioptr)        :: obsio_reg(obsio_reg_max)
+  class(obsio), pointer :: obsio_class
+
+  
+
   !------------------------------------------------------------
 
 
@@ -110,10 +120,13 @@ contains
     !! observation platform definition file to read in. By default
     !! `letkf.platdef` will be used.
 
+    character(len=*),parameter :: obstest_file = "obstest.cfg"
+    
     character(len=:), allocatable :: reader
     integer :: unit, i
 
     real(dp), allocatable :: obs_lons(:), obs_lats(:)
+    class(obsio), pointer ::obsio_ptr
 
     namelist /letkf_obs/ obs_test, reader, obsqc_maxstd
 
@@ -125,7 +138,7 @@ contains
             new_line('a'), '============================================================'
     end if
 
-
+   
     ! read in our section of the namelist
     allocate(character(1024) :: reader)
     open(newunit=unit, file=nml_filename)
@@ -136,33 +149,72 @@ contains
        print letkf_obs
     end if
 
+
+    ! register built-in obsio classes
+    allocate(obsio_dat :: obsio_ptr)
+    call letkf_obs_register(obsio_ptr)
+
+    allocate(obsio_nc :: obsio_ptr)
+    call letkf_obs_register(obsio_ptr)
+
+    
+    ! print a list of all obsio classes that have been registered
+    if(pe_isroot) then
+       print *,""
+       do i=1,obsio_reg_num
+          print "(A,A10,3A)", " obsio class registered: ", toupper(obsio_reg(i)%p%get_name()), " (", obsio_reg(i)%p%get_desc(), ")"
+       end do
+       print *,""
+    end if
+
+    
     ! determine the io class to create
-    ! TODO, add in hooks for user defined obsio classes
     if (.not. obs_test) then
-       if (reader == 'dat') then
-          allocate(obsio_dat :: obsio_class)
-       else if( reader == 'nc') then
-          allocate(obsio_nc :: obsio_class)
-       else
-          print *, 'ERROR, unkown obsio class "',reader,'"'
+       nullify(obsio_class)
+       do i=1,obsio_reg_num
+          if(trim(toupper(obsio_reg(i)%p%get_name())) == trim(toupper(reader))) then
+             obsio_class => obsio_reg(i)%p
+             exit
+          end if
+       end do
+       if (.not. associated(obsio_class)) then
+          if(pe_isroot) &
+               print *, 'ERROR: obsio class "',toupper(trim(reader)),&
+               '" not found. Check that the name is in the list of registered classes'
           stop 1
        end if
-       call obsio_class%init()
+
+       if (pe_isroot) &
+            print *, 'using ',trim(obsio_class%get_name())
+    else
+       if(pe_isroot) then
+            print *, 'NOT using an obsio class.'
+            print *, 'using testobs definition file: "', trim(obstest_file),'"'
+         end if
     end if
+    
+    !    if (.not. obs_test) then
+
+    !    else
+    !    end if
+    !    print *, ''
 
 
     ! read in additional configuration files defining observation
     ! and platform types
-    if (pe_isroot) then
-       print *, ''
-       print *, 'LETKF observation configuration files'
-       print *, '------------------------------------------------------------'
-       print *, '  observation definition file: "', trim(obsdef_file),'"'
-       print *, '  platform    definition file: "', trim(platdef_file),'"'
-       if (.not. obs_test) &
-            print *, '  I/O format: ',trim(obsio_class%description)
-       print *, ''
-    end if
+    ! if (pe_isroot) then
+    !    print *, ''
+    !    print *, 'LETKF observation configuration files'
+    !    print *, '------------------------------------------------------------'
+    !    print *, '  observation definition file: "', trim(obsdef_file),'"'
+    !    print *, '  platform    definition file: "', trim(platdef_file),'"'
+    !    if (.not. obs_test) then
+    !       print *, '  I/O format: ',trim(obsio_class%get_name()),' (',trim(obsio_class%get_desc()),')'
+    !    else
+    !       print *, '  testobs     definition file: "', trim(obstest_file),'"'
+    !    end if
+    !    print *, ''
+    ! end if
     call obsdef_read(obsdef_file)
     call platdef_read(platdef_file)
 
@@ -195,7 +247,7 @@ contains
   ! ================================================================================
   ! ================================================================================
   subroutine obs_test_read()
-    integer :: nobs, i, unit, iostat, pos
+    integer :: i, unit, iostat, pos
     logical :: ex
     character(len=1024) :: line
     type(obsdef) :: od
@@ -322,7 +374,20 @@ contains
   end subroutine letkf_obs_gentest
 
 
+  
+  
+  subroutine letkf_obs_register(cls)
+    class(obsio),pointer :: cls
+    if(obsio_reg_num == obsio_reg_max) then
+       print *, "ERROR: too many obsio classes registered"
+       stop 1
+    end if
+    obsio_reg_num = obsio_reg_num + 1
+    obsio_reg(obsio_reg_num)%p => cls    
+  end subroutine letkf_obs_register
 
+
+  
   ! ================================================================================
   ! ================================================================================
 
@@ -346,7 +411,7 @@ contains
        print *, ""
        print *, "Reading Observations"
        print *, "------------------------------------------------------------"
-       print *, "  obsio class: ", trim(reader%description)
+       print *, "  obsio class: ", trim(reader%get_desc())
     end if
 
 
@@ -364,9 +429,10 @@ contains
 
 
     ! each mpi proc loads in its resepective observation file
+    ! TODO, let the obsio class decide the filename /location
     do i=1,size(ens_list)
        write (filename, '(A,I0.4,3A)') 'INPUT/obsop/',ens_list(i),'.'&
-            ,trim(reader%extension)
+            ,'dat'!trim(reader%extension)
        print '(A,I5,2A)', " PROC ",pe_rank," is READING file: ", trim(filename)
 
        ! read the file
@@ -610,24 +676,9 @@ contains
        ! ignore empty lines
        if (len(trim(adjustl(line))) == 0) cycle
 
-       ! read ID
-       line = adjustl(line)
-       pos = scan(line, ' ')
-       read(line(1:pos), *) new_ob%id
-
-       ! read short name
-       line = adjustl(line(pos+1:))
-       pos = scan(line, ' ')
-       new_ob%name_short = toupper(trim(line(:pos-1)))
-
-       ! read units
-       line = adjustl(line(pos+1:))
-       pos = scan(line, ' ')
-       new_ob%units = trim(line(:pos-1))
-
-       ! read long name
-       line = adjustl(line(pos+1:))
-       new_ob%name_long = trim(line)
+       !read in
+       read(line, *, iostat=iostat) new_ob
+       new_ob%name_short = toupper(new_ob%name_short)
 
        ! add this one to the list
        obsdef_list_tmp_len = obsdef_list_tmp_len + 1
@@ -648,7 +699,7 @@ contains
     ! write summary
     if (pe_isroot) then
        print *, 'obs defined = ', size(obsdef_list)
-       print "(A6,A10,A10,A5,A)", "ID", "NAME", "UNITS", "","FULL NAME"
+       print "(A10,A6,A10,A5,A)", "NAME   ", "ID", "UNITS", "","DESCRIPTION"
        do pos=1, size(obsdef_list)
           call obsdef_list(pos)%print()
        end do
@@ -736,19 +787,9 @@ contains
        ! ignore empty lines
        if (len(trim(adjustl(line))) == 0) cycle
 
-       ! read ID
-       line = adjustl(line)
-       pos = scan(line, ' ')
-       read(line(1:pos), *) new_plat%id
-
-       ! read short name
-       line = adjustl(line(pos+1:))
-       pos = scan(line, ' ')
-       new_plat%name_short = toupper(trim(line(:pos-1)))
-
-       ! read long name
-       line = adjustl(line(pos+1:))
-       new_plat%name_long = trim(line)
+       ! read line
+       read(line, *, iostat=iostat) new_plat
+       new_plat%name_short = toupper(new_plat%name_short)
 
        ! add this one to the list
        platdef_list_tmp_len = platdef_list_tmp_len + 1
@@ -769,7 +810,7 @@ contains
     ! write summary
     if (pe_isroot) then
        print *, 'platforms defined = ', size(platdef_list)
-       print "(A6,A10,A5,A)", "ID", "NAME", "","DESCRIPTION"
+       print "(A6,A10,A5,A)", "NAME", "ID", "","DESCRIPTION"
        do pos=1, size(platdef_list)
           call platdef_list(pos)%print()
        end do
@@ -911,8 +952,8 @@ contains
   ! ============================================================
   subroutine obsdef_print(ob)
     class(obsdef), intent(in) :: ob
-    print "(I6,A10,A10,A5,A)", ob%id, ob%name_short, &
-         ob%units, " ", ob%name_long
+    print "(A10,I6,A10,A5,A)", ob%name_short, ob%id,  &
+         trim(ob%units), " ", trim(ob%name_long)
   end subroutine obsdef_print
 
 
@@ -921,8 +962,8 @@ contains
   ! ============================================================
   subroutine platdef_print(plat)
     class(platdef), intent(in) :: plat
-    print "(I6,A10,A5,A)", plat%id, plat%name_short, &
-         "", plat%name_long
+    print "(A10,I6,A5,A)", plat%name_short, plat%id, &
+         "", trim(plat%name_long)
   end subroutine platdef_print
 
 

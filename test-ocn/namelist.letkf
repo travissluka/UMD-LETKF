@@ -2,15 +2,6 @@
 &letkf_settings
 ! Overall variables needed by the LETKF program
 !------------------------------------------------------------
- ! mem     : number of ensemble members
- ! grid_nx : size of x dimension of state grid
- ! grid_ny : size of y dimension of state grid
- ! grid_ns : number of vertical/variable slabs
-
- mem = 10
- grid_nx = 720
- grid_ny = 410
- grid_ns = 80
 /
 
 
@@ -19,6 +10,11 @@
 &letkf_mpi
 !
 !------------------------------------------------------------
+ mem = 10
+ grid_nx = 720
+ grid_ny = 410
+ grid_ns = 80
+
  interleave=.true.
 /
 
@@ -28,9 +24,9 @@
 &letkf_obs
 ! Observation input and quality control
 !------------------------------------------------------------
- obs_test = T
+ obs_test = F
 
- reader = 'dat' 
+ reader = 'LETKF_DAT'
  obsqc_maxstd = 3.0
 /
 
@@ -60,11 +56,3 @@
  loc_hz = 1000.0d3, 500.0d3
 /
 
-
-
-&grid_def
- grid_nx = 720
- grid_ny = 410
- grid_nz = 40
- grid_ns = 80
-/

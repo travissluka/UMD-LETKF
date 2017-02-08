@@ -13,29 +13,54 @@ module letkf_obs_nc
 
 
 
-  !============================================================
+  !============================================================  
   type, extends(obsio) :: obsio_nc
      !! class to read and write observations in NetCDF format
    contains
-     procedure :: init => obs_init_nc
-     procedure :: write => obs_write_nc
-     procedure :: read => obs_read_nc
+     procedure :: get_name => obsio_get_name
+     procedure :: get_desc => obsio_get_desc     
+     procedure :: write    => obs_write_nc
+     procedure :: read     => obs_read_nc
 
   end type obsio_nc
   !============================================================
 
 
 
+  
 contains
 
 
-  subroutine obs_init_nc(self)
+  
+  
+  !============================================================
+  function obsio_get_name(self)
     class(obsio_nc) :: self
-    self%description = "netCDF observation I/O"
-    self%extension   = "nc"
-  end subroutine obs_init_nc
+    character(:), allocatable :: obsio_get_name
+    obsio_get_name = "LETKF_NC"
+
+    !pointless statement to get rid of unused argument warning
+    self%i = self%i
+  end function obsio_get_name
+  !============================================================
 
 
+  
+
+  !============================================================
+  function obsio_get_desc(self)
+    class(obsio_nc) :: self
+    character(:), allocatable :: obsio_get_desc
+    obsio_get_desc = "netCDF observation I/O"
+
+    !pointless statement to get rid of unused argument warning
+    self%i = self%i    
+  end function obsio_get_desc
+  !============================================================
+   
+  
+
+  
   !============================================================
   subroutine obs_write_nc(self, file, obs, iostat)
     class(obsio_nc) :: self
@@ -48,8 +73,8 @@ contains
     integer,  allocatable :: tmp_i(:)
     real(4), allocatable :: tmp_r(:)
 
-    ! pointless line to get rid of unused argument warning
-    self%extension = self%extension
+    !pointless statement to get rid of unused argument warning
+    self%i = self%i
 
     !!@todo have iostat do something useful, or remove it
     if (present(iostat)) iostat = 1
@@ -178,8 +203,8 @@ contains
     integer, allocatable :: tmp_i(:)
     real(4), allocatable :: tmp_r(:)
 
-    ! pointless line to get rid of unused argument warning
-    self%extension = self%extension
+    !pointless statement to get rid of unused argument warning
+    self%i = self%i
 
     !!@todo have iostat do something useful, or remove it
     if (present(iostat)) iostat = 1
