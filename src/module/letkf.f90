@@ -1,21 +1,27 @@
 module letkf
   !! main entry point for the LETKF library
   use timing
-  use letkf_obs
   use letkf_mpi
+  use letkf_obs
+  use letkf_obs_nc
+  use letkf_obs_dat
   use letkf_core
-  use letkf_state
   use letkf_loc
+  use letkf_state
+  use letkf_state_generic
 
   implicit none
   private
 
+  ! public module methods
+  !------------------------------------------------------------
   public :: letkf_driver_init
   public :: letkf_driver_run
 
-
+  
+  ! private module variables
+  !------------------------------------------------------------
   character(len=1024) :: nml_filename = "namelist.letkf"
-
 
   real :: infl_mul = 1.0
   real :: infl_rtps = 0.0
@@ -32,6 +38,10 @@ contains
 
 
   subroutine letkf_driver_init()
+    class(obsio),   pointer :: obsio_ptr
+    class(stateio), pointer :: stateio_ptr
+
+
     !! Initialize the LETKF module. This must be called before anything else.
     call letkf_mpi_preinit()
     call timing_init(mpi_comm_letkf, pe_root)
@@ -44,6 +54,19 @@ contains
        print "(A)", "============================================================"
        print "(A)", ""
     end if
+
+
+    !! setup the default I/O classes
+
+    allocate(obsio_dat :: obsio_ptr)
+    call letkf_obs_register(obsio_ptr)
+
+    allocate(obsio_nc :: obsio_ptr)
+    call letkf_obs_register(obsio_ptr)
+
+    allocate(stateio_generic :: stateio_ptr)
+    call letkf_state_register(stateio_ptr)
+
   end subroutine letkf_driver_init
 
 
@@ -184,9 +207,10 @@ contains
        wrk1 = ana_mean_ij(i,:)
        call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
     end do
+    ! TODO, let state module determine name
     if (pe_isroot) then
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
-            'OUTPUT/ana_mean', trim(stateio_class%extension)
+            'OUTPUT/ana_mean', '.nc'
        call stateio_class%write('OUTPUT/ana_mean', wrk3)
     end if
 
@@ -197,7 +221,7 @@ contains
     end do
     if (pe_isroot)  then
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
-            'OUTPUT/ana_sprd', trim(stateio_class%extension)
+            'OUTPUT/ana_sprd', '.nc'
        call stateio_class%write('OUTPUT/ana_sprd', wrk3)
     end if
     call timer_stop(t_ms)
@@ -216,7 +240,7 @@ contains
     end do
     if(pe_isroot) then
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
-            'OUTPUT/diag_count', trim(stateio_class%extension)
+            'OUTPUT/diag_count', '.nc'
        call stateio_class%write('OUTPUT/diag_count', wrk3)
     end if
 
@@ -244,7 +268,7 @@ contains
     call timer_start(t_ens2)
     do m=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'OUTPUT/',ens_list(m)
-       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", trim(filename), trim(stateio_class%extension)
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ", trim(filename), '.nc'
        call stateio_class%write(filename, wrk4(:,:,:,m))
     end do
     call timer_stop(t_ens2)

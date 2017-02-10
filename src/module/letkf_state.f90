@@ -4,8 +4,6 @@ module letkf_state
   ! library modules
   use timing
   use letkf_mpi
-  use letkf_state_I
-  use letkf_state_generic
   use letkf_obs
   use kdtree
 
@@ -13,6 +11,9 @@ module letkf_state
   private
 
   public :: letkf_state_init
+  public :: letkf_state_register
+  public :: stateio, stateioptr
+  public :: slab
 
   ! public module variables
   ! ------------------------------------------------------------
@@ -39,8 +40,102 @@ module letkf_state
     !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
 
 
+
+
+  !! ------------------------------------------------------------
+
+
+  ! type statedef
+  !    character(len=:), allocatable :: name_short
+  !    character(len=:), allocatable :: name_long
+  !    character(len=:), allocatable :: file_field
+  !    character(len=:), allocatable :: units
+  !    integer                       :: levels
+  ! end type statedef
+
+
+  !! ------------------------------------------------------------
+
+
+  type slab
+     integer :: lvl
+     integer :: var
+     real, allocatable :: val(:,:)
+  end type slab
+
+
+  !! ------------------------------------------------------------
+
+
+  type, abstract :: stateio
+     !! abstract base class for reading and writing of state files
+     integer :: i !don't worry about this, trust me
+   contains
+     procedure(I_stateio_getstr), deferred :: get_name
+     procedure(I_stateio_getstr), deferred :: get_desc
+     procedure(I_stateio_init),   deferred :: init
+     procedure(I_stateio_read),   deferred :: read
+     procedure(I_stateio_write),  deferred :: write
+     procedure(I_stateio_latlon), deferred :: latlon
+     procedure(I_stateio_mask),   deferred :: mask
+  end type stateio
+
+  abstract interface
+     function I_stateio_getstr(self) result(str)
+       import stateio
+       class(stateio) :: self
+       character(:), allocatable :: str
+     end function I_stateio_getstr
+
+     subroutine I_stateio_init(self,x,y,z)
+       import stateio
+       class(stateio) :: self
+       integer, intent(in) :: x,y,z
+     end subroutine I_stateio_init
+
+     subroutine I_stateio_read(self, filename, state)
+       import stateio
+       class(stateio) :: self
+       character(len=*),  intent(in)  :: filename
+       real, intent(out) :: state(:,:,:)
+     end subroutine I_stateio_read
+
+     subroutine I_stateio_write(self, filename, state)
+       import stateio
+       class(stateio) :: self
+       character(len=*),  intent(in)  :: filename
+       real, intent(in)  :: state(:,:,:)
+     end subroutine I_stateio_write
+
+     subroutine I_stateio_latlon(self, lat, lon)
+       import stateio
+       class(stateio) :: self
+       real, intent(inout) :: lat(:,:), lon(:,:)
+     end subroutine I_stateio_latlon
+
+     subroutine I_stateio_mask(self, mask)
+       import stateio
+       class(stateio) :: self
+       real, intent(inout) :: mask(:,:)
+     end subroutine I_stateio_mask
+
+  end interface
+
+
+  type stateioptr
+     class(stateio), pointer :: p
+  end type stateioptr
+
   ! private module variables
-  class(stateio), public, pointer :: stateio_class
+  !------------------------------------------------------------
+  !TODO, remove public from this
+  public :: stateio_class
+
+  ! registration of built-in and user-defined stateio classes
+  integer, parameter      :: stateio_reg_max = 100
+  integer                 :: stateio_reg_num = 0
+  type(stateioptr)        :: stateio_reg(stateio_reg_max)
+  class(stateio), pointer :: stateio_class
 
 
 
@@ -74,6 +169,10 @@ contains
     integer :: r_points(1), r_num
     real    :: r_distance(1)
     
+    character(len=:), allocatable :: ioclass
+
+    namelist /letkf_state/ ioclass
+
 
     if(pe_isroot) then
        print *, new_line('a'), &
@@ -83,16 +182,46 @@ contains
     end if
 
     ! read in our section of the namelist
-!    open(newunit=unit, file=nml_filename)
-!    read(unit, nml=grid_def)
-!    close(unit)
-!    if (pe_isroot) then
-!       print grid_def
-!    end if
+    allocate(character(1024) :: ioclass)
+    open(newunit=unit, file=nml_filename)
+    read(unit, nml=letkf_state)
+    close(unit)
+    ioclass = trim(ioclass)
+    if (pe_isroot) then
+       print letkf_state
+    end if
 
+    ! print a list of all stateio classes that have been registered
+    if(pe_isroot) then
+       print *, ""
+       print *, "List of stateio classes registered:"
+       do i=1,stateio_reg_num
+          print "(A,A,3A)", " * ", stateio_reg(i)%p%get_name(), &
+               " (",stateio_reg(i)%p%get_desc(), ")"
+       end do
+       print *, ""
+    end if
+
+
+    ! determine the io class to create
+    nullify(stateio_class)
+    do i=1,stateio_reg_num
+       if(trim(toupper(stateio_reg(i)%p%get_name())) == trim(toupper(ioclass))) then
+          stateio_class => stateio_reg(i)%p
+          exit
+       end if
+    end do
+    if(.not. associated(stateio_class)) then
+       if(pe_isroot) &
+            print *, 'ERROR: stateio class "',toupper(trim(ioclass)), &
+            '" not found. Check that the name is in the list of registered classes'
+       stop 1
+    end if
+    if(pe_isroot) &
+         print *, 'Using "', trim(stateio_class%get_name()),'"'
 
     !create the state io class, and initialize
-    allocate(stateio_generic :: stateio_class)
+!    allocate(stateio_generic :: stateio_class)
     call stateio_class%init(grid_nx, grid_ny, grid_nz)
     allocate(lat(grid_nx, grid_ny))
     allocate(lon(grid_nx, grid_ny))
@@ -119,7 +248,7 @@ contains
      do m=1,size(ens_list)
         write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
         print '(A,I5,3A)', " PROC ",pe_rank," is READING file: ",&
-             trim(filename),trim(stateio_class%extension)
+             trim(filename),'.nc'
         call stateio_class%read(filename, gues(:,:,:,m))
      end do
      call timer_stop(tbgread)
@@ -238,7 +367,7 @@ contains
      if (pe_isroot) then
         write (filename, '(A)') 'OUTPUT/bkg_mean'
         print '(A,I5,3A)', " PROC ",pe_rank," is WRITING file: ",&
-             trim(filename),trim(stateio_class%extension)
+             trim(filename),'.nc'
         call stateio_class%write(filename, wrk)
      end if
      do i = 1,grid_ns
@@ -248,7 +377,7 @@ contains
      if (pe_isroot) then
         write (filename, '(A)') 'OUTPUT/bkg_sprd'
         print '(A,I5,3A)', " PROC ",pe_rank," is WRITING file: ",&
-             trim(filename),trim(stateio_class%extension)
+             trim(filename),'.nc'
         call stateio_class%write(filename, wrk)
      end if
      deallocate(wrk)
@@ -257,6 +386,31 @@ contains
 
   end subroutine letkf_state_init
 
+
+  subroutine letkf_state_register(cls)
+    class(stateio), pointer :: cls
+    if(stateio_reg_num == stateio_reg_max) then
+       print *, "ERROR: too many stateio classes registered"
+       stop 1
+    end if
+    stateio_reg_num = stateio_reg_num + 1
+    stateio_reg(stateio_reg_num)%p => cls
+  end subroutine letkf_state_register
+
+
+  function toupper(in_str) result(out_str)
+    character(*), intent(in) :: in_str
+    character(len(in_str)) :: out_str
+    integer :: i
+    integer, parameter :: offset = 32
+
+    out_str = in_str
+    do i=1, len(out_str)
+       if(out_str(i:i) >= "a" .and. out_str(i:i) <= "z") then
+          out_str(i:i) = achar(iachar(out_str(i:i))-offset)
+       end if
+    end do
+  end function toupper
 
 
 end module letkf_state

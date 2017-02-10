@@ -1,6 +1,5 @@
 module letkf_obs_nc
-  use letkf_obs_I
-
+  use letkf_obs
   use netcdf
 
   implicit none

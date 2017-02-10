@@ -2,10 +2,6 @@ module letkf_obs
   use letkf_mpi
   use kdtree
 
-  use letkf_obs_I
-  use letkf_obs_nc
-  use letkf_obs_dat
-
   implicit none
   private
 
@@ -13,25 +9,118 @@ module letkf_obs
   integer, parameter :: dp = kind(0.0)
 
   ! public subroutines
+  !------------------------------------------------------------
   public :: letkf_obs_init
-  public :: letkf_obs_read
   public :: letkf_obs_get
-  public :: letkf_obs_gentest
   public :: letkf_obs_register
   
-
-  ! public types
 !  public :: obsdef, obsdef_list
 !  public :: obsdef_read,  obsdef_getbyname,  obsdef_getbyid
 !  public :: platdef, platdef_list
 !  public :: platdef_read, platdef_getbyname, platdef_getbyid
 
-  public :: obs_ohx, obs_list, obs_qc, obs_ohx_mean
 
+  ! public variables (that should probablybe made private)
+  !------------------------------------------------------------
+  public :: obs_ohx, obs_list, obs_qc, obs_ohx_mean
   logical, public :: obs_test = .false.
 
-  !------------------------------------------------------------
 
+  ! public types
+  !------------------------------------------------------------
+  public :: observation
+  public :: obsio, obsioptr
+
+
+  type observation
+     !! information for a single observation
+     integer :: id = -1
+     !! observation type id, as specified in the `obsdef` configuration file.
+     !! A value of -1 indicates no observation data has been read in.
+     integer :: plat
+     !! Platform type id, as specified in the `platdef` configuration file.
+     real(dp) :: lat
+     !! Latitude (degrees)
+     real(dp) :: lon
+     !! Longitude (degrees)
+     real(dp) :: depth
+     !! Depth, in whatever units is appropriate for the domain.
+     !! If this is a 2D observation, this value is ignored.
+     real(dp) :: time
+     !! Time (hours) from base time
+     real(dp) :: val
+     !! Observation value
+     real(dp) :: err
+     !! standard deviation of observation error
+!     integer :: qc
+     !! Quality control flag. ( 0 = no errors, > 0 removed by obs op, < 0
+     !! removed by LETKF qc
+  end type observation
+
+
+  type, abstract :: obsio
+     !! Abstract base class for observation file reading and writing.
+     !! All user-defined, and built-in, obs file I/O modules for
+     !! specific file types should be built from a class extending this
+     integer :: i ! don't worry about this
+   contains
+     procedure(I_obsio_getstr),  deferred :: get_name
+     procedure(I_obsio_getstr),  deferred :: get_desc
+     procedure(I_obsio_write),   deferred :: write
+     !! write a list of observatiosn to the given file
+     procedure(I_obsio_read),    deferred :: read
+     !! read a list of observatiosn from the given file
+  end type obsio
+
+  abstract interface
+
+     
+     function I_obsio_getstr(self)
+       import obsio
+       class(obsio) :: self
+       character(:), allocatable :: I_obsio_getstr
+     end function I_obsio_getstr
+
+     
+     subroutine I_obsio_init(self)
+       import obsio
+       class(obsio) :: self
+     end subroutine I_obsio_init
+
+     
+     subroutine I_obsio_write(self, file, obs, iostat)
+       !! interface for procedures to write observation data
+       import obsio
+       import observation
+       class(obsio) :: self
+       character(len=*), intent(in)   :: file
+       !! filename to write observations to
+       type(observation), intent(in) :: obs(:)
+       !! list of 1 or more observatiosn to write
+       integer, optional, intent(out) :: iostat
+     end subroutine I_obsio_write
+
+     
+     subroutine I_obsio_read(self, file, obs, obs_innov, obs_qc, iostat)
+       !! interface for procedures to load observation data
+       import observation
+       import obsio
+       import dp
+       class(obsio) :: self
+       character(len=*), intent(in) :: file
+
+       type(observation),allocatable, intent(out) :: obs(:)
+       real(dp), allocatable, intent(out) :: obs_innov(:)
+       integer,  allocatable, intent(out) :: obs_qc(:)
+
+       integer, optional, intent(out) :: iostat
+     end subroutine I_obsio_read
+  end interface
+
+
+  type obsioptr
+     class(obsio), pointer :: p
+  end type obsioptr
 
 
   type obsdef
@@ -64,14 +153,14 @@ module letkf_obs
 
 
   
-  ! protected variables
+  ! private variables
   !------------------------------------------------------------
-  type(obsdef), protected, allocatable ::  obsdef_list(:)
+  type(obsdef), allocatable ::  obsdef_list(:)
   !! list of all observation types
-  type(platdef), protected, allocatable :: platdef_list(:)
+  type(platdef), allocatable :: platdef_list(:)
   !! list of all platform types for observations
 
-  type(kd_root), protected                  :: obs_tree
+  type(kd_root) :: obs_tree
   integer,  protected, allocatable          :: obs_qc(:)
 
   ! TODO, only letkf_state needs to write to these, create
@@ -80,7 +169,8 @@ module letkf_obs
   real(dp), allocatable          :: obs_ohx(:,:)
   real(dp), allocatable          :: obs_ohx_mean(:)
   real :: obsqc_maxstd
-  
+
+  ! registration of built-in and user-defined obsio classes
   integer, parameter    :: obsio_reg_max = 100
   integer               :: obsio_reg_num = 0
   type(obsioptr)        :: obsio_reg(obsio_reg_max)
@@ -122,13 +212,13 @@ contains
 
     character(len=*),parameter :: obstest_file = "obstest.cfg"
     
-    character(len=:), allocatable :: reader
+    character(len=:), allocatable :: ioclass
     integer :: unit, i
 
     real(dp), allocatable :: obs_lons(:), obs_lats(:)
-    class(obsio), pointer ::obsio_ptr
 
-    namelist /letkf_obs/ obs_test, reader, obsqc_maxstd
+
+    namelist /letkf_obs/ obs_test, ioclass, obsqc_maxstd
 
 
     if (pe_isroot) then
@@ -140,29 +230,23 @@ contains
 
    
     ! read in our section of the namelist
-    allocate(character(1024) :: reader)
+    allocate(character(1024) :: ioclass)
     open(newunit=unit, file=nml_filename)
     read(unit, nml=letkf_obs)
     close(unit)
-    reader = trim(reader)
+    ioclass = trim(ioclass)
     if (pe_isroot) then
        print letkf_obs
     end if
 
-
-    ! register built-in obsio classes
-    allocate(obsio_dat :: obsio_ptr)
-    call letkf_obs_register(obsio_ptr)
-
-    allocate(obsio_nc :: obsio_ptr)
-    call letkf_obs_register(obsio_ptr)
-
-    
+   
     ! print a list of all obsio classes that have been registered
     if(pe_isroot) then
        print *,""
+       print *, "List of obsio classes registered:"
        do i=1,obsio_reg_num
-          print "(A,A10,3A)", " obsio class registered: ", toupper(obsio_reg(i)%p%get_name()), " (", obsio_reg(i)%p%get_desc(), ")"
+          print "(A,A,3A)", " * ", toupper(obsio_reg(i)%p%get_name()),&
+               " (", obsio_reg(i)%p%get_desc(), ")"
        end do
        print *,""
     end if
@@ -172,49 +256,29 @@ contains
     if (.not. obs_test) then
        nullify(obsio_class)
        do i=1,obsio_reg_num
-          if(trim(toupper(obsio_reg(i)%p%get_name())) == trim(toupper(reader))) then
+          if(trim(toupper(obsio_reg(i)%p%get_name())) == trim(toupper(ioclass))) then
              obsio_class => obsio_reg(i)%p
              exit
           end if
        end do
        if (.not. associated(obsio_class)) then
           if(pe_isroot) &
-               print *, 'ERROR: obsio class "',toupper(trim(reader)),&
+               print *, 'ERROR: obsio class "',toupper(trim(ioclass)),&
                '" not found. Check that the name is in the list of registered classes'
           stop 1
        end if
 
        if (pe_isroot) &
-            print *, 'using ',trim(obsio_class%get_name())
+            print *, 'Using "',trim(obsio_class%get_name()),'"'
     else
        if(pe_isroot) then
             print *, 'NOT using an obsio class.'
             print *, 'using testobs definition file: "', trim(obstest_file),'"'
          end if
     end if
-    
-    !    if (.not. obs_test) then
-
-    !    else
-    !    end if
-    !    print *, ''
 
 
-    ! read in additional configuration files defining observation
-    ! and platform types
-    ! if (pe_isroot) then
-    !    print *, ''
-    !    print *, 'LETKF observation configuration files'
-    !    print *, '------------------------------------------------------------'
-    !    print *, '  observation definition file: "', trim(obsdef_file),'"'
-    !    print *, '  platform    definition file: "', trim(platdef_file),'"'
-    !    if (.not. obs_test) then
-    !       print *, '  I/O format: ',trim(obsio_class%get_name()),' (',trim(obsio_class%get_desc()),')'
-    !    else
-    !       print *, '  testobs     definition file: "', trim(obstest_file),'"'
-    !    end if
-    !    print *, ''
-    ! end if
+    ! read in configuration files
     call obsdef_read(obsdef_file)
     call platdef_read(platdef_file)
 
@@ -223,7 +287,7 @@ contains
     if (obs_test) then
        call obs_test_read()       
     else
-       call letkf_obs_read(obsio_class)
+       call obs_read(obsio_class)
     end if
 
 
@@ -238,7 +302,9 @@ contains
     deallocate(obs_lons)
     deallocate(obs_lats)
 
+    ! print statistics about the observations
     call obs_stats_print()
+
   end subroutine letkf_obs_init
 
 
@@ -361,17 +427,17 @@ contains
 
   ! ================================================================================
   ! ================================================================================
-  subroutine letkf_obs_gentest()
+  ! subroutine letkf_obs_gentest()
 
-    if (pe_isroot) then
-       print *, ''
-       print *, 'letkf_obs_gentest() : generating test observatiosn'
-       print *, '------------------------------------------------------------'
-       PRINT *, "TODO: populate the test observations with read in bkg"
-    end if   
+  !   if (pe_isroot) then
+  !      print *, ''
+  !      print *, 'letkf_obs_gentest() : generating test observatiosn'
+  !      print *, '------------------------------------------------------------'
+  !      PRINT *, "TODO: populate the test observations with read in bkg"
+  !   end if   
 
 
-  end subroutine letkf_obs_gentest
+  ! end subroutine letkf_obs_gentest
 
 
   
@@ -391,7 +457,7 @@ contains
   ! ================================================================================
   ! ================================================================================
 
-  subroutine letkf_obs_read(reader)
+  subroutine obs_read(reader)
     !! parallel read in of observation
     !! afterwards obs_list, obs_ohx, obs_ohx_mean, obs_qc will be populated
 
@@ -520,7 +586,7 @@ contains
 
 
     !TODO: sort so that bad qc obs are moved to the end of the arrays
-  end subroutine letkf_obs_read
+  end subroutine obs_read
 
 
 

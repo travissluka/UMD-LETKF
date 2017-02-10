@@ -26,11 +26,15 @@
 !------------------------------------------------------------
  obs_test = F
 
- reader = 'LETKF_DAT'
+ ioclass = 'LETKF_DAT'
  obsqc_maxstd = 3.0
 /
 
 
+
+&letkf_state
+ ioclass = 'LETKF_GENERIC'
+/
 
 !------------------------------------------------------------
 &letkf_inflation

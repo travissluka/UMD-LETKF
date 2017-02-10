@@ -1,5 +1,5 @@
 module letkf_obs_dat
-  use letkf_obs_I
+  use letkf_obs
 
   implicit none
   private
