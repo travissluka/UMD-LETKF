@@ -21,10 +21,10 @@ module letkf_obs
   
 
   ! public types
-  public :: obsdef, obsdef_list
-  public :: obsdef_read,  obsdef_getbyname,  obsdef_getbyid
-  public :: platdef, platdef_list
-  public :: platdef_read, platdef_getbyname, platdef_getbyid
+!  public :: obsdef, obsdef_list
+!  public :: obsdef_read,  obsdef_getbyname,  obsdef_getbyid
+!  public :: platdef, platdef_list
+!  public :: platdef_read, platdef_getbyname, platdef_getbyid
 
   public :: obs_ohx, obs_list, obs_qc, obs_ohx_mean
 
