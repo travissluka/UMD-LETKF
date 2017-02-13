@@ -16,7 +16,6 @@ module letkf_state
   public :: letkf_state_write
   public :: letkf_state_register
   public :: stateio, stateioptr
-  public :: slab
 
 
   ! public module variables
@@ -132,7 +131,7 @@ module letkf_state
   integer                 :: stateio_reg_num = 0
   type(stateioptr)        :: stateio_reg(stateio_reg_max)
   class(stateio), pointer :: stateio_class
-  real, allocatable :: lat(:,:), lon(:,:), mask(:,:)
+  real, allocatable       :: lat(:,:), lon(:,:), mask(:,:)
 
 
 
@@ -181,7 +180,7 @@ contains
        print *, ""
        print *, "List of stateio classes registered:"
        do i=1,stateio_reg_num
-          print "(A,A,3A)", " * ", stateio_reg(i)%p%get_name(), &
+          print "(A,A,3A)", " * ", toupper(stateio_reg(i)%p%get_name()), &
                " (",stateio_reg(i)%p%get_desc(), ")"
        end do
        print *, ""
@@ -202,7 +201,7 @@ contains
             '" not found. Check that the name is in the list of registered classes'
        stop 1
     end if
-    if(pe_isroot) print *, 'Using "', trim(stateio_class%get_name()),'"'
+    if(pe_isroot) print *, 'Using "', trim(toupper(stateio_class%get_name())),'"'
 
 
     ! initialize the user-defined grid
@@ -523,10 +522,22 @@ contains
   !================================================================================
   subroutine letkf_state_register(cls)
     class(stateio), pointer :: cls
+    integer :: i
+
     if(stateio_reg_num == stateio_reg_max) then
        print *, "ERROR: too many stateio classes registered"
        stop 1
     end if
+
+    ! ensure a class of that same name doesn't already exist
+    do i=1, stateio_reg_num
+       if (toupper(stateio_reg(i)%p%get_name()) == toupper(cls%get_name())) then
+          print *, "ERROR: can't regsiter stateio class '",toupper(cls%get_name()),&
+               "', a class by that name has already been registered"
+          stop 1
+       end if
+    end do
+
     stateio_reg_num = stateio_reg_num + 1
     stateio_reg(stateio_reg_num)%p => cls
   end subroutine letkf_state_register

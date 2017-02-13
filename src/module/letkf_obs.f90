@@ -461,10 +461,22 @@ contains
   !================================================================================
   subroutine letkf_obs_register(cls)
     class(obsio),pointer :: cls
+    integer :: i
+
     if(obsio_reg_num == obsio_reg_max) then
        print *, "ERROR: too many obsio classes registered"
        stop 1
     end if
+
+    !TODO ensure there is not a class of the same name already registered
+    do i=1, obsio_reg_num
+       if(toupper(obsio_reg(i)%p%get_name()) == toupper(cls%get_name())) then
+          print *, "ERROR: can't register obsio class '", toupper(cls%get_name()), &
+               "', a class by that name has already been registered"
+          stop 1
+       end if
+    end do
+
     obsio_reg_num = obsio_reg_num + 1
     obsio_reg(obsio_reg_num)%p => cls    
   end subroutine letkf_obs_register
