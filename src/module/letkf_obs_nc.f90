@@ -5,7 +5,6 @@ module letkf_obs_nc
   implicit none
   private
 
-  integer, parameter :: dp = kind(0.0)
 
   ! public types
   public :: obsio_nc
@@ -193,7 +192,7 @@ contains
     class(obsio_nc) :: self
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
-    real(dp), allocatable, intent(out) :: obs_innov(:)
+    real,    allocatable, intent(out) :: obs_innov(:)
     integer, allocatable, intent(out) :: obs_qc(:)
     integer, intent(out), optional :: iostat
 

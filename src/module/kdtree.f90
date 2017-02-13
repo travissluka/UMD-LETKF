@@ -28,7 +28,7 @@ module kdtree
 
   ! public module methods
   !------------------------------------------------------------
-  public :: kd_root, kd_init
+  public :: kd_root, kd_init, kd_free
   public :: kd_search_radius, kd_search_nnearest
 
 
@@ -107,12 +107,18 @@ module kdtree
 contains
 
 
+  subroutine kd_free(root)
+    type(KD_ROOT), intent(out)  :: root
+
+    deallocate(root%ptindx)
+    deallocate(root%pts_ll)
+    deallocate(root%pts)
+    deallocate(root%boxes)
+  end subroutine kd_free
+
 
   !================================================================================
   !================================================================================
-
-
-
   subroutine kd_init(root, lons, lats)
     !! Initialize a kd-tree structure given a list of lat/lon pairs.
     !! The lons and lats variables are copied internally by the module and so

@@ -1,7 +1,6 @@
 module letkf_state
   !! performs I/O for the background and analysis states
-  !!
-  ! library modules
+
   use timing
   use letkf_mpi
   use letkf_obs
@@ -10,15 +9,22 @@ module letkf_state
   implicit none
   private
 
+  ! public module methods
+  !------------------------------------------------------------
   public :: letkf_state_init
+  public :: letkf_state_read
+  public :: letkf_state_write
   public :: letkf_state_register
   public :: stateio, stateioptr
   public :: slab
 
+
   ! public module variables
   ! ------------------------------------------------------------
-  integer, public, protected :: grid_nz
-    !! number of vertical levels for 3D variables
+  integer, public, protected :: grid_nx
+  integer, public, protected :: grid_ny
+  integer, public, protected :: grid_ns
+
   real,    public, protected, allocatable :: lat_ij(:)
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: lon_ij(:)
@@ -26,32 +32,19 @@ module letkf_state
   real,    public, protected, allocatable :: mask_ij(:)
 
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]] ) ***
+    !! ***Shape is ( [[letkf_mpi:mem]], [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: bkg_mean_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: bkg_sprd_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
 
   real,    public,            allocatable :: ana_ij(:,:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]] ) ***
+    !! ***Shape is ( [[letkf_mpi:mem]], [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
   real,    public,            allocatable :: ana_mean_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
   real,    public,            allocatable :: ana_sprd_ij(:,:)
-    !! ***Shape is ( [[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]] ) ***
+    !! ***Shape is ( [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
 
-
-
-
-  !! ------------------------------------------------------------
-
-
-  ! type statedef
-  !    character(len=:), allocatable :: name_short
-  !    character(len=:), allocatable :: name_long
-  !    character(len=:), allocatable :: file_field
-  !    character(len=:), allocatable :: units
-  !    integer                       :: levels
-  ! end type statedef
 
 
   !! ------------------------------------------------------------
@@ -87,10 +80,9 @@ module letkf_state
        character(:), allocatable :: str
      end function I_stateio_getstr
 
-     subroutine I_stateio_init(self,x,y,z)
+     subroutine I_stateio_init(self)
        import stateio
        class(stateio) :: self
-       integer, intent(in) :: x,y,z
      end subroutine I_stateio_init
 
      subroutine I_stateio_read(self, filename, state)
@@ -122,9 +114,13 @@ module letkf_state
   end interface
 
 
+  !! ------------------------------------------------------------
+
+
   type stateioptr
      class(stateio), pointer :: p
   end type stateioptr
+
 
   ! private module variables
   !------------------------------------------------------------
@@ -136,6 +132,8 @@ module letkf_state
   integer                 :: stateio_reg_num = 0
   type(stateioptr)        :: stateio_reg(stateio_reg_max)
   class(stateio), pointer :: stateio_class
+  real, allocatable :: lat(:,:), lon(:,:), mask(:,:)
+
 
 
 
@@ -143,35 +141,20 @@ contains
 
 
 
-  !============================================================
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_state_init(nml_filename)
     !! Initialize the state vector by reading in the background ensemble
     !! and distributing across cores
 
     character(len=*), intent(in) :: nml_filename
       !! filename of namelist to read in for the ***grid_def*** section
-
-    real, allocatable :: gues(:,:,:,:)
-    real, allocatable :: wrk(:,:,:)
-    real, allocatable :: wrk2(:)
-    real, allocatable :: lat(:,:), lon(:,:), mask(:,:)
-
-    integer :: unit, tbgscatter, tbgread, tbgms
-    character(len=1024) :: filename
-    integer :: m, i, j
-
-    ! lat/lon gridpoint kdtree, if needed for test observations
-    real :: r
-    integer :: x,y
-    type(kd_root) :: llkd_root
-    integer, allocatable :: llkd_x(:), llkd_y(:)
-    real,    allocatable :: llkd_lons(:), llkd_lats(:)
-    integer :: r_points(1), r_num
-    real    :: r_distance(1)
-    
+    integer :: unit, i   
     character(len=:), allocatable :: ioclass
 
-    namelist /letkf_state/ ioclass
+
+    namelist /letkf_state/ ioclass, grid_nx, grid_ny, grid_ns
 
 
     if(pe_isroot) then
@@ -180,6 +163,7 @@ contains
             new_line('a'), ' letkf_state_init() : ',&
             new_line('a'), '============================================================'
     end if
+
 
     ! read in our section of the namelist
     allocate(character(1024) :: ioclass)
@@ -190,6 +174,7 @@ contains
     if (pe_isroot) then
        print letkf_state
     end if
+    
 
     ! print a list of all stateio classes that have been registered
     if(pe_isroot) then
@@ -203,7 +188,7 @@ contains
     end if
 
 
-    ! determine the io class to create
+    ! determine the stateio class to use
     nullify(stateio_class)
     do i=1,stateio_reg_num
        if(trim(toupper(stateio_reg(i)%p%get_name())) == trim(toupper(ioclass))) then
@@ -217,12 +202,12 @@ contains
             '" not found. Check that the name is in the list of registered classes'
        stop 1
     end if
-    if(pe_isroot) &
-         print *, 'Using "', trim(stateio_class%get_name()),'"'
+    if(pe_isroot) print *, 'Using "', trim(stateio_class%get_name()),'"'
 
-    !create the state io class, and initialize
-!    allocate(stateio_generic :: stateio_class)
-    call stateio_class%init(grid_nx, grid_ny, grid_nz)
+
+    ! initialize the user-defined grid
+    ! TODO, only one process needs to read in lat/lon/mask and scatter it
+    call stateio_class%init() 
     allocate(lat(grid_nx, grid_ny))
     allocate(lon(grid_nx, grid_ny))
     call stateio_class%latlon(lat,lon)
@@ -230,163 +215,312 @@ contains
     call stateio_class%mask(mask)
 
 
-    ! read in the background members that our process is responsible for
-     if (pe_isroot) then
-        print *, ""
-        print *, "Reading ensemble background..."
-     end if
+    ! tell the mpi module about the grid layout
+    call letkf_mpi_setgrid(grid_nx, grid_ny, grid_ns)
 
 
-     ! console output synchronization
-     call letkf_mpi_barrier(syncio=.true.)
-
-
-     ! read in the files
-     allocate(gues(grid_nx, grid_ny, grid_ns, size(ens_list)))
-     tbgread = timer_init("    bkg_read", TIMER_SYNC)
-     call timer_start(tbgread)
-     do m=1,size(ens_list)
-        write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
-        print '(A,I5,3A)', " PROC ",pe_rank," is READING file: ",&
-             trim(filename),'.nc'
-        call stateio_class%read(filename, gues(:,:,:,m))
-     end do
-     call timer_stop(tbgread)
-
-
-     ! console output synchronization
-     call letkf_mpi_barrier(syncio=.true.)
-
-
-     ! before scattering, see if the obs module needs the full
-     ! background in order to generate test observations
-     if (obs_test) then
-        if(pe_isroot) then
-           print *,""
-           print *, "Generating test observations from background..."
-           print *, size(obs_list), "observations"
-        end if
-
-        ! generate the kd tree for obs location lookup
-        ! TODO: filter out masked points
-        allocate(llkd_lons(grid_nx*grid_ny))
-        allocate(llkd_lats(grid_nx*grid_ny))
-        allocate(llkd_x(grid_nx*grid_ny))
-        allocate(llkd_y(grid_nx*grid_ny))
-        do x=1,grid_nx
-           do y=1,grid_ny
-              llkd_lons((y-1)*grid_nx + x) = lon(x,y)
-              llkd_lats((y-1)*grid_nx + x) = lat(x,y)
-              llkd_x((y-1)*grid_nx + x) = x
-              llkd_y((y-1)*grid_nx + x) = y
-           end do
-        end do
-        call kd_init(llkd_root, llkd_lons, llkd_lats)
-
-        ! for each test ob, get the closest grid point and use that as its value
-        !TODO use the state config to get the right slab
-        do i =1,size(obs_list)
-           call kd_search_nnearest(llkd_root, obs_list(i)%lon, obs_list(i)%lat,&
-                1, r_points, r_distance, r_num, .false.)
-           do m=1,size(ens_list)
-              obs_ohx(ens_list(m), i) = gues(&
-                   llkd_x(r_points(1)), llkd_y(r_points(1)), &
-                   merge(1,41,obs_list(i)%id==2210), m)
-           end do
-        end do
-        call letkf_mpi_obs(obs_ohx)        
-
-        ! update the observation ensemble mean/departures using
-        ! the desired increment currently stored in obs_list%val
-        obs_ohx_mean = sum(obs_ohx,1)/mem
-        do i = 1,size(obs_list)
-           obs_ohx(:,i) = obs_ohx(:,i) - obs_ohx_mean(i)
-           r =  obs_list(i)%val
-           obs_list(i)%val= obs_ohx_mean(i)
-           obs_ohx_mean(i) = obs_ohx_mean(i) + r
-        end do
-        
-        deallocate(llkd_lons)
-        deallocate(llkd_lats)
-        deallocate(llkd_x)
-        deallocate(llkd_y)
-     end if
-        
-
-     ! scatter grids to mpi procs
-     if (pe_isroot) then
-        print *,""
-        print *, "Scattering across procs..."
-     end if
-     allocate(bkg_ij(mem, grid_ns,ij_count))
-     allocate(bkg_mean_ij(grid_ns, ij_count))
-     allocate(bkg_sprd_ij(grid_ns, ij_count))
-     allocate(ana_ij(mem, grid_ns, ij_count))
-     allocate(ana_mean_ij(grid_ns, ij_count))
-     allocate(ana_sprd_ij(grid_ns, ij_count))
-     allocate(lon_ij(ij_count))
-     allocate(lat_ij(ij_count))
-     allocate(mask_ij(ij_count))
-     tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
-     call timer_start(tbgscatter)
-     call letkf_mpi_ens2ij(gues, bkg_ij)
-     call letkf_mpi_grd2ij(lon,  lon_ij)
-     call letkf_mpi_grd2ij(lat,  lat_ij)
-     call letkf_mpi_grd2ij(mask, mask_ij)
-     call timer_stop(tbgscatter)
-     deallocate(gues)
-     deallocate(lon)
-     deallocate(lat)
-
-
-     ! caculate mean / spread
-     tbgms = timer_init("    bkg_meansprd")
-     call timer_start(tbgms)
-     if (pe_isroot) then
-        print *,""
-        print *, "Calculating background mean / spread..."
-     end if
-
-     bkg_mean_ij = sum(bkg_ij, 1) / mem
-     bkg_sprd_ij = 0
-     do i=1,grid_ns
-        do j=1,ij_count
-           bkg_ij(:,i,j) = bkg_ij(:,i,j) - bkg_mean_ij(i,j)
-           bkg_sprd_ij(i,j) =  sqrt(dot_product(bkg_ij(:,i,j),bkg_ij(:,i,j)) / mem)
-        end do
-     end do
-
-
-     ! save the mean / spread out to files
-     allocate(wrk(grid_nx, grid_ny, grid_ns))
-     allocate(wrk2(ij_count))
-     do i = 1,grid_ns
-        wrk2 = bkg_mean_ij(i,:)
-        call letkf_mpi_ij2grd(wrk2, wrk(:,:,i))
-     end do
-     if (pe_isroot) then
-        write (filename, '(A)') 'OUTPUT/bkg_mean'
-        print '(A,I5,3A)', " PROC ",pe_rank," is WRITING file: ",&
-             trim(filename),'.nc'
-        call stateio_class%write(filename, wrk)
-     end if
-     do i = 1,grid_ns
-        wrk2 = bkg_sprd_ij(i,:)
-        call letkf_mpi_ij2grd(wrk2, wrk(:,:,i))
-     end do
-     if (pe_isroot) then
-        write (filename, '(A)') 'OUTPUT/bkg_sprd'
-        print '(A,I5,3A)', " PROC ",pe_rank," is WRITING file: ",&
-             trim(filename),'.nc'
-        call stateio_class%write(filename, wrk)
-     end if
-     deallocate(wrk)
-     deallocate(wrk2)
-     call timer_stop(tbgms)
+    ! scatter grids to mpi procs
+    if (pe_isroot) then
+       print *,""
+       print *, "Scattering across procs..."
+    end if
+    allocate(lon_ij(ij_count))
+    allocate(lat_ij(ij_count))
+    allocate(mask_ij(ij_count))
+    call letkf_mpi_grd2ij(lat,  lat_ij)
+    call letkf_mpi_grd2ij(lon,  lon_ij)
+    call letkf_mpi_grd2ij(mask, mask_ij)
+    ! TODO, deallocate lat/lon here
+!    deallocate(lon)
+!    deallocate(lat)
 
   end subroutine letkf_state_init
+  !================================================================================
 
 
+
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_state_read
+    real, allocatable :: gues(:,:,:,:)
+    integer :: tbgscatter, tbgread
+    character(len=1024) :: filename
+    integer :: m, i, j
+
+    ! lat/lon gridpoint kdtree, if needed for test observations
+    real :: r
+    integer :: x,y
+    type(kd_root) :: llkd_root
+    integer, allocatable :: llkd_x(:), llkd_y(:)
+    real,    allocatable :: llkd_lons(:), llkd_lats(:)
+    integer :: r_points(1), r_num
+    real    :: r_distance(1)
+
+
+    if(pe_isroot) then
+       print *, new_line('a'), &
+            new_line('a'), '============================================================',&
+            new_line('a'), ' letkf_state_read() :',&
+            new_line('a'), '============================================================'
+    end if
+
+
+    if (pe_isroot) then
+       print *, ""
+       print *, "Reading ensemble background..."
+    end if
+
+
+    ! console output synchronization
+    call letkf_mpi_barrier(syncio=.true.)
+
+
+    ! read in the background members that our process is responsible for
+    allocate(gues(grid_nx, grid_ny, grid_ns, size(ens_list)))
+    tbgread = timer_init("    bkg_read", TIMER_SYNC)
+    call timer_start(tbgread)
+    do m=1,size(ens_list)
+       write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
+       print '(A,I5,3A)', " PROC ",pe_rank," is READING file: ",&
+            trim(filename),'.nc'
+       call stateio_class%read(filename, gues(:,:,:,m))
+    end do
+    call timer_stop(tbgread)
+
+
+    ! console output synchronization
+    call letkf_mpi_barrier(syncio=.true.)
+
+
+    ! before scattering, see if the obs module needs the full
+    ! background in order to generate test observations
+    if (obs_test) then
+       if(pe_isroot) then
+          print *,""
+          print *, "Generating test observations from background..."
+          print *, size(obs_list), "observations"
+       end if
+
+       ! generate the kd tree for obs location lookup
+       ! TODO: filter out masked points
+       allocate(llkd_lons(grid_nx*grid_ny))
+       allocate(llkd_lats(grid_nx*grid_ny))
+       allocate(llkd_x(grid_nx*grid_ny))
+       allocate(llkd_y(grid_nx*grid_ny))
+       do x=1,grid_nx
+          do y=1,grid_ny
+             llkd_lons((y-1)*grid_nx + x) = lon(x,y)
+             llkd_lats((y-1)*grid_nx + x) = lat(x,y)
+             llkd_x((y-1)*grid_nx + x) = x
+             llkd_y((y-1)*grid_nx + x) = y
+          end do
+       end do
+       call kd_init(llkd_root, llkd_lons, llkd_lats)
+
+       ! for each test ob, get the closest grid point and use that as its value
+       !TODO use the state config to get the right slab
+       do i =1,size(obs_list)
+          call kd_search_nnearest(llkd_root, obs_list(i)%lon, obs_list(i)%lat,&
+               1, r_points, r_distance, r_num, .false.)
+          do m=1,size(ens_list)
+             obs_ohx(ens_list(m), i) = gues(&
+                  llkd_x(r_points(1)), llkd_y(r_points(1)), &
+                  merge(1,41,obs_list(i)%id==2210), m)
+          end do
+       end do
+       call letkf_mpi_obs(obs_ohx)        
+
+       ! update the observation ensemble mean/departures using
+       ! the desired increment currently stored in obs_list%val
+       obs_ohx_mean = sum(obs_ohx,1)/mem
+       do i = 1,size(obs_list)
+          obs_ohx(:,i) = obs_ohx(:,i) - obs_ohx_mean(i)
+          r =  obs_list(i)%val
+          obs_list(i)%val= obs_ohx_mean(i)
+          obs_ohx_mean(i) = obs_ohx_mean(i) + r
+       end do
+
+       ! all done with the kd-tree
+       deallocate(llkd_lons)
+       deallocate(llkd_lats)
+       deallocate(llkd_x)
+       deallocate(llkd_y)
+       call kd_free(llkd_root)
+    end if
+
+
+    ! scatter background, 
+    if(pe_isroot) then
+       print *,""
+       print *, "scattering background..."
+    end if
+    tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
+
+    call timer_start(tbgscatter)
+    allocate(bkg_ij(mem, grid_ns, ij_count))
+    allocate(bkg_mean_ij(grid_ns, ij_count))
+    allocate(bkg_sprd_ij(grid_ns, ij_count))
+    allocate(ana_ij(mem, grid_ns, ij_count))
+    allocate(ana_mean_ij(grid_ns, ij_count))
+    allocate(ana_sprd_ij(grid_ns, ij_count))
+    call letkf_mpi_ens2ij(gues, bkg_ij)
+    call timer_stop(tbgscatter)
+
+
+    ! cleanup no longer needed arrays
+    ! TODO, is lat/lon needed all the way to this point?
+    deallocate(gues)
+    deallocate(lon)
+    deallocate(lat)
+
+
+    ! caculate mean / spread
+    if (pe_isroot) then
+       print *,""
+       print *, "Calculating background mean / spread..."
+    end if
+
+    bkg_mean_ij = sum(bkg_ij, 1) / mem
+    bkg_sprd_ij = 0
+    do i=1,grid_ns
+       do j=1,ij_count
+          bkg_ij(:,i,j) = bkg_ij(:,i,j) - bkg_mean_ij(i,j)
+          bkg_sprd_ij(i,j) =  sqrt(dot_product(bkg_ij(:,i,j),bkg_ij(:,i,j)) / mem)
+       end do
+    end do
+
+  end subroutine letkf_state_read
+  !================================================================================
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_state_write()
+    integer :: i, m 
+    integer :: rank_bm, rank_bs, rank_am, rank_as
+
+    real, allocatable :: wrkij(:)
+    real, allocatable :: wrk_bm(:,:,:)
+    real, allocatable :: wrk_bs(:,:,:)
+    real, allocatable :: wrk_am(:,:,:)
+    real, allocatable :: wrk_as(:,:,:)
+    real, allocatable :: wrk4(:,:,:,:)
+    character(len=1024) :: filename
+
+    integer :: t_mpi, t_write
+
+    t_mpi   = timer_init("  output_scatter")
+    t_write = timer_init("  output_write")
+
+    if(pe_isroot) then
+       print *, new_line('a'), &
+            new_line('a'), '============================================================',&
+            new_line('a'), ' letkf_state_write() :',&
+            new_line('a'), '============================================================'
+    end if
+
+    ! determine which processes are going to output which of the bkg/ana mean/spread
+    ! so that we can write them in parallel
+    rank_bm = mod(pe_size  , 4)
+    rank_bs = mod(pe_size+1, 4)
+    rank_am = mod(pe_size+2, 4)
+    rank_as = mod(pe_size+3, 4)
+    if (pe_isroot) then
+       print *, ""
+       print *, "Saving ana/bkg mean/sprd"
+       print '(A,I5,3A)', " PROC ",rank_bm, " is WRITING file: OUTPUT/bkg_mean"
+       print '(A,I5,3A)', " PROC ",rank_bs, " is WRITING file: OUTPUT/bkg_sprd"
+       print '(A,I5,3A)', " PROC ",rank_am, " is WRITING file: OUTPUT/ana_mean"
+       print '(A,I5,3A)', " PROC ",rank_as, " is WRITING file: OUTPUT/ana_sprd"
+    end if
+
+    ! gather the mean/spread
+    if(pe_isroot) print *, "scattering..."
+    allocate(wrkij(ij_count))
+    call timer_start(t_mpi)
+    if (pe_rank == rank_bm) allocate(wrk_bm(grid_nx, grid_ny, grid_ns))
+    do i=1,grid_ns
+       wrkij = bkg_mean_ij(i,:)
+       call letkf_mpi_ij2grd(wrkij, wrk_bm(:,:,i), rank_bm)
+    end do    
+    if (pe_rank == rank_bs) allocate(wrk_bs(grid_nx, grid_ny, grid_ns))
+    do i=1,grid_ns
+       wrkij = bkg_sprd_ij(i,:)
+       call letkf_mpi_ij2grd(wrkij, wrk_bs(:,:,i), rank_bs)
+    end do    
+    if (pe_rank == rank_am) allocate(wrk_am(grid_nx, grid_ny, grid_ns))
+    do i=1,grid_ns
+       wrkij = ana_mean_ij(i,:)
+       call letkf_mpi_ij2grd(wrkij, wrk_am(:,:,i), rank_am)
+    end do    
+    if (pe_rank == rank_as) allocate(wrk_as(grid_nx, grid_ny, grid_ns))
+    do i=1,grid_ns
+       wrkij = ana_sprd_ij(i,:)
+       call letkf_mpi_ij2grd(wrkij, wrk_as(:,:,i), rank_as)
+    end do    
+    call timer_stop(t_mpi)
+    deallocate(wrkij)
+
+
+    ! write out the mean/spread
+    if(pe_isroot) print *, "writing..."
+    call timer_start(t_write)
+    if (pe_rank == rank_bm) then
+       call stateio_class%write('OUTPUT/bkg_mean', wrk_bm)       
+       deallocate(wrk_bm)
+    end if
+    if (pe_rank == rank_bs) then
+       call stateio_class%write('OUTPUT/bkg_sprd', wrk_bs)
+       deallocate(wrk_bs)
+    end if
+    if (pe_rank == rank_am) then
+       call stateio_class%write('OUTPUT/ana_mean', wrk_am)
+       deallocate(wrk_am)
+    end if
+    if (pe_rank == rank_as) then
+       call stateio_class%write('OUTPUT/ana_sprd', wrk_as)
+       deallocate(wrk_as)
+    end if
+    call timer_stop(t_write)
+    call letkf_mpi_barrier(.true.)
+    if(pe_isroot) print *, "Done."
+
+
+    ! analysis ensemble members
+    if(pe_isroot) then
+       print *,""
+       print *, "Saving analyais ensemble members"
+       print *, "mpi collect..."
+    end if
+
+    call timer_start(t_mpi)
+    allocate(wrk4(grid_nx,grid_ny, grid_ns, size(ens_list)))
+    call letkf_mpi_ij2ens(ana_ij, wrk4)
+    call timer_stop(t_mpi)
+
+    call timer_start(t_write)
+    do m=1,size(ens_list)
+       write (filename, '(A,I0.4,A)') 'OUTPUT/', ens_list(m)
+       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",trim(filename)
+       call stateio_class%write(filename, wrk4(:,:,:,m))
+    end do
+    call timer_stop(t_write)
+
+    call letkf_mpi_barrier()
+    deallocate(wrk4)
+
+
+    
+  end subroutine letkf_state_write
+  !================================================================================
+
+
+
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_state_register(cls)
     class(stateio), pointer :: cls
     if(stateio_reg_num == stateio_reg_max) then
@@ -396,8 +530,13 @@ contains
     stateio_reg_num = stateio_reg_num + 1
     stateio_reg(stateio_reg_num)%p => cls
   end subroutine letkf_state_register
+  !================================================================================
 
 
+
+
+  !================================================================================
+  !================================================================================
   function toupper(in_str) result(out_str)
     character(*), intent(in) :: in_str
     character(len(in_str)) :: out_str
@@ -411,6 +550,6 @@ contains
        end if
     end do
   end function toupper
-
+  !================================================================================
 
 end module letkf_state

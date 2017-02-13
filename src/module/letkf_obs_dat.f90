@@ -6,8 +6,6 @@ module letkf_obs_dat
 
   public :: obsio_dat
 
-  integer, parameter :: dp = kind(0.0)
-
   !------------------------------------------------------------
 
   type, extends(obsio) :: obsio_dat
@@ -69,7 +67,7 @@ contains
     class(obsio_dat) :: self
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
-    real(dp), allocatable, intent(out) :: obs_innov(:)
+    real, allocatable, intent(out) :: obs_innov(:)
     integer,  allocatable, intent(out) :: obs_qc(:)
     integer, optional, intent(out) :: iostat
 

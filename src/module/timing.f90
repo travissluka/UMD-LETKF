@@ -3,12 +3,14 @@ module timing
   implicit none
   private
 
+  ! public module methods
+  !------------------------------------------------------------
   public :: timing_init
   public :: timer_init, timer_start, timer_stop
   public :: timer_print, timer_gather
   public :: gettimer
 
-
+  
   integer, parameter, public :: TIMER_SYNC = 1
 
   type timer_obj
@@ -19,6 +21,9 @@ module timing
      integer :: grain
   end type timer_obj
 
+
+  ! private module variables
+  !------------------------------------------------------------
   integer, parameter :: max_timers = 1024
   integer            :: active_timers = 0
   type(timer_obj)    :: timer_objs(max_timers)
@@ -31,6 +36,8 @@ contains
 
 
 
+  !================================================================================
+  !================================================================================
   subroutine timing_init(comm, root)
     integer, intent(in) :: comm
     integer, intent(in) :: root
@@ -48,10 +55,13 @@ contains
        stop 1
     end if
   end subroutine timing_init
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   function gettimer(timer) result(id)
     character(len=*), intent(in) :: timer
     integer :: id
@@ -66,10 +76,13 @@ contains
     if (id > active_timers) id = -1
 
   end function gettimer
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   function timer_init(name, flags) result(id)
     character(len=*), intent(in) :: name
     integer, optional, intent(in) :: flags
@@ -92,10 +105,13 @@ contains
        if (present(flags)) timer_objs(id)%flags = flags
     end if
   end function timer_init
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   subroutine timer_start(id)
     integer, intent(in) :: id
     integer :: ierr
@@ -113,10 +129,13 @@ contains
 
     call system_clock(timer_objs(id)%tick)
   end subroutine timer_start
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   subroutine timer_stop(id)
     integer, intent(in) :: id
 
@@ -135,9 +154,13 @@ contains
     timer_objs(id)%tick = 0
 
   end subroutine timer_stop
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine timer_gather(id, times)
     integer, intent(in) :: id
     real,intent(inout) :: times(:)
@@ -150,10 +173,13 @@ contains
     t0 = real(timer_objs(id)%total_ticks) / real(timer_rate)
     call mpi_allgather(t0, 1, mpi_real, times, 1, mpi_real, mp_comm, ierr)
   end subroutine timer_gather
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   subroutine timer_print
     integer :: i
     real :: t, tmin, tmax, tave, tdif2, tdif2g
@@ -192,6 +218,7 @@ contains
        i = i +1
     end do
   end subroutine timer_print
+  !================================================================================
 
 
   ! !############################################################

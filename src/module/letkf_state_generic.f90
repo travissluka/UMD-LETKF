@@ -1,7 +1,6 @@
 module letkf_state_generic
   ! TODO, make an actual generic one... this is for the MOM4 grid
   use letkf_state
-
   use netcdf
 
   implicit none
@@ -20,7 +19,7 @@ module letkf_state_generic
      procedure :: mask     => stateio_mask
   end type stateio_generic
 
-  integer :: grid_nx, grid_ny !, grid_nz
+  integer, parameter :: grid_nz = 40
 
   real, allocatable :: nom_lon(:), nom_lat(:), depths(:)
 
@@ -79,13 +78,12 @@ contains
 
 
 
-  subroutine stateio_init(self, x,y,z)
+  subroutine stateio_init(self)
     class(stateio_generic) :: self
-    integer, intent(in) :: x, y, z
     integer :: ncid, varid
 
-    grid_nx = x
-    grid_ny = y
+!    grid_nx = x
+!    grid_ny = y
 !    grid_nz = z
 
     call check(nf90_open('INPUT/grid_spec.nc', nf90_write, ncid))

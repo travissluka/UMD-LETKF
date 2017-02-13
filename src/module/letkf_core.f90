@@ -6,16 +6,30 @@ module letkf_core
   !! @todo correctly determine evwork_size based on ILAENV and max
   !! number of observations, \( evwork\_size = (NB+2)*n\)
 
+
   implicit none
   private
 
+  ! public module methods
+  !------------------------------------------------------------
   public :: letkf_core_solve, letkf_core_init
 
+
+  ! private variables
+  !------------------------------------------------------------
   integer :: evwork_size
   integer :: nbv
 
+
+
+
 contains
 
+
+
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_core_init(nbvi)
     !! initializes the LETKF core for future calls to letkf_core_solve
     !! (mainly just sets the size of a temporary working matix used
@@ -26,9 +40,13 @@ contains
     nbv = nbvi
     evwork_size = (64+2) * nbv
   end subroutine letkf_core_init
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_core_solve(nobs, hdxb, rdiag, rloc, dep, infl, trans)
     integer, parameter :: rsize = 4
     integer, intent(in) :: nobs
@@ -118,7 +136,6 @@ contains
     ! TODO
 
   end subroutine letkf_core_solve
-
-
+  !================================================================================
 
 end module letkf_core

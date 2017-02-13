@@ -7,50 +7,41 @@ module letkf_mpi
   implicit none
   private
 
+
+  ! public module methods
+  !------------------------------------------------------------
   public :: letkf_mpi_preinit, letkf_mpi_init, letkf_mpi_final
+  public :: letkf_mpi_setgrid
   public :: letkf_mpi_obs, letkf_mpi_grd2ij, letkf_mpi_ij2grd
   public :: letkf_mpi_ens2ij, letkf_mpi_ij2ens
-  public :: ens_list
   public :: letkf_mpi_barrier
 
-  integer, parameter :: dp = kind(0.0)
 
-
-  integer, public :: mem
+  ! public module variables
+  ! ------------------------------------------------------------
+  integer, public, protected :: mem
   !! Number of ensemble members
 
-  ! public variables
-  ! ------------------------------
-  integer,public, allocatable :: ens_map(:)
+  integer, public, protected, allocatable :: ens_list(:)
+    !! lists which process is responsible for the I/O for
+    !! each ensemble member number.
+    !! ***Size is ([[letkf_mpi:mem]])***
+
+  integer,public, protected, allocatable :: ens_map(:)
     !! for each index MEM, the number of the PE
     !! respsonsible for its I/O
 
   integer, public, protected :: ij_count
     !! Number of grid points the current process is responsible for handling
 
-  integer, public, protected :: grid_nx
-    !! number of grid points in the x direction (longitude usually)  
-
-  integer, public, protected :: grid_ny
-    !! number of grid points in the y direction (latitude usually)  
-
-  integer, public, protected :: grid_ns
-    !! total number of 2d slices. This is equal to grid_nz *num_3d_vars + num_2d_vars
-
   integer, public, protected :: pe_rank, pe_size, pe_root
   logical, public, protected :: pe_isroot
   integer, public, protected :: mpi_comm_letkf
-
 
   
 
   ! private variables
   ! ------------------------------
-  integer, allocatable :: ens_list(:)
-    !! lists which process is responsible for the I/O for
-    !! each ensemble member number.
-    !! ***Size is ([[letkf_mpi:mem]])***
-
   integer :: ens_count
     !! number of ensemble members for which is process is responsible for the I/O
 
@@ -62,6 +53,14 @@ module letkf_mpi
   integer, allocatable :: scatterv_displ(:)
 
   logical :: interleave = .true.
+  integer :: grid_nx
+    !! number of grid points in the x direction (longitude usually)  
+
+  integer :: grid_ny
+    !! number of grid points in the y direction (latitude usually)  
+
+  integer :: grid_ns
+    !! total number of 2d slices. This is equal to grid_nz *num_3d_vars + num_2d_vars
 
 
 
@@ -70,6 +69,72 @@ contains
 
   
 
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_mpi_setgrid(nx,ny,ns)
+    integer, intent(in) :: nx, ny, ns
+    integer :: i, j
+    integer :: count, prev
+
+    real, allocatable :: load_weights(:)
+
+    grid_nx = nx
+    grid_ny = ny
+    grid_ns = ns
+
+    ! determine how many gridpoints this PE should deal with
+    ! ----------------------------------------
+    if (pe_isroot) print *, ""
+
+    ! determine the process load weights
+    ! TODO: remove load weights... this was leftover from a previous failed idea
+    allocate(load_weights(pe_size))
+    load_weights = 1.0
+    load_weights = load_weights / sum(load_weights)
+
+
+    ! calculate actual numer of gridpoints to use
+    allocate(scatterv_count(pe_size))
+    allocate(scatterv_displ(pe_size))
+    prev = 0
+    do i=0, pe_size-1
+       count = nint(grid_nx*grid_ny * load_weights(i+1))
+       if (i == pe_size-1) count = grid_nx*grid_ny - prev
+
+       if (i == pe_rank) then
+          ij_count = count
+          allocate(ij_list(count))
+          do j = 1,count
+             ij_list(j) = prev + j
+          end do
+       end if
+       scatterv_count(i+1) = count
+       scatterv_displ(i+1) = prev
+       prev = prev+count
+    end do
+    deallocate(load_weights)
+   
+    if (pe_isroot) then
+       print *, ""
+       print *, "gridpoint assignment balancing:"
+       i = minval(scatterv_count)
+       j = maxval(scatterv_count)
+       if (i==j) then
+          print *, " all procs assigned ",i,"gridpoints"
+       else
+          print *, " all procs assigned between ",i,"and",j,"gridpoints"
+       end if
+    end if
+
+  end subroutine letkf_mpi_setgrid
+  !================================================================================
+
+
+
+
+  !================================================================================
+  !================================================================================
   subroutine  letkf_mpi_barrier(syncio)
     integer :: ierr
     logical, optional :: syncio
@@ -83,9 +148,13 @@ contains
     end if
     
   end subroutine letkf_mpi_barrier
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_ens2ij(ens, ij)
     !! takes ensemble members read in by 1 or more process and distributes
     !! to all processes. Afterward each process will have all ensemble members for a
@@ -98,7 +167,7 @@ contains
 
     real, intent(inout) :: ij(mem, grid_ns, ij_count)
       !! The gridpoints this given process is responsible for computing.
-      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:mem]], [[letkf_mpi:grid_ns]],[[letkf_mpi:ij_count]] )***
 
     integer :: ierr, s, i, j, m
     real :: wrk(ij_count)
@@ -133,9 +202,13 @@ contains
     end do
 
   end subroutine letkf_mpi_ens2ij
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_ij2ens(ij, ens)
     !! Takes gridpoints that are scattered across the processors and
     !! combines them and sends individual whole ensemble members to the processors
@@ -143,7 +216,7 @@ contains
 
     real, intent(in) :: ij(mem, grid_ns, ij_count)
       !! The gridpoints this given process is responsible for computing.
-      !! ***Shape is ([[letkf_mpi:ij_count]], [[letkf_mpi:grid_ns]], [[letkf_mpi:mem]])***
+      !! ***Shape is ([[letkf_mpi:mem]], [[letkf_mpi:grid_ns]],[[letkf_mpi:ij_count]] )***
 
     real, intent(inout)    :: ens(grid_nx*grid_ny, grid_ns, size(ens_list))
       !! The ensemble members this given process is responsible for loading in.
@@ -182,9 +255,13 @@ contains
     end do
 
   end subroutine letkf_mpi_ij2ens
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_grd2ij(grd, ij)
     !! Takes a single grid on the root process and distributes
     !! portions of it to the worker processes
@@ -220,24 +297,35 @@ contains
        stop 1
     end if
   end subroutine letkf_mpi_grd2ij
+  !================================================================================
 
 
 
-  subroutine letkf_mpi_ij2grd(ij, grd)
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_mpi_ij2grd(ij, grd, rank)
     real, intent(in)    :: ij(ij_count)
     real, intent(inout) :: grd(grid_nx* grid_ny)
+    integer, intent(in), optional :: rank
 
+    integer :: rank0
     integer :: ierr,i,j
     real :: wrk(grid_nx*grid_ny)
 
+    if(present(rank)) then
+       rank0 = rank
+    else
+       rank0 = pe_root
+    end if
 
     if(.not.interleave) then
        call mpi_gatherv(ij, ij_count, mpi_real, &
-            grd, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
+            grd, scatterv_count, scatterv_displ, mpi_real, rank0, mpi_comm_letkf, ierr)
     else
        call mpi_gatherv(ij, ij_count, mpi_real, &
-            wrk, scatterv_count, scatterv_displ, mpi_real, pe_root, mpi_comm_letkf, ierr)
-       if(pe_isroot) then
+            wrk, scatterv_count, scatterv_displ, mpi_real, rank0, mpi_comm_letkf, ierr)
+       if(rank0 == pe_rank) then
           do i=1,pe_size
              do j=1,scatterv_count(i)
                 grd((j-1)*pe_size+i) = wrk(scatterv_displ(i)+j)
@@ -251,11 +339,15 @@ contains
        stop 1
     end if
   end subroutine letkf_mpi_ij2grd
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_obs(ohx, qc)
-    real(dp), intent(inout)           :: ohx(:,:)
+    real,     intent(inout)           :: ohx(:,:)
     integer,  intent(inout), optional :: qc(:,:)
     integer :: ierr
     !TODO, this is inefficient
@@ -264,8 +356,13 @@ contains
        call mpi_allreduce(mpi_in_place, qc, mem*size(ohx,2), mpi_integer, mpi_sum, mpi_comm_letkf, ierr)
     end if
   end subroutine letkf_mpi_obs
+  !================================================================================
 
 
+
+
+  !================================================================================
+  !================================================================================
   function ens_idx(m)
     !! Get the global ensemble number of the m-th member this process is responsible for.
     !! Returns -1 if m is out of bounds, or this process does not have any members to load
@@ -282,14 +379,15 @@ contains
     end do
     ens_idx = -1
   end function ens_idx
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_preinit()
     integer :: ierr
-
-
 
     call mpi_init(ierr)
 
@@ -304,22 +402,20 @@ contains
 
     pe_isroot = pe_root == pe_rank
 
-
   end subroutine letkf_mpi_preinit
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_init(filename)
     character(len=*), intent(in) :: filename
     integer :: i, j
     integer :: count, prev, unit
 
-    real, allocatable :: load_weights(:)
-
-
-    namelist /letkf_mpi/ mem, grid_nx, grid_ny, grid_ns,interleave
-
+    namelist /letkf_mpi/ mem, interleave
 
     if(pe_isroot) then
        print *, new_line('a'), &
@@ -387,58 +483,14 @@ contains
        prev = prev + count
     end do
 
-
-
-    ! determine how many gridpoints this PE should deal with
-    ! ----------------------------------------
-    if (pe_isroot) print *, ""
-
-    ! determine the process load weights
-    ! TODO: remove load weights... this was leftover from a previous failed idea
-    allocate(load_weights(pe_size))
-    load_weights = 1.0
-    load_weights = load_weights / sum(load_weights)
-
-
-    ! calculate actual numer of gridpoints to use
-    allocate(scatterv_count(pe_size))
-    allocate(scatterv_displ(pe_size))
-    prev = 0
-    do i=0, pe_size-1
-       count = nint(grid_nx*grid_ny * load_weights(i+1))
-       if (i == pe_size-1) count = grid_nx*grid_ny - prev
-
-       if (i == pe_rank) then
-          ij_count = count
-          allocate(ij_list(count))
-          do j = 1,count
-             ij_list(j) = prev + j
-          end do
-       end if
-       scatterv_count(i+1) = count
-       scatterv_displ(i+1) = prev
-       prev = prev+count
-    end do
-    deallocate(load_weights)
-
-    
-    if (pe_isroot) then
-       print *, ""
-       print *, "gridpoint assignment balancing:"
-       i = minval(scatterv_count)
-       j = maxval(scatterv_count)
-       if (i==j) then
-          print *, " all procs assigned ",i,"gridpoints"
-       else
-          print *, " all procs assigned between ",i,"and",j,"gridpoints"
-       end if
-    end if
-
   end subroutine letkf_mpi_init
+  !================================================================================
 
 
 
-  !############################################################
+
+  !================================================================================
+  !================================================================================
   subroutine letkf_mpi_final
     integer :: ierr
     real :: mem, mem_avg, mem_min, mem_max, mem_sum
@@ -463,9 +515,13 @@ contains
     end if
     call mpi_finalize(ierr)
   end subroutine letkf_mpi_final
+  !================================================================================
 
 
 
+
+  !================================================================================
+  !================================================================================
   subroutine getMaxMem(mem)
     !! return memory hiwater mark, in gigabytes.
     !! this relies on the VmHWM field set in the /proc/(pid)/status file
@@ -513,4 +569,6 @@ contains
     mem = -1
     close(unit)
   end subroutine getMaxMem
+  !================================================================================
+
 end module letkf_mpi

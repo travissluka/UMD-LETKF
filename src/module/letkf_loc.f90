@@ -1,12 +1,22 @@
 module letkf_loc
   !! observation localization routines
+
   implicit none
   private
 
+  ! public module methods
+  !------------------------------------------------------------
   public :: loc_gc, loc_gaus
+
+
+
 
 contains
 
+
+
+  !================================================================================
+  !================================================================================
   pure function loc_gc(z, L)
     !! Gaspari-Cohn localization function
     !! Possibly faster than the Gaussian function, depending on computer architecture.
@@ -35,11 +45,17 @@ contains
             (5.0/8.0)*z_c**3 - (5.0/3.0)*z_c**2 + 1
     end if
   end function loc_gc
+  !================================================================================
 
 
+
+  !================================================================================
+  !================================================================================
   pure function loc_gaus(z, L)
     real, intent(in) :: z, L
     real :: loc_gaus
     loc_gaus = exp( -0.5 *  z*z / L*L)
   end function loc_gaus
+  !================================================================================
+
 end module letkf_loc
