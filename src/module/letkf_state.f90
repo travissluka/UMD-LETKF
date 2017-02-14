@@ -28,7 +28,7 @@ module letkf_state
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
   real,    public, protected, allocatable :: lon_ij(:)
     !! ***Size is ( [[letkf_mpi:ij_count]] ) ***
-  real,    public, protected, allocatable :: mask_ij(:)
+  logical,  public, protected, allocatable :: mask_ij(:)
 
   real,    public, protected, allocatable :: bkg_ij(:,:,:)
     !! ***Shape is ( [[letkf_mpi:mem]], [[letkf_mpi:grid_ns]], [[letkf_mpi:ij_count]] ) ***
@@ -48,15 +48,6 @@ module letkf_state
 
   !! ------------------------------------------------------------
 
-
-  type slab
-     integer :: lvl
-     integer :: var
-     real, allocatable :: val(:,:)
-  end type slab
-
-
-  !! ------------------------------------------------------------
 
 
   type, abstract :: stateio
@@ -107,7 +98,7 @@ module letkf_state
      subroutine I_stateio_mask(self, mask)
        import stateio
        class(stateio) :: self
-       real, intent(inout) :: mask(:,:)
+       logical, intent(inout) :: mask(:,:)
      end subroutine I_stateio_mask
 
   end interface
@@ -127,11 +118,21 @@ module letkf_state
   public :: stateio_class
 
   ! registration of built-in and user-defined stateio classes
+  ! TODO allow for 2D/3D mask, 1D/2D lat/lon
   integer, parameter      :: stateio_reg_max = 100
   integer                 :: stateio_reg_num = 0
   type(stateioptr)        :: stateio_reg(stateio_reg_max)
   class(stateio), pointer :: stateio_class
-  real, allocatable       :: lat(:,:), lon(:,:), mask(:,:)
+  real,    allocatable    :: lat(:,:), lon(:,:)
+  logical, allocatable    :: mask(:,:)
+
+  !TODO, make these private, and/or protected
+  character(len=8), public, allocatable :: state_var(:)
+  !! name of a state variable
+  integer,          public, allocatable :: slab_var(:)
+  !! state variable for each slab, gives an index in the [[letkf_state::state_var]] array
+  integer,          public, allocatable :: slab_lvl(:)
+  !! level number for each slab
 
 
 
@@ -205,6 +206,12 @@ contains
 
 
     ! initialize the user-defined grid
+    !TODO, should this be done inside the stateio instance (if we want stateio to determine
+    ! the grid_ns/nx/ny parameters)?
+    allocate(slab_var(grid_ns))
+    allocate(slab_lvl(grid_ns))
+    slab_var = -1
+    slab_lvl = -1
     ! TODO, only one process needs to read in lat/lon/mask and scatter it
     call stateio_class%init() 
     allocate(lat(grid_nx, grid_ny))
@@ -221,17 +228,35 @@ contains
     ! scatter grids to mpi procs
     if (pe_isroot) then
        print *,""
-       print *, "Scattering across procs..."
+       print *, "Scattering grid definition across procs..."
     end if
     allocate(lon_ij(ij_count))
     allocate(lat_ij(ij_count))
     allocate(mask_ij(ij_count))
-    call letkf_mpi_grd2ij(lat,  lat_ij)
-    call letkf_mpi_grd2ij(lon,  lon_ij)
-    call letkf_mpi_grd2ij(mask, mask_ij)
-    ! TODO, deallocate lat/lon here
+    !TODO, get the generic mpi_grd2ij interface working
+    call letkf_mpi_grd2ij_real(lat,  lat_ij)
+    call letkf_mpi_grd2ij_real(lon,  lon_ij)
+    call letkf_mpi_grd2ij_logical(mask, mask_ij)
+    ! TODO, deallocate lat/lon here,
+    ! Err, can't right now because it is needed when the state bg is read in 
+    ! if doing test observations
 !    deallocate(lon)
 !    deallocate(lat)
+
+    ! print out statistics about the grid layout
+    if (pe_isroot) then
+       print *,""
+       print *, "grid definition:"
+       print *, "------------------------------------------------------------"
+       print '(A,I6,A,I6)', " horizontal grid size", grid_nx," X",grid_ny
+       print '(A,F6.1,A,F6.1)', "  longitude range: ", minval(lon), " to ",maxval(lon)
+       print '(A,F6.1,A,F6.1)', "  latitude  range: ", minval(lat), " to ",maxval(lat)       
+       print '(A,I6)', " vertical/variable slabs:", grid_ns
+       do i =1, grid_ns
+          print '(A,I4,A,A10,A,I6)', "  slab", i, "       var=",&
+               letkf_state_getvarname(slab_var(i)), "      lvl=",slab_lvl(i)
+       end do
+    end if
 
   end subroutine letkf_state_init
   !================================================================================
@@ -543,6 +568,34 @@ contains
   end subroutine letkf_state_register
   !================================================================================
 
+
+
+
+  !================================================================================
+  !================================================================================
+  function letkf_state_getvarid(str) result(id)
+    character(*), intent(in) :: str
+    integer :: id
+    id = -1
+  end function letkf_state_getvarid
+  !================================================================================
+
+
+
+
+  !================================================================================
+  !================================================================================
+  function letkf_state_getvarname(id) result(str)
+    integer, intent(in) :: id
+    character(len=:), allocatable :: str
+    if (id <= 0 .or. id > size(state_var)) then
+       str = "ERR"
+       print *, "ERROR, trying to get non-existant state variable name in slot ", id
+       stop 1
+    end if   
+    str = state_var(id)
+  end function letkf_state_getvarname
+  !================================================================================
 
 
 

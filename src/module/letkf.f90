@@ -92,8 +92,9 @@ contains
     call timer_start(timer)
     call letkf_state_init(nml_filename)
     call timer_stop(timer)
-
     call letkf_core_init(mem)
+
+    call letkf_mpi_barrier(.true.)
 
   end subroutine letkf_driver_init
   !================================================================================
@@ -112,6 +113,13 @@ contains
 
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
     namelist /letkf_localization/ loc_hz
+
+    if(pe_isroot) then
+       print *, new_line('a'),&
+            new_line('a'), '============================================================',&
+            new_line('a'), ' letkf_driver_run()',&
+            new_line('a'), '============================================================'
+    end if
 
     ! read in main section of the  namelist
     open(newunit=unit, file=nml_filename)
@@ -246,25 +254,29 @@ contains
     integer, parameter :: maxpt = 100000
     integer :: rpoints(maxpt)
     real :: rdistance(maxpt)
-    integer :: rnum, ob_cnt
+    integer :: rnum, ob_cnt, ob_cnt_lg
 
-    real :: hdxb(mem,maxpt), rdiag(maxpt), rloc(maxpt), dep(maxpt)
+    integer :: obidx(maxpt)
+    real :: hdxb(mem,maxpt), rdiag(maxpt), dep(maxpt), rdist(maxpt)
+    real :: lhdxb(mem,maxpt), lrdiag(maxpt), lrloc(maxpt), ldep(maxpt)
     real :: trans(mem,mem)
-    integer :: timer1, timer2, n, timer3
-    integer :: i
-    integer, parameter :: progress_bar_size = 45
 
-    real :: loc_h
+    integer :: timer1, timer2, n, timer3, timerloc
+    integer :: i, lg, slab
+    integer, parameter :: progress_bar_size = 45
+    real :: rloc
     real :: loc_hz_max
     real :: loc_hz_ij
     real, parameter :: pi = 4.0*atan(1.0)
 
-    timer1 = timer_init("  obs_search")
-    timer2 = timer_init("  core_solve")
-    timer3 = timer_init("  core_trans")
+    type(letkf_loc_group), allocatable :: loc_groups(:)
 
-    ana_ij = 0
+    timer1   = timer_init("  obs_search")
+    timerloc = timer_init("  obs_loc")
+    timer2   = timer_init("  core_solve")
+    timer3   = timer_init("  core_trans")
 
+    ana_ij = bkg_ij
     
     ! setup progress bar
     if(pe_isroot) then
@@ -277,9 +289,15 @@ contains
        write(*,"(A)", advance='no')      " progress: │"
     end if
 
+
+    ! TODO, only call loc_groups once if the localization groups are constant with respect
+    ! to the grid position
+!    loc_groups = letkf_loc_getgroups(0)
+
+
     ! perform analysis at each grid point
     ! ------------------------------
-    do ij=1,ij_count
+    ij_loop: do ij=1,ij_count
 
        ! print out progress 
        if(pe_isroot) then
@@ -294,18 +312,21 @@ contains
 
 
        !TODO, don't include these gridpoints at all in the mpi ij allocation if the point is masked out
-       if(mask_ij(ij) == 0) cycle
+       if(mask_ij(ij)) cycle
 
        !TODO, use a precomputed cos(lat) grid
+       !TODO move max hz distance into the localization module
+       ! to allow for user-defined localization methods
        loc_hz_ij = loc_hz(2) + (loc_hz(1)-loc_hz(2))*cos(lat_ij(ij) * pi/180.0)
        loc_hz_max = loc_hz_ij * sqrt(40.0/3.0)
 
        ! search for all observations in a given radius of this gridpoint
        !TODO, do the KD tree call once to get all possible obs to be used by a grid BLOCK
-       !
+       !TODO allow for multiple kd-trees (observation groups) each with a different
+       ! loc_hz_max (e.g probably want ocean and atm obs separate, because ocean obs 
+       ! use a smaller radius than atm obs)
        call timer_start(timer1)
        call letkf_obs_get(lat_ij(ij), lon_ij(ij), loc_hz_max, rpoints, rdistance, rnum)
-       call timer_stop(timer1)
 
        ! if there are observations found, process them
        ob_cnt = 0
@@ -316,42 +337,72 @@ contains
           ! get rid of obs with bad QC values
           if (obs_qc(n) /= 0) cycle
 
-          ! calculate observation localization, and
-          ! get rid of obs outside of localization radius
-          loc_h = loc_gc(rdistance(i), loc_hz_ij)
-          if (loc_h <= 0 ) cycle
-
           ! use this observation
           ob_cnt = ob_cnt + 1
+
+          obidx(ob_cnt) = n
           hdxb(:,ob_cnt) = obs_ohx(:,n)
           rdiag(ob_cnt)  = obs_list(n)%err
-          rloc(ob_cnt) = loc_h
+          rdist(ob_cnt) = rdistance(i)
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
           diag_count_ij(:,ij) = diag_count_ij(:,ij)+1!loc_h
        end do
+       call timer_stop(timer1)
 
 
-       ! if there are still good quality observations to assimilate, do so
-       if (ob_cnt > 0) then
-          ! main LETKF equations
-          call timer_start(timer2)
-          call letkf_core_solve(ob_cnt,&
-               hdxb(:,:ob_cnt), rdiag(:ob_cnt), rloc(:ob_cnt),&
-               dep(:ob_cnt), 1.0e0, trans)
-          call timer_stop(timer2)
+       ! perform the core letkf equations and apply transformation matrix
+       ! to the background ensemble for EACH localization group
+       ! ------------------------------------------------------------
+       loc_groups = letkf_loc_getgroups(ij)
+       lg_loop: do lg=1,size(loc_groups)         
 
-          ! calculate the ensemble increments by applying the trans matrix
-          !TODO, if not doing vertical localization, do all grid_ns layers at once
-          call timer_start(timer3)
-          do i=1,grid_ns
-             call sgemm('n','n', 1, mem, mem, 1.0e0, bkg_ij(:,i,ij),&
-                  1, trans, mem, 0.0e0, ana_ij(:,i,ij), 1)
-          end do
-          call timer_stop(timer3)
-       else
-          ana_ij(:,:, ij) = bkg_ij(:,:,ij)
-       end if
+          ! determine observation localization
+          ! if an observation has localization of 0, move it to the end of the array
+          ! so that it can be ignored by the letkf_core.
+          ! TODO, see if its faster to instead move and index pointing to hdxb,rdiag,dep
+          !  and copy them into a new array
+          ! TODO, this needs to be faster
+          !  precalculate bounds for the observation?
+          call timer_start(timerloc)
+          ob_cnt_lg = 0
+          loc_loop: do i=ob_cnt,1,-1
+             rloc = letkf_loc_localize(ij, lg, rdist(i), obidx(i), loc_hz_ij)
+             ! if localization is 0, ignore this ob by moving it to the back
+             if (rloc > 0.0) then
+                ob_cnt_lg = ob_cnt_lg + 1
+                lrloc(ob_cnt_lg) = rloc
+                lhdxb(:,ob_cnt_lg) = hdxb(:,i)
+                lrdiag(ob_cnt_lg) = rdiag(i)
+                ldep(ob_cnt_lg) = dep(i)
+             end if
+          end do loc_loop
+          call timer_stop(timerloc)
 
+
+          ! if there are still good quality observations to assimilate, do so
+          if (ob_cnt_lg > 0) then
+             
+             ! main LETKF equations
+             call timer_start(timer2)
+             call letkf_core_solve(ob_cnt_lg,&
+                  lhdxb(:,:ob_cnt_lg), lrdiag(:ob_cnt_lg), lrloc(:ob_cnt_lg),&
+                  ldep(:ob_cnt_lg), 1.0e0, trans)
+             call timer_stop(timer2)
+
+             ! calculate the ensemble increments by applying the trans matrix
+             !TODO, if not doing vertical localization, do all grid_ns layers at once
+             ! .. if it turns out to be any faster
+             call timer_start(timer3)
+             do i=1,loc_groups(lg)%count
+                slab = loc_groups(lg)%slab(i)
+                call sgemm('n','n', 1, mem, mem, 1.0e0, bkg_ij(:,slab,ij),&
+                     1, trans, mem, 0.0e0, ana_ij(:,slab,ij), 1)
+             end do
+             call timer_stop(timer3)
+          end if
+       end do lg_loop
+
+          
        ! recenter analysis perturbations on new analysis mean
        do i=1,grid_ns
           ana_ij(:,i,ij) = ana_ij(:,i,ij) + bkg_mean_ij(i,ij)
@@ -400,8 +451,8 @@ contains
           ana_sprd_ij(i,ij) = sqrt(&
                dot_product(ana_ij(:,i,ij)-ana_mean_ij(i,ij),ana_ij(:,i,ij)-ana_mean_ij(i,ij)) /mem)
        end do
-
-    end do
+       
+    end do ij_loop
 
   end subroutine letkf_do_letkf
   !================================================================================

@@ -12,10 +12,18 @@ module letkf_mpi
   !------------------------------------------------------------
   public :: letkf_mpi_preinit, letkf_mpi_init, letkf_mpi_final
   public :: letkf_mpi_setgrid
-  public :: letkf_mpi_obs, letkf_mpi_grd2ij, letkf_mpi_ij2grd
+  public :: letkf_mpi_obs, letkf_mpi_ij2grd !, letkf_mpi_grd2ij
   public :: letkf_mpi_ens2ij, letkf_mpi_ij2ens
   public :: letkf_mpi_barrier
 
+  public :: letkf_mpi_grd2ij_real
+  public :: letkf_mpi_grd2ij_logical
+
+  !TODO, why does this interface not work
+!   interface letkf_mpi_grd2ij
+!      module procedure letkf_mpi_grd2ij_real
+!      module procedure letkf_mpi_grd2ij_logical
+!   end interface
 
   ! public module variables
   ! ------------------------------------------------------------
@@ -262,7 +270,7 @@ contains
 
   !================================================================================
   !================================================================================
-  subroutine letkf_mpi_grd2ij(grd, ij)
+  subroutine letkf_mpi_grd2ij_real(grd, ij)
     !! Takes a single grid on the root process and distributes
     !! portions of it to the worker processes
 
@@ -296,7 +304,48 @@ contains
        print *, "ERROR: with letkf_mpi_grd2ij",ierr
        stop 1
     end if
-  end subroutine letkf_mpi_grd2ij
+  end subroutine letkf_mpi_grd2ij_real
+  !================================================================================
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_mpi_grd2ij_logical(grd, ij)
+    !! Takes a single grid on the root process and distributes
+    !! portions of it to the worker processes
+
+    logical, intent(in) :: grd(grid_nx*grid_ny)
+      !! The 2D grid to send.
+      !! ***Shape is ([[letkf_mpi:grid_nx]], [[letkf_mpi:grid_ny]])***
+
+    logical, intent(inout) :: ij(ij_count)
+      !! The gridpoints this process is responsible for using.
+      !! ***Shape is ([[letkf_mpi:ij_count]])***
+
+    integer :: ierr,i,j
+    logical :: wrk(grid_nx*grid_ny)
+
+    if(.not.interleave) then
+       call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_logical, &
+            ij, ij_count, mpi_logical, pe_root, mpi_comm_letkf, ierr)
+    else
+       if (pe_isroot) then
+          do i=1,pe_size
+             do j=1,scatterv_count(i)
+                wrk(scatterv_displ(i)+j) = grd((j-1)*pe_size+i)
+             end do
+          end do
+       end if
+       call mpi_scatterv(wrk, scatterv_count, scatterv_displ, mpi_logical, &
+            ij, ij_count, mpi_logical, pe_root, mpi_comm_letkf, ierr)
+    end if
+
+    if(ierr /= 0) then
+       print *, "ERROR: with letkf_mpi_grd2ij",ierr
+       stop 1
+    end if
+  end subroutine letkf_mpi_grd2ij_logical
   !================================================================================
 
 

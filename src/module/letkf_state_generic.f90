@@ -27,21 +27,69 @@ module letkf_state_generic
 contains
 
 
+
+  !================================================================================
+  !================================================================================
   function stateio_get_name(self) result(str)
     class(stateio_generic) :: self
     character(:), allocatable :: str
     str = "LETKF_GENERIC"
     self%i = self%i
   end function stateio_get_name
+  !================================================================================
 
 
+
+
+  !================================================================================
+  !================================================================================
   function stateio_get_desc(self) result(str)
     class(stateio_generic) :: self
     character(:), allocatable :: str
     str = "generic netCDF state I/O"
     self%i = self%i
   end function stateio_get_desc
+  !================================================================================    
+
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine stateio_init(self)
+    class(stateio_generic) :: self
+    integer :: ncid, varid
+    integer :: i
+
+    ! set the variable name properties
+    !TODO read this from a configuration file
+    allocate(state_var(2))
+    state_var(1) = "OCN_T"
+    state_var(2) = "OCN_S"
+    slab_var(1:40) = 1
+    slab_var(41:80) = 2
+    do i=1,40
+       slab_lvl(i)=i
+       slab_lvl(i+40) = i
+    end do
     
+
+    ! read in some things from the grid spec file
+    ! TODO, move this to stateio_latlon ?
+    call check(nf90_open('INPUT/grid_spec.nc', nf90_write, ncid))
+    allocate(nom_lon(grid_nx))
+    allocate(nom_lat(grid_ny))
+    allocate(depths(grid_nz))
+    call check(nf90_inq_varid(ncid, "grid_x_T", varid))
+    call check(nf90_get_var(ncid, varid, nom_lon))
+    call check(nf90_inq_varid(ncid, "grid_y_T", varid))
+    call check(nf90_get_var(ncid, varid, nom_lat))
+    call check(nf90_inq_varid(ncid, "zt", varid))
+    call check(nf90_get_var(ncid, varid, depths))
+    call check(nf90_close(ncid))
+  end subroutine stateio_init
+  !================================================================================
+
 
   subroutine stateio_latlon(self, lat, lon)
     class(stateio_generic) :: self
@@ -64,40 +112,27 @@ contains
 
   subroutine stateio_mask(self, mask)
     class(stateio_generic) :: self
-    real, intent(inout) :: mask(:,:)
+    logical, intent(inout) :: mask(:,:)
     integer :: ncid, varid
+
+    real :: wrk(grid_nx,grid_ny)
 
     ! pointless statement to prevent "self" not used warnings
     self%i = self%i
 
     call check(nf90_open('INPUT/grid_spec.nc', nf90_nowrite, ncid))
     call check(nf90_inq_varid(ncid, 'wet', varid))
-    call check(nf90_get_var(ncid, varid, mask))
+    call check(nf90_get_var(ncid, varid, wrk))
+    where(wrk <= tiny(0.0))
+       mask = .true.
+    elsewhere
+       mask = .false.
+    end where
     call check(nf90_close(ncid))
   end subroutine stateio_mask
 
 
 
-  subroutine stateio_init(self)
-    class(stateio_generic) :: self
-    integer :: ncid, varid
-
-!    grid_nx = x
-!    grid_ny = y
-!    grid_nz = z
-
-    call check(nf90_open('INPUT/grid_spec.nc', nf90_write, ncid))
-    allocate(nom_lon(grid_nx))
-    allocate(nom_lat(grid_ny))
-    allocate(depths(grid_nz))
-    call check(nf90_inq_varid(ncid, "grid_x_T", varid))
-    call check(nf90_get_var(ncid, varid, nom_lon))
-    call check(nf90_inq_varid(ncid, "grid_y_T", varid))
-    call check(nf90_get_var(ncid, varid, nom_lat))
-    call check(nf90_inq_varid(ncid, "zt", varid))
-    call check(nf90_get_var(ncid, varid, depths))
-    call check(nf90_close(ncid))
-  end subroutine stateio_init
 
 
 
