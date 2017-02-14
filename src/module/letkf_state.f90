@@ -422,10 +422,10 @@ contains
 
     ! determine which processes are going to output which of the bkg/ana mean/spread
     ! so that we can write them in parallel
-    rank_bm = mod(pe_size  , 4)
-    rank_bs = mod(pe_size+1, 4)
-    rank_am = mod(pe_size+2, 4)
-    rank_as = mod(pe_size+3, 4)
+    rank_bm = mod(pe_size  , min(4,pe_size))
+    rank_bs = mod(pe_size+1, min(4,pe_size))
+    rank_am = mod(pe_size+2, min(4,pe_size))
+    rank_as = mod(pe_size+3, min(4,pe_size))
     if (pe_isroot) then
        print *, ""
        print *, "Saving ana/bkg mean/sprd"
