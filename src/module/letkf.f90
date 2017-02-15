@@ -28,6 +28,7 @@ module letkf
   real :: infl_rtps = 0.0
   real :: infl_rtpp = 0.0
   real :: loc_hz(2) = (/-1.0,-1.0/)
+  real :: loc_prune = 0.0
   real, allocatable :: diag_count_ij(:,:)
   integer :: t_total,  t_init
 
@@ -112,7 +113,7 @@ contains
     integer :: i
 
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
-    namelist /letkf_localization/ loc_hz
+    namelist /letkf_localization/ loc_hz, loc_prune
 
     if(pe_isroot) then
        print *, new_line('a'),&
@@ -264,7 +265,7 @@ contains
     integer :: timer1, timer2, n, timer3, timerloc
     integer :: i, lg, slab
     integer, parameter :: progress_bar_size = 45
-    real :: rloc
+    real :: rloc, r
     real :: loc_hz_max
     real :: loc_hz_ij
     real, parameter :: pi = 4.0*atan(1.0)
@@ -365,9 +366,9 @@ contains
           !  precalculate bounds for the observation?
           call timer_start(timerloc)
           ob_cnt_lg = 0
-          loc_loop: do i=ob_cnt,1,-1
+          loc_loop: do i=1,ob_cnt
              rloc = letkf_loc_localize(ij, lg, rdist(i), obidx(i), loc_hz_ij)
-             ! if localization is 0, ignore this ob by moving it to the back
+             ! if localization is 0, ignore this
              if (rloc > 0.0) then
                 ob_cnt_lg = ob_cnt_lg + 1
                 lrloc(ob_cnt_lg) = rloc
@@ -378,6 +379,21 @@ contains
           end do loc_loop
           call timer_stop(timerloc)
 
+          !if pruning obs based on the ratio of rloc to max(rloc)
+          if(loc_prune > 0.0 ) then
+             r = maxval(lrloc(:ob_cnt_lg)) * loc_prune
+             do i=ob_cnt_lg,1,-1
+                if(lrloc(i)<r) then
+                   if(i<ob_cnt_lg) then
+                      lrloc(i)=lrloc(ob_cnt_lg)
+                      lhdxb(:,i) = lhdxb(:,ob_cnt_lg)
+                      lrdiag(i) = lrdiag(ob_cnt_lg)
+                      ldep(i) = ldep(ob_cnt_lg)
+                   end if
+                   ob_cnt_lg = ob_cnt_lg -1
+                end if
+             end do             
+          end if
 
           ! if there are still good quality observations to assimilate, do so
           if (ob_cnt_lg > 0) then

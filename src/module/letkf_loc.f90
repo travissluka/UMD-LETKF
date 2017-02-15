@@ -19,7 +19,10 @@ module letkf_loc
 
 
 
+  logical, parameter :: noloc = .false.
 
+
+  
 contains
 
 
@@ -27,10 +30,11 @@ contains
 
   !================================================================================
   !================================================================================
-  function letkf_loc_getgroups(ij) result(grps)
+  pure function letkf_loc_getgroups(ij) result(grps)
     integer, intent(in) :: ij
     type(letkf_loc_group), allocatable :: grps(:)
     integer:: i
+
 
 
     ! TODO, create configurable loc groups (make sure for this
@@ -39,21 +43,24 @@ contains
     ! TODO, do the allocation beforehand and save it if we
     !  are not doing dynamic loc groups, should be faster
 
-    ! allocate(grps(40))
-    ! do i=1,40
-    !    grps(i)%count=2
-    !    allocate(grps(i)%slab(2))
-    !    grps(i)%slab(1) = i
-    !    grps(i)%slab(2) = i+40
-    ! end do
+    
 
-
-    allocate(grps(1))
-    grps(1)%count=80
-    allocate(grps(1)%slab(80))
-    do i=1,80
-       grps(1)%slab(i) = i
-    end do
+    if(noloc) then
+       allocate(grps(1))
+       grps(1)%count=80
+       allocate(grps(1)%slab(80))
+       do i=1,80
+          grps(1)%slab(i) = i
+       end do
+    else
+       allocate(grps(20))
+       do i=1,20
+          grps(i)%count=2
+          allocate(grps(i)%slab(2))
+          grps(i)%slab(1) = i
+          grps(i)%slab(2) = i+40
+       end do
+    end if
     
   end function letkf_loc_getgroups
   !================================================================================
@@ -76,12 +83,13 @@ contains
     ! TODO, caching of horizontal localization, for instances where
     ! horizontal scale is the same for each lg
 
-    ! grd_depth = -5.0 + grd_lg*10.0  
-    ! val = loc_gc(ob_dist, tmp) * &
-    !       loc_gc( abs(obs_list(ob_idx)%depth - grd_depth), 10.0)
-
-    val = loc_gc(ob_dist, tmp)
-
+    if(noloc) then
+       val = loc_gc(ob_dist, tmp)
+    else
+       grd_depth = -5.0 + grd_lg*10.0  
+       val = loc_gc(ob_dist, tmp) * &
+            loc_gc( abs(obs_list(ob_idx)%depth - grd_depth), 20.0)
+    end if
 
   end function letkf_loc_localize
   !================================================================================
