@@ -9,7 +9,7 @@ module letkf
   use letkf_core
   use letkf_loc
   use letkf_state
-  use letkf_state_generic
+  use letkf_state_nc
 
   implicit none
   private
@@ -83,7 +83,7 @@ contains
     allocate(obsio_nc :: obsio_ptr)
     call letkf_obs_register(obsio_ptr)
 
-    allocate(stateio_generic :: stateio_ptr)
+    allocate(stateio_nc :: stateio_ptr)
     call letkf_state_register(stateio_ptr)
 
     ! initialize other modules
@@ -350,6 +350,9 @@ contains
        end do
        call timer_stop(timer1)
 
+       ! TODO, for each observation, generate a list of localization groups
+       ! to which i should be applied
+
 
        ! perform the core letkf equations and apply transformation matrix
        ! to the background ensemble for EACH localization group
@@ -362,13 +365,14 @@ contains
           ! so that it can be ignored by the letkf_core.
           ! TODO, see if its faster to instead move and index pointing to hdxb,rdiag,dep
           !  and copy them into a new array
-          ! TODO, this needs to be faster
-          !  precalculate bounds for the observation?
           call timer_start(timerloc)
           ob_cnt_lg = 0
           loc_loop: do i=1,ob_cnt
+
+             ! TODO, drop this ob, without calculating rloc, if out of bounds
+             ! for this lg
+             
              rloc = letkf_loc_localize(ij, lg, rdist(i), obidx(i), loc_hz_ij)
-             ! if localization is 0, ignore this
              if (rloc > 0.0) then
                 ob_cnt_lg = ob_cnt_lg + 1
                 lrloc(ob_cnt_lg) = rloc
@@ -379,7 +383,7 @@ contains
           end do loc_loop
           call timer_stop(timerloc)
 
-          !if pruning obs based on the ratio of rloc to max(rloc)
+          ! if pruning obs based on the ratio of rloc to max(rloc)
           if(loc_prune > 0.0 ) then
              r = maxval(lrloc(:ob_cnt_lg)) * loc_prune
              do i=ob_cnt_lg,1,-1

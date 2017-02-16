@@ -1,14 +1,15 @@
-module letkf_state_generic
+module letkf_state_nc
   ! TODO, make an actual generic one... this is for the MOM4 grid
+  use letkf_mpi ! TODO, remove this
   use letkf_state
   use netcdf
 
   implicit none
   private
 
-  public :: stateio_generic
+  public :: stateio_nc
 
-  type, extends(stateio) :: stateio_generic
+  type, extends(stateio) :: stateio_nc
    contains
      procedure :: get_name => stateio_get_name
      procedure :: get_desc => stateio_get_desc
@@ -17,13 +18,30 @@ module letkf_state_generic
      procedure :: write    => stateio_write
      procedure :: latlon   => stateio_latlon
      procedure :: mask     => stateio_mask
-  end type stateio_generic
+  end type stateio_nc
 
   integer, parameter :: grid_nz = 40
 
   real, allocatable :: nom_lon(:), nom_lat(:), depths(:)
 
 
+  
+  character(len=*), parameter :: statedef_file = "statedef.cfg"
+
+
+  type data_entry
+     character(len=30)  :: w1
+     character(len=30)  :: w2
+     character(len=512) :: w3
+     integer :: i
+  end type data_entry
+
+  integer, parameter :: max_vars = 100
+  integer            :: num_vars = 0
+  type(data_entry)   :: data_entries(max_vars)
+
+
+  
 contains
 
 
@@ -31,9 +49,9 @@ contains
   !================================================================================
   !================================================================================
   function stateio_get_name(self) result(str)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     character(:), allocatable :: str
-    str = "LETKF_GENERIC"
+    str = "LETKF_NC"
     self%i = self%i
   end function stateio_get_name
   !================================================================================
@@ -44,7 +62,7 @@ contains
   !================================================================================
   !================================================================================
   function stateio_get_desc(self) result(str)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     character(:), allocatable :: str
     str = "generic netCDF state I/O"
     self%i = self%i
@@ -54,13 +72,111 @@ contains
 
 
 
+  function getline(str) result(line)
+    character(len=*), intent(in) :: str
+    integer :: line, i
+    line = -1
+    do i=1,num_vars       
+       if(toupper(trim(str)) == toupper(trim(data_entries(i)%w1))) then
+          line = i
+          return
+       end if
+    end do
+  end function getline
+
+
   !================================================================================
   !================================================================================
   subroutine stateio_init(self)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     integer :: ncid, varid
-    integer :: i
+    integer :: i, unit, iostat, i1,i2,i3
+    logical :: ex
+    character(len=1024) :: line
+    type(data_entry) :: newline  
+     
+    ! read in the statedef configuration file
+    ! ------------------------------------------------------------
+    if(pe_isroot) then
+       print *, ''
+       print *, ""
+       print *, "state_generic initialization"
+       print *, "------------------------------------------------------------"
+       print *, "Reading file '", trim(statedef_file),"' ..."
+    end if
 
+    ! make sure the file exists
+    inquire(file=statedef_file, exist=ex)
+    if (.not. ex) then
+       print *, 'ERROR: file does not exist: "', trim(statedef_file), '"'
+       stop 1
+    end if
+
+    ! open it up for reading
+    open(newunit=unit, file=statedef_file, action='read')
+    do while(.true.)
+       ! read a new line
+       read(unit, '(A)', iostat=iostat) line
+       if (iostat < 0) exit
+       if (iostat > 0) then
+          print *, 'ERROR: there was a problem reading the file.'
+          print *, '  error code: ',iostat
+          stop 1
+       end if
+
+       ! convert tabs to spaces
+       do i=1, len(line)
+          if(line(i:i) == char(9)) line(i:i) = ' '
+       end do
+
+       ! ignore comments / empty lines
+       line = adjustl(line)
+       if(line(1:1) == '#') cycle
+       if(len(trim(adjustl(line))) == 0) cycle
+
+       ! read in the line
+       read(line, *, iostat=iostat) newline
+       newline%w1 = toupper(newline%w1)
+       if(num_vars == max_vars) then
+          print *, "ERROR: too many lines in ",trim(statedef_file)
+          stop 1
+       end if
+       if(getline(newline%w1) >0) then
+          print *, "ERROR: duplicate entry '",trim(newline%w1),"'"
+          stop 1
+       end if
+       num_vars = num_vars + 1
+       data_entries(num_vars) = newline
+    end do
+
+    ! read in the lat/lon
+    i1 = getline('grid_lon_1d')
+    i2 = getline('grid_lon_2d')
+    if( .not. xor(i1 > 0, i2 >0) ) then
+       print *, "ERROR: one, and only one of the following must be specified: 'grid_lon_2d' 'grid_lon_1d'"
+       stop 1
+    end if
+    i1 = getline('grid_lat_1d')
+    i2 = getline('grid_lat_2d')
+    if( .not. xor(i1 > 0, i2 >0) ) then
+       print *, "ERROR: only one of the following can be specified: 'grid_lat_2d' 'grid_lat_1d'"
+       stop 1
+    end if
+    
+    ! read the z
+    i1 = getline('grid_z_1d')
+    i2 = getline('grid_z_2d')
+    if( .not. xor(i1 > 0, i2 >0) ) then
+       print *, "ERROR: only one of the following can be specified: 'grid_z_2d' 'grid_z_1d'"
+       stop 1
+    end if
+
+   
+    !------------------------------------------------------------
+    
+    ! every other variable remaining is a state variable
+    
+    
     ! set the variable name properties
     !TODO read this from a configuration file
     allocate(state_var(2))
@@ -92,7 +208,7 @@ contains
 
 
   subroutine stateio_latlon(self, lat, lon)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     real, intent(inout) :: lat(:,:)
     real, intent(inout) :: lon(:,:)
     integer :: ncid, varid
@@ -111,7 +227,7 @@ contains
 
 
   subroutine stateio_mask(self, mask)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     logical, intent(inout) :: mask(:,:)
     integer :: ncid, varid
 
@@ -137,7 +253,7 @@ contains
 
 
   subroutine stateio_read(self, filename, state)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     character(len=*), intent(in)  :: filename
     real, intent(out) :: state(:,:,:)
 
@@ -155,7 +271,7 @@ contains
 
 
   subroutine stateio_write(self, filename, state)
-    class(stateio_generic) :: self
+    class(stateio_nc) :: self
     character(len=*), intent(in)  :: filename
     real, intent(in) :: state(:,:,:)
 
@@ -190,6 +306,21 @@ contains
 
 
 
+  function toupper(in_str) result(out_str)
+    character(*), intent(in) :: in_str
+    character(len(in_str))   :: out_str
+    integer :: i
+    integer, parameter :: offset = 32
+
+    out_str = in_str
+    do i =1, len(out_str)
+       if (out_str(i:i) >= "a" .and. out_str(i:i) <= "z") then
+          out_str(i:i) = achar(iachar(out_str(i:i)) - offset)
+       end if
+    end do
+  end function toupper
+
+
   subroutine check(status)
     integer, intent(in) :: status
     if(status /= nf90_noerr) then
@@ -197,4 +328,4 @@ contains
        stop 1
     end if
   end subroutine check
-end module letkf_state_generic
+end module letkf_state_nc
