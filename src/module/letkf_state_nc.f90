@@ -16,8 +16,8 @@ module letkf_state_nc
      procedure :: init     => stateio_init
      procedure :: read     => stateio_read
      procedure :: write    => stateio_write
-     procedure :: latlon   => stateio_latlon
-     procedure :: mask     => stateio_mask
+!     procedure :: latlon   => stateio_latlon
+!     procedure :: mask     => stateio_mask
   end type stateio_nc
 
   integer, parameter :: grid_nz = 40
@@ -72,6 +72,8 @@ contains
 
 
 
+  !================================================================================
+  !================================================================================
   function getline(str) result(line)
     character(len=*), intent(in) :: str
     integer :: line, i
@@ -83,12 +85,20 @@ contains
        end if
     end do
   end function getline
+  !================================================================================
+
 
 
   !================================================================================
   !================================================================================
-  subroutine stateio_init(self)
-    class(stateio_nc) :: self
+  subroutine stateio_init(self, lat, lon, mask)
+    class(stateio_nc)   :: self
+    real, intent(inout) :: lat(:,:)
+    real, intent(inout) :: lon(:,:)
+    logical, intent(inout) :: mask(:,:)
+
+    real :: tmp(grid_nx, grid_ny)
+
     integer :: ncid, varid
     integer :: i, unit, iostat, i1,i2,i3
     logical :: ex
@@ -149,122 +159,190 @@ contains
        data_entries(num_vars) = newline
     end do
 
-    ! read in the lat/lon
-    i1 = getline('grid_lon_1d')
-    i2 = getline('grid_lon_2d')
-    if( .not. xor(i1 > 0, i2 >0) ) then
-       print *, "ERROR: one, and only one of the following must be specified: 'grid_lon_2d' 'grid_lon_1d'"
-       stop 1
+    ! ------------------------------------------------------------
+    ! read in grid definitions
+    if(pe_isroot) then
+       print *, ""
+       print *, "grid defnition..."
     end if
+    ! TODO clean this up
+    ! TODO give choice between 1d or 2d
+    ! TODO allow specification in cfg file of type (real, logical, int) and inversion (for mask)
+
+    ! read in the lat
     i1 = getline('grid_lat_1d')
     i2 = getline('grid_lat_2d')
     if( .not. xor(i1 > 0, i2 >0) ) then
-       print *, "ERROR: only one of the following can be specified: 'grid_lat_2d' 'grid_lat_1d'"
+       print *, "ERROR: one, and only one of the following must be specified: ",&
+            "'grid_lat_2d' 'grid_lat_1d'"
        stop 1
     end if
-    
-    ! read the z
-    i1 = getline('grid_z_1d')
-    i2 = getline('grid_z_2d')
+    if(pe_isroot) then
+       print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
+            '" of file "',trim(data_entries(i2)%w3),'"'
+    end if
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
+    call check(nf90_get_var(ncid, varid, lat))
+    call check(nf90_close(ncid))
+
+    ! read in the lon
+    i1 = getline('grid_lon_1d')
+    i2 = getline('grid_lon_2d')
     if( .not. xor(i1 > 0, i2 >0) ) then
-       print *, "ERROR: only one of the following can be specified: 'grid_z_2d' 'grid_z_1d'"
+       print *, "ERROR: one, and only one of the following must be specified: ",&
+            "'grid_lon_2d' 'grid_lon_1d'"
        stop 1
     end if
+    if(pe_isroot) then
+       print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
+            '" of file "',trim(data_entries(i2)%w3),'"'
+    end if
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
+    call check(nf90_get_var(ncid, varid, lon))
+    call check(nf90_close(ncid))
 
-   
-    !------------------------------------------------------------
-    
-    ! every other variable remaining is a state variable
-    
-    
-    ! set the variable name properties
-    !TODO read this from a configuration file
-    allocate(state_var(2))
-    state_var(1) = "OCN_T"
-    state_var(2) = "OCN_S"
-    slab_var(1:40) = 1
-    slab_var(41:80) = 2
-    do i=1,40
-       slab_lvl(i)=i
-       slab_lvl(i+40) = i
-    end do
-    
-
-    ! read in some things from the grid spec file
-    ! TODO, move this to stateio_latlon ?
-    call check(nf90_open('INPUT/grid_spec.nc', nf90_write, ncid))
+    ! read in the nom lat 
     allocate(nom_lon(grid_nx))
     allocate(nom_lat(grid_ny))
     allocate(depths(grid_nz))
-    call check(nf90_inq_varid(ncid, "grid_x_T", varid))
-    call check(nf90_get_var(ncid, varid, nom_lon))
-    call check(nf90_inq_varid(ncid, "grid_y_T", varid))
+
+    i2 = getline('grid_lat_nom')
+    if(pe_isroot) then
+       print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
+            '" of file "',trim(data_entries(i2)%w3),'"'
+    end if
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
     call check(nf90_get_var(ncid, varid, nom_lat))
-    call check(nf90_inq_varid(ncid, "zt", varid))
+    call check(nf90_close(ncid))
+
+    i2 = getline('grid_lon_nom')
+    if(pe_isroot) then
+       print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
+            '" of file "',trim(data_entries(i2)%w3),'"'
+    end if
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
+    call check(nf90_get_var(ncid, varid, nom_lon))
+    call check(nf90_close(ncid))
+
+    i2 = getline('grid_z_1d')
+    if(pe_isroot) then
+       print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
+            '" of file "',trim(data_entries(i2)%w3),'"'
+    end if
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
     call check(nf90_get_var(ncid, varid, depths))
     call check(nf90_close(ncid))
-  end subroutine stateio_init
-  !================================================================================
-
-
-  subroutine stateio_latlon(self, lat, lon)
-    class(stateio_nc) :: self
-    real, intent(inout) :: lat(:,:)
-    real, intent(inout) :: lon(:,:)
-    integer :: ncid, varid
-
-    ! pointless statement to prevent "self" not used warnings
-    self%i = self%i
-
-    call check(nf90_open('INPUT/grid_spec.nc', nf90_nowrite, ncid))
-    call check(nf90_inq_varid(ncid, 'x_T', varid))
-    call check(nf90_get_var(ncid, varid, lon))
-    call check(nf90_inq_varid(ncid, 'y_T', varid))
-    call check(nf90_get_var(ncid, varid, lat))
+       
+    
+    ! read in the mask
+    i2 = getline('grid_mask_2d')
+    if(pe_isroot) then
+       print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
+            '" of file "',trim(data_entries(i2)%w3),'"'
+    end if
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
+    call check(nf90_get_var(ncid, varid, tmp))
     call check(nf90_close(ncid))
-  end subroutine stateio_latlon
-
-
-
-  subroutine stateio_mask(self, mask)
-    class(stateio_nc) :: self
-    logical, intent(inout) :: mask(:,:)
-    integer :: ncid, varid
-
-    real :: wrk(grid_nx,grid_ny)
-
-    ! pointless statement to prevent "self" not used warnings
-    self%i = self%i
-
-    call check(nf90_open('INPUT/grid_spec.nc', nf90_nowrite, ncid))
-    call check(nf90_inq_varid(ncid, 'wet', varid))
-    call check(nf90_get_var(ncid, varid, wrk))
-    where(wrk <= tiny(0.0))
+    where (tmp < tiny(0.0))
        mask = .true.
     elsewhere
        mask = .false.
     end where
-    call check(nf90_close(ncid))
-  end subroutine stateio_mask
 
 
 
+    !------------------------------------------------------------   
+    ! read in the state variable configurations
+    if(pe_isroot) then
+       print *, ""
+       print *, "state variables defnition..."
+    end if
+    
+    ! get the number of state variables
+    i1 = 0
+    do i=1,num_vars
+       if( data_entries(i)%w1(1:5) == 'GRID_') cycle
+       i1 = i1 +1
+    end do
+    if(pe_isroot) then
+       print *, "processing ",i1,"state variables"
+    end if
+    allocate(state_var(i1))
+    i1 = 0
+    i2 = 1
+    i3 = 1
+    do i=1,num_vars       
+       if( data_entries(i)%w1(1:5) == 'GRID_') cycle
+       i1 = i1 + 1
+       i3 = max(data_entries(i)%i,1)-1+i2
+       if(pe_isroot) then
+          print '(A,I5,A,I5,A,A10,5A)', "  slab",i2,' to ',i3,' is ',trim(data_entries(i)%w1), ' from "',&
+               trim(data_entries(i)%w2),'" of "', trim(data_entries(i)%w3),'"'
+       end if
+
+       state_var(i1) = trim(data_entries(i)%w1)
+       slab_var(i2:i3) = i1       
+
+       i2 = i3+1
+    end do
+
+    if(i3 /= grid_ns) then
+       if(pe_isroot) then
+          print *, "ERROR: slabs defined only add up to",i3,". But grid_ns is set to ",grid_ns
+       end if
+       
+       call letkf_mpi_barrier(.true.)
+       stop 1
+
+    end if
+  end subroutine stateio_init
+  !================================================================================
 
 
 
-  subroutine stateio_read(self, filename, state)
+  subroutine stateio_read(self, ens, state)
     class(stateio_nc) :: self
-    character(len=*), intent(in)  :: filename
+    integer, intent(in) :: ens
     real, intent(out) :: state(:,:,:)
 
+    character(len=1024)  :: filename
     integer :: ncid, varid
+    integer :: i, j, i1,i2, i3, i4, k
 
-    call check(nf90_open(trim(filename)//'.nc', nf90_nowrite, ncid))
-    call check(nf90_inq_varid(ncid, "temp", varid))
-    call check(nf90_get_var(ncid, varid, state(:,:,1:40)))
-    call check(nf90_inq_varid(ncid, "salt", varid))
-    call check(nf90_get_var(ncid, varid, state(:,:,41:80)))
-    call check(nf90_close(ncid))
+    do i=1,size(state_var)
+        j =  getline(state_var(i))
+! !       print *, state_var(i), trim(data_entries(j)%w2), "  ",trim(data_entries(j)%w3)
+
+
+        ! TODO, add logic to use ENS0X, and/or ENSX
+        i1=index(toupper(data_entries(j)%w3), '{ENS04}')
+        i2 = i1+7
+        write (filename, '(A,I0.4,A)') data_entries(j)%w3(1:i1-1), ens, trim(data_entries(j)%w3(i2:))
+
+        ! determine start/stop slabs for this var
+        ! TODO, handle differently if slabs are arranged with entire LEVELS grouped together
+        do i3=1,grid_ns
+           if(slab_var(i3) == i) exit
+        end do
+        do k=1,grid_ns
+           if(slab_var(k) == i) i4 = k
+        end do
+
+!        print '(I5,A,A10,A,I3,A,I3,4A)', ens," ", state_var(i) ," into ",i3,":",i4,&
+!             ' from ',trim(data_entries(j)%w2), "  ",trim(filename)
+
+              
+        call check(nf90_open(trim(filename), nf90_nowrite, ncid))
+        call check(nf90_inq_varid(ncid, trim(data_entries(j)%w2), varid))
+        call check(nf90_get_var(ncid, varid, state(:,:,i3:i4)))
+        call check(nf90_close(ncid))
+    end do
 
   end subroutine stateio_read
 
@@ -276,7 +354,9 @@ contains
     real, intent(in) :: state(:,:,:)
 
     integer :: ncid
-    integer :: d_x, d_y, d_z, v_t, v_s, v_x, v_y, v_z
+    integer :: d_x, d_y, d_z, v_x, v_y, v_z
+    integer :: v_v(size(state_var))
+    integer :: i3, i4, i ,j, k
 
     call check(nf90_create(trim(filename)//'.nc', nf90_write, ncid))
     call check(nf90_def_dim(ncid, "grid_x", grid_nx, d_x))
@@ -291,15 +371,40 @@ contains
     call check(nf90_def_var(ncid, "grid_z", nf90_real, (/d_z/), v_z))
     call check(nf90_put_att(ncid, v_z, "units", "meters"))
 
-    call check(nf90_def_var(ncid, "temp",  nf90_real, (/d_x,d_y,d_z/), v_t))
-    call check(nf90_def_var(ncid, "salt",  nf90_real, (/d_x,d_y,d_z/), v_s))
+    
+    do i=1,size(state_var)
+        j =  getline(state_var(i))
+        do i3=1,grid_ns
+           if(slab_var(i3) == i) exit
+        end do
+        do k=1,grid_ns
+           if(slab_var(k) == i) i4 = k
+        end do
+        
+        !TODO, allow for 2d variables as well
+        call check(nf90_def_var(ncid, trim(data_entries(j)%w2),  nf90_real, (/d_x,d_y,d_z/), v_v(i)))
+              
+    end do
     call check(nf90_enddef(ncid))
 
-    call check(nf90_put_var(ncid, v_t, state(:,:,1:40)))
-    call check(nf90_put_var(ncid, v_s, state(:,:,41:80)))
     call check(nf90_put_var(ncid, v_x, nom_lon))
     call check(nf90_put_var(ncid, v_y, nom_lat))
     call check(nf90_put_var(ncid, v_z, depths))
+
+    do i=1,size(state_var)
+        j =  getline(state_var(i))
+        do i3=1,grid_ns
+           if(slab_var(i3) == i) exit
+        end do
+        do k=1,grid_ns
+           if(slab_var(k) == i) i4 = k
+        end do
+        
+        !TODO, allow for 2d variables as well
+        call check(nf90_put_var(ncid, v_v(i), state(:,:,i3:i4)))              
+    end do
+
+
     call check(nf90_close(ncid))
 
   end subroutine stateio_write

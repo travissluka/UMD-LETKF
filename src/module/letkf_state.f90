@@ -59,8 +59,8 @@ module letkf_state
      procedure(I_stateio_init),   deferred :: init
      procedure(I_stateio_read),   deferred :: read
      procedure(I_stateio_write),  deferred :: write
-     procedure(I_stateio_latlon), deferred :: latlon
-     procedure(I_stateio_mask),   deferred :: mask
+!     procedure(I_stateio_latlon), deferred :: latlon
+!     procedure(I_stateio_mask),   deferred :: mask
   end type stateio
 
   abstract interface
@@ -70,15 +70,18 @@ module letkf_state
        character(:), allocatable :: str
      end function I_stateio_getstr
 
-     subroutine I_stateio_init(self)
+     subroutine I_stateio_init(self, lat, lon, mask)
        import stateio
        class(stateio) :: self
+       real,    intent(inout) :: lat(:,:), lon(:,:)
+       logical, intent(inout) :: mask(:,:)
      end subroutine I_stateio_init
 
-     subroutine I_stateio_read(self, filename, state)
+     subroutine I_stateio_read(self, ens, state)
        import stateio
        class(stateio) :: self
-       character(len=*),  intent(in)  :: filename
+!       character(len=*),  intent(in)  :: filename
+       integer, intent(in) :: ens
        real, intent(out) :: state(:,:,:)
      end subroutine I_stateio_read
 
@@ -127,7 +130,7 @@ module letkf_state
   logical, allocatable    :: mask(:,:)
 
   !TODO, make these private, and/or protected
-  character(len=8), public, allocatable :: state_var(:)
+  character(len=12), public, allocatable :: state_var(:)
   !! name of a state variable
   integer,          public, allocatable :: slab_var(:)
   !! state variable for each slab, gives an index in the [[letkf_state::state_var]] array
@@ -213,13 +216,10 @@ contains
     slab_var = -1
     slab_lvl = -1
     ! TODO, only one process needs to read in lat/lon/mask and scatter it
-    call stateio_class%init() 
-    allocate(lat(grid_nx, grid_ny))
-    allocate(lon(grid_nx, grid_ny))
-    call stateio_class%latlon(lat,lon)
+    allocate(lat (grid_nx, grid_ny))
+    allocate(lon (grid_nx, grid_ny))
     allocate(mask(grid_nx, grid_ny))
-    call stateio_class%mask(mask)
-
+    call stateio_class%init(lat, lon, mask) 
 
     ! tell the mpi module about the grid layout
     call letkf_mpi_setgrid(grid_nx, grid_ny, grid_ns)
@@ -305,10 +305,10 @@ contains
     tbgread = timer_init("    bkg_read", TIMER_SYNC)
     call timer_start(tbgread)
     do m=1,size(ens_list)
-       write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
-       print '(A,I5,3A)', " PROC ",pe_rank," is READING file: ",&
-            trim(filename),'.nc'
-       call stateio_class%read(filename, gues(:,:,:,m))
+!       write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
+       print '(A,I5,A,I5)', " PROC ",pe_rank," is READING ens member: ", ens_list(m)
+
+       call stateio_class%read(ens_list(m), gues(:,:,:, m))
     end do
     call timer_stop(tbgread)
 

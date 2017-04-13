@@ -19,7 +19,7 @@ module letkf_loc
 
 
 
-  logical, parameter :: noloc = .false.
+  logical, parameter :: noloc = .true.
 
 
   
