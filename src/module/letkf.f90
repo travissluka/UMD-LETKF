@@ -27,8 +27,6 @@ module letkf
   real :: infl_mul = 1.0
   real :: infl_rtps = 0.0
   real :: infl_rtpp = 0.0
-  real :: loc_hz(2) = (/-1.0,-1.0/)
-  real :: loc_prune = 0.0
   real, allocatable :: diag_count_ij(:,:)
   integer :: t_total,  t_init
 
@@ -44,8 +42,9 @@ contains
   !================================================================================
   subroutine letkf_driver_init()
     !! Initialize the LETKF module. This must be called before anything else.
-    class(obsio),   pointer :: obsio_ptr
-    class(stateio), pointer :: stateio_ptr
+    class(obsio),     pointer :: obsio_ptr
+    class(stateio),   pointer :: stateio_ptr
+    class(localizer), pointer :: loc_ptr
 
     integer :: timer
 
@@ -86,6 +85,11 @@ contains
     allocate(stateio_nc :: stateio_ptr)
     call letkf_state_register(stateio_ptr)
 
+    ! setup the default localizer classes, user can add theri own after calling
+    ! letkf_driver_init
+    allocate(localizer_novrt :: loc_ptr)
+    call letkf_loc_register(loc_ptr)
+    
     ! initialize other modules
     call letkf_obs_init(nml_filename, "obsdef.cfg", "platdef.cfg")
 
@@ -93,8 +97,11 @@ contains
     call timer_start(timer)
     call letkf_state_init(nml_filename)
     call timer_stop(timer)
+    
     call letkf_core_init(mem)
 
+    call letkf_loc_init(nml_filename)
+    
     call letkf_mpi_barrier(.true.)
 
   end subroutine letkf_driver_init
@@ -113,7 +120,6 @@ contains
     integer :: i
 
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
-    namelist /letkf_localization/ loc_hz, loc_prune
 
     if(pe_isroot) then
        print *, new_line('a'),&
@@ -125,23 +131,15 @@ contains
     ! read in main section of the  namelist
     open(newunit=unit, file=nml_filename)
     read(unit, nml=letkf_inflation)
-    rewind(unit)
-    read(unit, nml=letkf_localization)
     close(unit)
-    if (loc_hz(2) <= 0) loc_hz(2) = loc_hz(1)
     if (pe_isroot) then
        print letkf_inflation
        print *, ""
-       print letkf_localization
     end if
 
     !make sure inflation parameters are correct
     !TODO, these will be move to a separate module that deals with localization
     if(pe_isroot) then
-       if(loc_hz(1) <=0 .or. loc_hz(2) <= 0) then
-          print *, "ERROR: illegal values for loc_hz. ", loc_hz
-          stop 1
-       end if
        if(infl_rtps > 1.0 .or. infl_rtps < 0.0) then
           print *, "ERROR: illegal value for infl_rtps ",&
                "(should be < 1.0 and >0.0). Value given: ", infl_rtps
@@ -258,19 +256,21 @@ contains
     integer :: rnum, ob_cnt, ob_cnt_lg
 
     integer :: obidx(maxpt)
+    real :: rloc(maxpt)
     real :: hdxb(mem,maxpt), rdiag(maxpt), dep(maxpt), rdist(maxpt)
     real :: lhdxb(mem,maxpt), lrdiag(maxpt), lrloc(maxpt), ldep(maxpt)
     real :: trans(mem,mem)
+    
 
     integer :: timer1, timer2, n, timer3, timerloc
     integer :: i, lg, slab
     integer, parameter :: progress_bar_size = 45
-    real :: rloc, r
+    real :: r
     real :: loc_hz_max
     real :: loc_hz_ij
     real, parameter :: pi = 4.0*atan(1.0)
 
-    type(letkf_loc_group), allocatable :: loc_groups(:)
+    type(localizer_group), allocatable :: loc_groups(:)
 
     timer1   = timer_init("  obs_search")
     timerloc = timer_init("  obs_loc")
@@ -318,7 +318,8 @@ contains
        !TODO, use a precomputed cos(lat) grid
        !TODO move max hz distance into the localization module
        ! to allow for user-defined localization methods
-       loc_hz_ij = loc_hz(2) + (loc_hz(1)-loc_hz(2))*cos(lat_ij(ij) * pi/180.0)
+       !       loc_hz_ij = loc_hz(2) + (loc_hz(1)-loc_hz(2))*cos(lat_ij(ij) * pi/180.0)
+       loc_hz_ij = localizer_class%get_maxhz(ij)
        loc_hz_max = loc_hz_ij * sqrt(40.0/3.0)
 
        ! search for all observations in a given radius of this gridpoint
@@ -357,7 +358,10 @@ contains
        ! perform the core letkf equations and apply transformation matrix
        ! to the background ensemble for EACH localization group
        ! ------------------------------------------------------------
-       loc_groups = letkf_loc_getgroups(ij)
+       loc_groups = localizer_class%get_groups(ij)
+
+       !TODO, do a check to make sure each slab is handled in exactly 1 of the groups
+
        lg_loop: do lg=1,size(loc_groups)         
 
           ! determine observation localization
@@ -367,15 +371,16 @@ contains
           !  and copy them into a new array
           call timer_start(timerloc)
           ob_cnt_lg = 0
+
+          call localizer_class%localize(ij, loc_groups(lg), ob_cnt, rdist, obidx, rloc)
+
           loc_loop: do i=1,ob_cnt
 
              ! TODO, drop this ob, without calculating rloc, if out of bounds
              ! for this lg
-             
-             rloc = letkf_loc_localize(ij, lg, rdist(i), obidx(i), loc_hz_ij)
-             if (rloc > 0.0) then
+             if (rloc(i) > 0.0) then
                 ob_cnt_lg = ob_cnt_lg + 1
-                lrloc(ob_cnt_lg) = rloc
+                lrloc(ob_cnt_lg) = rloc(i)
                 lhdxb(:,ob_cnt_lg) = hdxb(:,i)
                 lrdiag(ob_cnt_lg) = rdiag(i)
                 ldep(ob_cnt_lg) = dep(i)
@@ -383,21 +388,21 @@ contains
           end do loc_loop
           call timer_stop(timerloc)
 
-          ! if pruning obs based on the ratio of rloc to max(rloc)
-          if(loc_prune > 0.0 ) then
-             r = maxval(lrloc(:ob_cnt_lg)) * loc_prune
-             do i=ob_cnt_lg,1,-1
-                if(lrloc(i)<r) then
-                   if(i<ob_cnt_lg) then
-                      lrloc(i)=lrloc(ob_cnt_lg)
-                      lhdxb(:,i) = lhdxb(:,ob_cnt_lg)
-                      lrdiag(i) = lrdiag(ob_cnt_lg)
-                      ldep(i) = ldep(ob_cnt_lg)
-                   end if
-                   ob_cnt_lg = ob_cnt_lg -1
-                end if
-             end do             
-          end if
+          ! ! if pruning obs based on the ratio of rloc to max(rloc)
+          ! if(loc_prune > 0.0 ) then
+          !    r = maxval(lrloc(:ob_cnt_lg)) * loc_prune
+          !    do i=ob_cnt_lg,1,-1
+          !       if(lrloc(i)<r) then
+          !          if(i<ob_cnt_lg) then
+          !             lrloc(i)=lrloc(ob_cnt_lg)
+          !             lhdxb(:,i) = lhdxb(:,ob_cnt_lg)
+          !             lrdiag(i) = lrdiag(ob_cnt_lg)
+          !             ldep(i) = ldep(ob_cnt_lg)
+          !          end if
+          !          ob_cnt_lg = ob_cnt_lg -1
+          !       end if
+          !    end do             
+          ! end if
 
           ! if there are still good quality observations to assimilate, do so
           if (ob_cnt_lg > 0) then
@@ -413,7 +418,7 @@ contains
              !TODO, if not doing vertical localization, do all grid_ns layers at once
              ! .. if it turns out to be any faster
              call timer_start(timer3)
-             do i=1,loc_groups(lg)%count
+             do i=1, size(loc_groups(lg)%slab)
                 slab = loc_groups(lg)%slab(i)
                 call sgemm('n','n', 1, mem, mem, 1.0e0, bkg_ij(:,slab,ij),&
                      1, trans, mem, 0.0e0, ana_ij(:,slab,ij), 1)

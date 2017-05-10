@@ -468,7 +468,6 @@ contains
        stop 1
     end if
 
-    !TODO ensure there is not a class of the same name already registered
     do i=1, obsio_reg_num
        if(toupper(obsio_reg(i)%p%get_name()) == toupper(cls%get_name())) then
           print *, "ERROR: can't register obsio class '", toupper(cls%get_name()), &
