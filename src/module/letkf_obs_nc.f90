@@ -87,8 +87,8 @@ contains
     call check( nf90_put_att(ncid, nf90_global, "description",&
          "UMD-LETKF compatible observation file"))
 
-    call check( nf90_def_dim(ncid, "nobs",  nobs, dimid))
-    call check( nf90_def_var(ncid, "id",    nf90_int,  dimid, varid))
+    call check( nf90_def_dim(ncid, "obs",  nobs, dimid))
+    call check( nf90_def_var(ncid, "obid",    nf90_int,  dimid, varid))
     call check( nf90_put_att(ncid, varid, "long_name", "observation ID number"))
 
     call check( nf90_def_var(ncid, "plat",  nf90_int,  dimid, varid))
@@ -106,7 +106,7 @@ contains
     call check( nf90_def_var(ncid, "depth", nf90_real, dimid, varid))
     call check( nf90_put_att(ncid, varid, "long_name", "depth/height"))
 
-    call check( nf90_def_var(ncid, "time",  nf90_real, dimid, varid))
+    call check( nf90_def_var(ncid, "hr",  nf90_real, dimid, varid))
     call check( nf90_put_att(ncid, varid, "units", "hours"))
 
     call check( nf90_def_var(ncid, "val",   nf90_real, dimid, varid))
@@ -188,11 +188,11 @@ contains
 
 
   !============================================================
-  subroutine obs_read_nc(self, file, obs, obs_innov, obs_qc, iostat)
+  subroutine obs_read_nc(self, file, obs, obs_ohx, obs_qc, iostat)
     class(obsio_nc) :: self
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
-    real,    allocatable, intent(out) :: obs_innov(:)
+    real,    allocatable, intent(out) :: obs_ohx(:)
     integer, allocatable, intent(out) :: obs_qc(:)
     integer, intent(out), optional :: iostat
 
@@ -209,7 +209,7 @@ contains
 
     ! open the file
     call check( nf90_open(file, nf90_nowrite, ncid) )
-    call check( nf90_inq_dimid(ncid, "nobs", dimid))
+    call check( nf90_inq_dimid(ncid, "obs", dimid))
     call check( nf90_inquire_dimension(ncid, dimid, len=nobs))
 
     ! allocate space depending on number of observations
@@ -218,7 +218,7 @@ contains
     allocate(obs(nobs))
 
     ! read in the variables
-    call check( nf90_inq_varid(ncid, "id", varid))
+    call check( nf90_inq_varid(ncid, "obid", varid))
     call check( nf90_get_var(ncid, varid, tmp_i))
     do n=1,nobs
        obs(n)%id = tmp_i(n)
@@ -248,7 +248,7 @@ contains
        obs(n)%depth = tmp_r(n)
     end do
 
-    call check( nf90_inq_varid(ncid, "time", varid))
+    call check( nf90_inq_varid(ncid, "hr", varid))
     call check( nf90_get_var(ncid, varid, tmp_r))
     do n=1,nobs
        obs(n)%time = tmp_r(n)
@@ -266,16 +266,19 @@ contains
        obs(n)%err = tmp_r(n)
     end do
 
-    ! call check( nf90_inq_varid(ncid, "qc", varid))
-    ! call check( nf90_get_var(ncid, varid, tmp_i))
-    ! do n=1,nobs
-    !    obs(n)%qc = tmp_i(n)
-    ! end do
-    !TODO fix
     allocate(obs_qc(nobs))
-    obs_qc = 1
-    allocate(obs_innov(nobs))
-    obs_innov = 0
+    call check( nf90_inq_varid(ncid, "qc", varid))
+    call check( nf90_get_var(ncid, varid, tmp_r))
+    do n=1,nobs
+       obs_qc(n)=tmp_r(n)
+    end do
+
+    allocate(obs_ohx(nobs))
+    call check( nf90_inq_varid(ncid, "inc", varid))
+    call check( nf90_get_var(ncid, varid, tmp_r))
+    do n=1,nobs
+       obs_ohx(n)=tmp_r(n)+obs(n)%val
+    enddo
 
     ! close / cleanup
     call check( nf90_close(ncid))

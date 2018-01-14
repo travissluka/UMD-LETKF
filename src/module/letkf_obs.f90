@@ -1,4 +1,5 @@
 module letkf_obs
+  use mpi !  TODO, can we put everything we need inside letkf_mpi?
   use letkf_mpi
   use kdtree
 
@@ -51,10 +52,8 @@ module letkf_obs
      !! Observation value
      real :: err
      !! standard deviation of observation error
-!     integer :: qc
-     !! Quality control flag. ( 0 = no errors, > 0 removed by obs op, < 0
-     !! removed by LETKF qc
   end type observation
+  integer :: obs_mpi_observation
 
 
   type, abstract :: obsio
@@ -99,7 +98,7 @@ module letkf_obs
      end subroutine I_obsio_write
 
      
-     subroutine I_obsio_read(self, file, obs, obs_innov, obs_qc, iostat)
+     subroutine I_obsio_read(self, file, obs, obs_ohx, obs_qc, iostat)
        !! interface for procedures to load observation data
        import observation
        import obsio
@@ -108,7 +107,7 @@ module letkf_obs
        character(len=*), intent(in) :: file
 
        type(observation),allocatable, intent(out) :: obs(:)
-       real,     allocatable, intent(out) :: obs_innov(:)
+       real,     allocatable, intent(out) :: obs_ohx(:)
        integer,  allocatable, intent(out) :: obs_qc(:)
 
        integer, optional, intent(out) :: iostat
@@ -282,9 +281,44 @@ contains
     call platdef_read(platdef_file)
     
     if(obs_test) call obs_test_read()
+
+    ! initialize MPI objects
+    call obs_mpi_init()
+
   end subroutine letkf_obs_init
   !================================================================================
 
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine obs_mpi_init()
+    integer, parameter :: n = 8
+    integer :: type(n), blocklen(n)
+    integer(kind=mpi_address_kind) :: disp(n), base
+    integer :: ierr, i
+    type(observation) :: ob
+    
+    i=0
+    i=i+1; call mpi_get_address(ob%id,    disp(i), ierr); type(i) = mpi_integer
+    i=i+1; call mpi_get_address(ob%plat,  disp(i), ierr); type(i) = mpi_integer
+    i=i+1; call mpi_get_address(ob%lat,   disp(i), ierr); type(i) = mpi_real
+    i=i+1; call mpi_get_address(ob%lon,   disp(i), ierr); type(i) = mpi_real
+    i=i+1; call mpi_get_address(ob%depth, disp(i), ierr); type(i) = mpi_real
+    i=i+1; call mpi_get_address(ob%time,  disp(i), ierr); type(i) = mpi_real
+    i=i+1; call mpi_get_address(ob%val,   disp(i), ierr); type(i) = mpi_real
+    i=i+1; call mpi_get_address(ob%err,   disp(i), ierr); type(i) = mpi_real
+    base = disp(1)
+    disp(:) = disp(:) - base
+    blocklen(:)=1
+
+    call mpi_type_create_struct(n, blocklen, disp, type, obs_mpi_observation, ierr)
+    call mpi_type_commit(obs_mpi_observation, ierr)
+
+  end subroutine obs_mpi_init
+
+  !================================================================================
 
 
 
@@ -495,7 +529,7 @@ contains
     class(obsio), intent(in) :: reader
     !! abstract reader class
 
-    integer :: i
+    integer :: i, ierr
     character(len=1024) :: filename
 
     type(observation), allocatable :: obs_t(:)
@@ -560,33 +594,29 @@ contains
        deallocate(obs_qc_t)
     end do
 
-    !TODO, this is a temporary work around...
-    !use mpi instead to broadcast the obs_list var from root
-    if(size(ens_list) == 0) then
-       write (filename, '(A,I0.4,A)') 'INPUT/obsop/',1,'.dat'
-       print '(A,I5,2A)', " PROC ",pe_rank," is READING file: ", trim(filename)
-       call reader%read(filename, obs_t, obs_ohx_t, obs_qc_t)
-       if (.not. allocated(obs_list)) then
-          allocate(obs_list(size(obs_t)))
-          obs_list = obs_t
-          allocate(obs_ohx( mem, size(obs_ohx_t)))
-          allocate(obs_ohx_mean( size(obs_ohx_t)))
-          allocate(obs_qc_l( mem, size(obs_qc_t)))
-          obs_ohx = 0
-          obs_ohx_mean = 0
-          obs_qc_l = 0
-       end if
-       deallocate(obs_t)
-       deallocate(obs_ohx_t)
-       deallocate(obs_qc_t)
-    end if
-
 
     ! console output synchronization
     call letkf_mpi_barrier(syncio=.true.)
 
 
+    ! make sure each process has a full copy of the (non-ensemble) observation information
+    i = size(obs_list)
+    call mpi_bcast(i, 1, mpi_integer, pe_root, mpi_comm_letkf, ierr)
+    if (.not. allocated(obs_list)) allocate(obs_list(i))
+    call mpi_bcast(obs_list, i, obs_mpi_observation, pe_root, mpi_comm_letkf, ierr)
+
+    !TODO, remove this
+    if (.not. allocated(obs_ohx)) then
+       allocate(obs_ohx( mem,  size(obs_list)))
+       allocate(obs_ohx_mean(  size(obs_list)))
+       allocate(obs_qc_l( mem, size(obs_list)))
+       obs_ohx(:,:)    = 0.0
+       obs_ohx_mean(:) = 0.0
+       obs_qc_l(:,:)   = 0.0
+    end if
+
     ! distribute the qc and innovation values
+    ! TODO, doing allreduce is likely inefficient,
     call letkf_mpi_obs(obs_ohx, obs_qc_l)
 
 
@@ -596,7 +626,7 @@ contains
        obs_qc(i) = sum(obs_qc_l(:,i))
     end do
     deallocate(obs_qc_l)
-
+    
 
     ! calculate ohx perturbations
     do i=1,size(obs_list)
@@ -605,13 +635,14 @@ contains
     end do
 
 
-    !TODO basic QC checks on the observations
-    ! TODO: check stddev of ohx, problems if == 0 (odds of this happening though?)
+    ! basic QC checks on the observations
     do i=1,size(obs_list)
        if (obs_qc(i) == 0) then
-          if( abs(obs_ohx_mean(i)-obs_list(i)%val)/obs_list(i)%err  > obsqc_maxstd) then
-             obs_qc(i) = -1
-          end if
+          ! make sure increment is within several standard deviations of bg err
+          if( abs(obs_ohx_mean(i)-obs_list(i)%val)/obs_list(i)%err  > obsqc_maxstd) obs_qc(i) = -1
+
+          ! make sure there is sufficient spread in the observation increment ensemble
+          if( maxval(obs_ohx(:,i)) < mem*10*tiny(1.0e0)) obs_qc(i)=-1
        end if
     end do
 

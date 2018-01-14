@@ -63,11 +63,11 @@ contains
 
 
 
-  subroutine obsio_dat_read(self, file, obs, obs_innov, obs_qc, iostat)
+  subroutine obsio_dat_read(self, file, obs, obs_ohx, obs_qc, iostat)
     class(obsio_dat) :: self
     character(len=*), intent(in) :: file
     type(observation), allocatable, intent(out) :: obs(:)
-    real, allocatable, intent(out) :: obs_innov(:)
+    real, allocatable, intent(out) :: obs_ohx(:)
     integer,  allocatable, intent(out) :: obs_qc(:)
     integer, optional, intent(out) :: iostat
 
@@ -81,7 +81,7 @@ contains
     ! determine the number of observations that will be read in
     inquire(file=file, size=filesize)
     allocate( obs(filesize/4/12) ) !TODO, do this better
-    allocate( obs_innov(filesize/4/12) )
+    allocate( obs_ohx(filesize/4/12) )
     allocate( obs_qc(filesize/4/12) )
 
     ! make sure th at the desired file exists
@@ -103,11 +103,11 @@ contains
        obs(i)%err   = record(6)
        obs(i)%plat  = int(record(7))
        obs(i)%time  = record(8)
-       obs_innov(i) = record(9)
+       obs_ohx(i) = record(9)
        obs_qc(i)    = int(record(10))
 
        !TODO: temporary, remove this
-       if (obs(i)%id == 1100) obs_innov(i) = obs_innov(i) / 100.0
+       if (obs(i)%id == 1100) obs_ohx(i) = obs_ohx(i) / 100.0
 !       if (obs_qc(i) == 0) then
 !          obs_qc(i) = 1
 !       else
