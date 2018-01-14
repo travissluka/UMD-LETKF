@@ -20,7 +20,7 @@ include_directories(${MPI_Fortran_INCLUDE_PATH})
 
 # build target
 #------------------------------------------------------------
-file( GLOB SRCS "*.f90")
+file( GLOB SRCS "*.[f,F]90")
 #add_library( ${LIB_NAME}_shared SHARED ${SRCS})
 #set_target_properties( ${LIB_NAME}_shared
 #  PROPERTIES

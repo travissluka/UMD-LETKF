@@ -312,6 +312,8 @@ contains
        print '(A,I5,A,I5)', " PROC ",pe_rank," is READING ens member: ", ens_list(m)
 
        call stateio_class%read(ens_list(m), gues(:,:,:, m))
+       print '(A,I5,A,I5)', " PROC ",pe_rank," DONE"
+       
     end do
     call timer_stop(tbgread)
 
@@ -441,10 +443,16 @@ contains
     real, allocatable :: wrk4(:,:,:,:)
     character(len=1024) :: filename
 
-    integer :: t_mpi, t_write
+    integer :: t_mpi, t_write, t_mpi1,t_mpi2, t_write1,t_write2
 
-    t_mpi   = timer_init("  output_scatter")
-    t_write = timer_init("  output_write")
+    t_mpi    = timer_init("  mpi gather", TIMER_SYNC)
+    t_mpi1   = timer_init("   mean/sprd")
+    t_mpi2   = timer_init("   ens members")
+
+    t_write  = timer_init("  write", TIMER_SYNC)
+    t_write1 = timer_init("   mean/sprd")
+    t_write2 = timer_init("   ens members")
+    
 
     if(pe_isroot) then
        print *, ""
@@ -455,11 +463,12 @@ contains
     end if
 
     ! determine which processes are going to output which of the bkg/ana mean/spread
-    ! so that we can write them in parallel
-    rank_bm = mod(pe_size  , min(4,pe_size))
-    rank_bs = mod(pe_size+1, min(4,pe_size))
-    rank_am = mod(pe_size+2, min(4,pe_size))
-    rank_as = mod(pe_size+3, min(4,pe_size))
+    ! so that we can write them in parallel    
+    proc = 0;              rank_bm = proc
+    proc = nextProc(proc); rank_bs = proc
+    proc = nextProc(proc); rank_am = proc
+    proc = nextProc(proc); rank_as = proc
+
     if (pe_isroot) then
        print *, ""
        print *, "Saving ana/bkg mean/sprd"
@@ -470,9 +479,11 @@ contains
     end if
 
     ! gather the mean/spread
-    if(pe_isroot) print *, "scattering..."
+    if(pe_isroot) print *, "gathering..."
     allocate(wrkij(ij_count))
     call timer_start(t_mpi)
+    call timer_start(t_mpi1)
+
     if (pe_rank == rank_bm) allocate(wrk_bm(grid_nx, grid_ny, grid_ns))
     do i=1,grid_ns
        wrkij = bkg_mean_ij(i,:)
@@ -493,6 +504,8 @@ contains
        wrkij = ana_sprd_ij(i,:)
        call letkf_mpi_ij2grd(wrkij, wrk_as(:,:,i), rank_as)
     end do    
+
+    call timer_stop(t_mpi1)
     call timer_stop(t_mpi)
     deallocate(wrkij)
 
@@ -500,6 +513,8 @@ contains
     ! write out the mean/spread
     if(pe_isroot) print *, "writing..."
     call timer_start(t_write)
+    call timer_start(t_write1)
+
     if (pe_rank == rank_bm) then
        call stateio_class%write('OUTPUT/bkg_mean', wrk_bm)       
        deallocate(wrk_bm)
@@ -516,6 +531,8 @@ contains
        call stateio_class%write('OUTPUT/ana_sprd', wrk_as)
        deallocate(wrk_as)
     end if
+    
+    call timer_stop(t_write1)
     call timer_stop(t_write)
     call letkf_mpi_barrier(.true.)
     if(pe_isroot) print *, "Done."
@@ -527,24 +544,35 @@ contains
        print *, "Saving analyais ensemble members"
        print *, "mpi collect..."
     end if
+    allocate(wrk4(grid_nx,grid_ny, grid_ns, size(ens_list)))
 
     call timer_start(t_mpi)
-    allocate(wrk4(grid_nx,grid_ny, grid_ns, size(ens_list)))
+    call timer_start(t_mpi2)
     call letkf_mpi_ij2ens(ana_ij, wrk4)
+    call timer_stop(t_mpi2)
     call timer_stop(t_mpi)
 
     call timer_start(t_write)
+    call timer_start(t_write2)
     do m=1,size(ens_list)
        write (filename, '(A,I0.4,A)') 'OUTPUT/', ens_list(m)
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",trim(filename)
        call stateio_class%write(filename, wrk4(:,:,:,m))
     end do
+    call timer_stop(t_write2)
     call timer_stop(t_write)
 
     call letkf_mpi_barrier()
     deallocate(wrk4)
 
 
+  contains
+    function nextProc(p)
+      integer, intent(in) :: p
+      integer :: nextProc
+
+      nextProc=mod(p+1, pe_size)
+    end function nextProc
     
   end subroutine letkf_state_write
   !================================================================================

@@ -88,7 +88,8 @@ contains
     integer, optional, intent(in) :: flags
     integer :: id
 
-    id = gettimer(name)
+!    id = gettimer(name)
+    id = -1
 
     if ( id < 0 ) then
        active_timers = active_timers + 1

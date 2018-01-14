@@ -12,6 +12,8 @@ module letkf
   use letkf_state
   use letkf_state_nc
 
+  use iso_fortran_env
+
   implicit none
   private
 
@@ -278,9 +280,8 @@ contains
     
 
     integer :: timer1, timer2, n, timer3, timerloc
-    integer :: i, lg, slab
+    integer :: i, j, lg, slab
     integer, parameter :: progress_bar_size = 45
-    real :: r
     real :: loc_hz_max
     real :: loc_hz_ij
     real, parameter :: pi = 4.0*atan(1.0)
@@ -362,7 +363,6 @@ contains
           rdiag(ob_cnt)  = obs_list(n)%err
           rdist(ob_cnt) = rdistance(i)
           dep(ob_cnt) = obs_list(n)%val - obs_ohx_mean(n)
-          diag_count_ij(:,ij) = diag_count_ij(:,ij)+1!loc_h
        end do
        call timer_stop(timer1)
 
