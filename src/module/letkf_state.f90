@@ -161,10 +161,11 @@ contains
 
 
     if(pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================',&
-            new_line('a'), ' letkf_state_init() : ',&
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_state_init() : '
+       print "(A)", '============================================================'
     end if
 
 
@@ -252,10 +253,10 @@ contains
        print '(A,F6.1,A,F6.1)', "  longitude range: ", minval(lon), " to ",maxval(lon)
        print '(A,F6.1,A,F6.1)', "  latitude  range: ", minval(lat), " to ",maxval(lat)       
        print '(A,I6)', " vertical/variable slabs:", grid_ns
-       do i =1, grid_ns
-          print '(A,I4,A,A10,A,I6)', "  slab", i, "       var=",&
-               letkf_state_getvarname(slab_var(i)), "      lvl=",slab_lvl(i)
-       end do
+!       do i =1, grid_ns
+!          print '(A,I4,A,A10,A,I6)', "  slab", i, "       var=",&
+!               letkf_state_getvarname(slab_var(i)), "      lvl=",slab_lvl(i)
+!       end do
     end if
 
   end subroutine letkf_state_init
@@ -283,10 +284,11 @@ contains
 
 
     if(pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================',&
-            new_line('a'), ' letkf_state_read() :',&
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_state_read() :'
+       print "(A)", '============================================================'
     end if
 
 
@@ -439,10 +441,11 @@ contains
     t_write = timer_init("  output_write")
 
     if(pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================',&
-            new_line('a'), ' letkf_state_write() :',&
-            new_line('a'), '============================================================'
+       print *, ""
+       print *, ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_state_write() :'
+       print "(A)", '============================================================'
     end if
 
     ! determine which processes are going to output which of the bkg/ana mean/spread

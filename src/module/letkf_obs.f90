@@ -220,10 +220,11 @@ contains
     namelist /letkf_obs/ obs_test, ioclass, obsqc_maxstd
 
     if (pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================', &
-            new_line('a'), ' letkf_obs_init() : ', &
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_obs_init() : '
+       print "(A)", '============================================================'
     end if
 
    
@@ -294,10 +295,11 @@ contains
     real, allocatable :: obs_lons(:), obs_lats(:)
 
     if (pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================', &
-            new_line('a'), ' letkf_obs_read() : ', &
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_obs_read() : '
+       print "(A)", '============================================================'
     end if
 
     ! read in the observations

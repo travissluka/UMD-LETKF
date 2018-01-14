@@ -18,7 +18,6 @@ module letkf_mpi
 
   public :: letkf_mpi_grd2ij_real
   public :: letkf_mpi_grd2ij_logical
-
   !TODO, why does this interface not work
 !   interface letkf_mpi_grd2ij
 !      module procedure letkf_mpi_grd2ij_real
@@ -467,10 +466,11 @@ contains
     namelist /letkf_mpi/ mem, interleave
 
     if(pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================', &
-            new_line('a'), ' letkf_mpi_init() : ', &
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_mpi_init() : '
+       print "(A)", '============================================================'
     end if
 
     ! read in namelist

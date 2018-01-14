@@ -139,10 +139,11 @@ contains
     namelist /letkf_loc/ locclass
     
     if(pe_isroot)then
-       print *, new_line('a'), &
-            new_line('a'), '============================================================', &
-            new_line('a'), ' letkf_loc_init() : ',&
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_loc_init() : '
+       print "(A)", '============================================================'
     end if
 
     ! read in our section of the namelist

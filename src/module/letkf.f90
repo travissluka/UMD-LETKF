@@ -63,10 +63,12 @@ contains
 
     if (pe_isroot) then
        print "(A)", "============================================================"
+       print "(A)", "============================================================"
        print "(A)", " Universal Multi-Domain Local Ensemble Transform Kalman Filter"
        print "(A)", " (UMD-LETKF)"
        print "(A)", " version 0.1.0"
        print "(A)", " Travis Sluka (tsluka@umd.edu, travis.sluka@noaa.gov)"
+       print "(A)", "============================================================"
        print "(A)", "============================================================"
        print "(A)", ""
     end if
@@ -126,10 +128,11 @@ contains
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
 
     if(pe_isroot) then
-       print *, new_line('a'),&
-            new_line('a'), '============================================================',&
-            new_line('a'), ' letkf_driver_run()',&
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' letkf_driver_run()'
+       print "(A)", '============================================================'
     end if
 
     ! read in main section of the  namelist
@@ -194,10 +197,11 @@ contains
 
     ! run LETKF core
     if(pe_isroot) then
-       print *, new_line('a'),&
-            new_line('a'), '============================================================',&
-            new_line('a'), ' Running LETKF core',&
-            new_line('a'), '============================================================'
+       print "(A)", ""
+       print "(A)", ""
+       print "(A)", '============================================================'
+       print "(A)", ' Running LETKF core'
+       print "(A)", '============================================================'
        print *, "Beginning core solver..."
     end if
 
