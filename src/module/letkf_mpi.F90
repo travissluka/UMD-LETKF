@@ -542,26 +542,26 @@ contains
   !================================================================================
   subroutine letkf_mpi_final
     integer :: ierr
-    real :: mem, mem_avg, mem_min, mem_max, mem_sum
-    ! calculate memore hiwater mark
-    call getMaxMem(mem)
-    call mpi_reduce(mem, mem_min, 1, mpi_real, mpi_min, pe_root, mpi_comm_letkf, ierr)
-    call mpi_reduce(mem, mem_max, 1, mpi_real, mpi_max, pe_root, mpi_comm_letkf, ierr)
-    call mpi_reduce(mem, mem_sum, 1, mpi_real, mpi_sum, pe_root, mpi_comm_letkf, ierr)
-    mem_avg = mem_sum / pe_size
+    ! real :: cur, mem, mem_avg, mem_min, mem_max, mem_sum
+    ! ! calculate memore hiwater mark
+    ! call getMem(cur, mem)
+    ! call mpi_reduce(mem, mem_min, 1, mpi_real, mpi_min, pe_root, mpi_comm_letkf, ierr)
+    ! call mpi_reduce(mem, mem_max, 1, mpi_real, mpi_max, pe_root, mpi_comm_letkf, ierr)
+    ! call mpi_reduce(mem, mem_sum, 1, mpi_real, mpi_sum, pe_root, mpi_comm_letkf, ierr)
+    ! mem_avg = mem_sum / pe_size
 
-    if(pe_isroot) then
-       print *, new_line('a'), &
-            new_line('a'), "============================================================",&
-            new_line('a'), " Max memory usage",&
-            new_line('a'), "============================================================"
-       print *, "per core:"
-       print '(A,F5.2,A)', "   avg: ",mem_avg," GB"
-       print '(A,F5.2,A)', "   min: ",mem_min," GB"
-       print '(A,F5.2,A)', "   max: ",mem_max," GB"
-       print *,"total:"
-       print '(A,F5.2,A)', "    ",mem_sum," GB"
-    end if
+    ! if(pe_isroot) then
+    !    print *, new_line('a'), &
+    !         new_line('a'), "============================================================",&
+    !         new_line('a'), " Max memory usage",&
+    !         new_line('a'), "============================================================"
+    !    print *, "per core:"
+    !    print '(A,F5.2,A)', "   avg: ",mem_avg," GB"
+    !    print '(A,F5.2,A)', "   min: ",mem_min," GB"
+    !    print '(A,F5.2,A)', "   max: ",mem_max," GB"
+    !    print *,"total:"
+    !    print '(A,F5.2,A)', "    ",mem_sum," GB"
+    ! end if
     call mpi_finalize(ierr)
   end subroutine letkf_mpi_final
   !================================================================================
@@ -569,55 +569,5 @@ contains
 
 
 
-  !================================================================================
-  !================================================================================
-  subroutine getMaxMem(mem)
-    !! return memory hiwater mark, in gigabytes.
-    !! this relies on the VmHWM field set in the /proc/(pid)/status file
-    !! if this file or field can't be found, -1 is returned
-    real, intent(out)   :: mem
-    character(len=30)   :: pid_char
-    character(len=1024) :: proc_file, line
-    integer             :: unit, iostat, i
-    logical             :: ex
-
-    ! get process id
-    write(pid_char,'(I10)') getpid()
-    pid_char = adjustl(pid_char)
-
-    ! make sure the file exists that contains memory hi usage info in linux
-    proc_file="/proc/"//trim(pid_char)//"/status"
-    inquire(file=proc_file, exist=ex)
-    if (.not. ex) then
-       print *, "can't open ",trim(proc_file)
-       mem = -1
-       return
-    end if
-
-    ! read in the VmHWM line of the file
-    open(newunit=unit, file=proc_file, action='read')
-    iostat = 0
-    do while (iostat==0)
-       read(unit,'(A)',iostat=iostat) line
-       i = scan(line, ':')
-       if(i<=0) cycle
-       if(line(:i) == "VmHWM:") then
-          ! the VmHWM line has been found, parse out the number of kilobytes
-          line = line(i+1:)
-          do i=1,len(line)
-             if(line(i:i) == char(9)) line(i:i) = ' '
-          end do
-          line = adjustl(line)
-          read(line,*) mem
-          ! return the number of gigabytes
-          mem = mem/1024/1024
-          close(unit)
-          return
-       end if
-    end do
-    mem = -1
-    close(unit)
-  end subroutine getMaxMem
-  !================================================================================
 
 end module letkf_mpi

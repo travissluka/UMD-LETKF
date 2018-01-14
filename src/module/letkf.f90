@@ -1,6 +1,7 @@
 module letkf
   !! main entry point for the LETKF library
 
+  use getmem
   use timing
   use letkf_mpi
   use letkf_obs
@@ -73,6 +74,7 @@ contains
     ! initialize the rest of mpi
     ! (determines the processor distribution for I/O
     call letkf_mpi_init(nml_filename)
+    call getmem_init(pe_root, mpi_comm_letkf)
 
     ! setup the default I/O classes, user can add their own after calling 
     ! letkf_driver_init
@@ -102,7 +104,9 @@ contains
 
     call letkf_loc_init(nml_filename)
     
+    ! all done, wait for all procs to finish, print out memory statistics
     call letkf_mpi_barrier(.true.)
+    call getmem_print()
 
   end subroutine letkf_driver_init
   !================================================================================
@@ -170,6 +174,7 @@ contains
     call timer_start(timer)
     call letkf_obs_read()
     call timer_stop(timer)
+    call getmem_print()
 
 
     ! read background state
@@ -178,6 +183,7 @@ contains
     call letkf_state_read()
     call timer_stop(timer)
     call timer_stop(t_init)
+    call getmem_print()
 
 
     ! ensure output directory is setup right
@@ -204,6 +210,7 @@ contains
 
     call letkf_mpi_barrier()
     if(pe_isroot) print *, "LETKF solver completed."
+    call getmem_print()
 
     !------------------------------------------------------------
 
@@ -213,6 +220,7 @@ contains
 
     ! save the background / analysis
     call letkf_state_write()
+    call getmem_print()
 
     ! write out other diagnostics
     if(pe_isroot) then
@@ -232,11 +240,14 @@ contains
     end if
     if(pe_isroot) deallocate(wrk3)
     deallocate(wrk1)
+    call getmem_print()
 
     ! all done, cleanup
     call timer_stop(t_output)
     call timer_stop(t_total)
     call timer_print()
+    call getmem_print()
+
     call letkf_mpi_final()
 
   end subroutine letkf_driver_run
