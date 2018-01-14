@@ -376,21 +376,26 @@ contains
        call kd_free(llkd_root)
     end if
 
-
-    ! scatter background, 
-    if(pe_isroot) then
-       print *,""
-       print *, "scattering background..."
-    end if
-    tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
-
-    call timer_start(tbgscatter)
+    ! initialize memory needed by this proc
     allocate(bkg_ij(mem, grid_ns, ij_count))
     allocate(bkg_mean_ij(grid_ns, ij_count))
     allocate(bkg_sprd_ij(grid_ns, ij_count))
     allocate(ana_ij(mem, grid_ns, ij_count))
     allocate(ana_mean_ij(grid_ns, ij_count))
     allocate(ana_sprd_ij(grid_ns, ij_count))
+
+
+    ! scatter background, 
+    if(pe_isroot) then
+       print *,""
+       print *, "scattering background..."
+    end if
+
+    tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
+    call timer_start(tbgscatter)
+    ! TODO: do a scatter after each state read
+    ! (in case we have a single proc reading multiple members, with
+    !  amount of memory large enough that we would run out)
     call letkf_mpi_ens2ij(gues, bkg_ij)
     call timer_stop(tbgscatter)
 
@@ -425,7 +430,7 @@ contains
   !================================================================================
   !================================================================================
   subroutine letkf_state_write()
-    integer :: i, m 
+    integer :: i, m, proc
     integer :: rank_bm, rank_bs, rank_am, rank_as
 
     real, allocatable :: wrkij(:)

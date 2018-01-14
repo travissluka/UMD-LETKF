@@ -7,6 +7,8 @@ module letkf_mpi
   implicit none
   private
 
+#define SCATTER_CUSTOMPACK
+
 
   ! public module methods
   !------------------------------------------------------------
@@ -69,8 +71,9 @@ module letkf_mpi
   integer :: grid_ns
     !! total number of 2d slices. This is equal to grid_nz *num_3d_vars + num_2d_vars
 
-
-
+  ! custom MPI object types
+  !------------------------------------------------------------
+  integer :: state_mpi_type
   
 contains
 
@@ -134,6 +137,9 @@ contains
        end if
     end if
 
+    ! initialize the custom MPI types
+    call init_state_mpi_type()
+
   end subroutine letkf_mpi_setgrid
   !================================================================================
 
@@ -146,7 +152,7 @@ contains
     integer :: ierr
     logical, optional :: syncio
 
-    call mpi_barrier(mpi_comm_letkf, ierr)
+    call mpi_barrier(mpi_comm_letkf, ierr)    
 
     if(present(syncio) .and. syncio) then
        flush(output_unit)
@@ -176,11 +182,12 @@ contains
       !! The gridpoints this given process is responsible for computing.
       !! ***Shape is ([[letkf_mpi:mem]], [[letkf_mpi:grid_ns]],[[letkf_mpi:ij_count]] )***
 
-    integer :: ierr, s, i, j, m
-    real :: wrk(ij_count)
-    real :: wrk2(grid_nx*grid_ny)
-
-
+#ifdef SCATTER_CUSTOMPACK
+    !custom buffer / packing method
+    !------------------------------------------------------------
+       integer :: ierr, s, i, j, m
+       real :: wrk(ij_count)
+       real :: wrk2(grid_nx*grid_ny)
     ! TODO, is there any way to do this with fewer mpi_scatter calls?
     do m=1,mem
        do s=1,size(ens,2)
@@ -208,10 +215,81 @@ contains
        end do
     end do
 
+
+#else
+
+    ! using MPI custom types method
+    !------------------------------------------------------------
+    ! TODO, possible cache miss performance issues by specifying data by ns length then nij?
+    !  trying toing by nij then x ns?
+    integer :: mpitype_col_send
+    integer :: mpitype_col_recv
+    integer(kind=mpi_address_kind) :: lb, ex, ex_real
+    integer :: j, m, p, ierr
+    integer :: status(mpi_status_size), recv_req(mem), send_req(pe_size*ens_count)
+
+
+    ! how big is a real?
+    call mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
+
+    ! define the outgoing structure for a single grid column
+    call mpi_type_vector(grid_ns, 1, grid_nx*grid_ny, mpi_real, mpitype_col_send, ierr)
+    lb=0; ex=ex_real*pe_size
+    call mpi_type_create_resized(mpitype_col_send, lb, ex, mpitype_col_send, ierr)
+    call mpi_type_commit(mpitype_col_send, ierr)
+
+    ! define the incoming structure for a single grid column
+    call mpi_type_vector(grid_ns, 1, mem, mpi_real, mpitype_col_recv, ierr)
+    lb=0; ex=ex_real*grid_ns*mem
+    call mpi_type_create_resized(mpitype_col_recv, lb, ex, mpitype_col_recv, ierr)
+    call mpi_type_commit(mpitype_col_recv, ierr)
+
+    do m=1,mem      
+       ! initialize receive
+       call mpi_Irecv(ij(m,1,1), scatterv_count(pe_rank+1), mpitype_col_recv, ens_map(m), 0, mpi_comm_letkf, recv_req(m), ierr)
+    end do
+
+    ! FAST 
+    do m=1,ens_count
+       do p=0,pe_size-1
+          call mpi_Isend(ens(p+1,1,m), scatterv_count(p+1), mpitype_col_send, p, 0, mpi_comm_letkf, &
+              send_req((m-1)*pe_size+p+1), ierr)
+       end do
+    end do
+    ! do m=1,ens_count
+    !    do p=0,pe_size-1
+    !       call mpi_send(ens(p+1,1,m), scatterv_count(p+1), mpitype_col_send, p, 0, mpi_comm_letkf, ierr)
+    !    end do
+    ! end do
+
+
+
+    ! wait for receive to finish
+    call mpi_waitall(mem, recv_req, status, ierr)
+    if(j>0) then
+       call mpi_waitall(j, send_req, status, ierr)
+    end if
+
+    call mpi_type_free(mpitype_col_send, ierr)
+    call mpi_type_free(mpitype_col_recv, ierr)
+
+#endif
+
   end subroutine letkf_mpi_ens2ij
   !================================================================================
 
 
+
+  subroutine init_state_mpi_type
+!    mpi_type_Create_indexed_block(grid_nx*grid_ny, 1, 
+!    state_mpi_type
+!    integer :: ierr
+!    integer :: state_col_snd_mpi_type
+
+!    call mpi_type_vector(grid_ns, 1, grid_nx*grid_ny, mpi_real, state_col_snd_mpi_type, ierr)
+!    call mpi_type_commit(state_col_mpi_type, ierr)
+
+  end subroutine init_state_mpi_type
 
 
   !================================================================================
@@ -531,6 +609,13 @@ contains
 
        prev = prev + count
     end do
+
+#ifdef SCATTER_CUSTOMPACK
+    if (pe_isroot) then
+       print *,""
+       print *,"NOTE: using secondary buffering for scatter /gether calls"
+    end if
+#endif
 
   end subroutine letkf_mpi_init
   !================================================================================
