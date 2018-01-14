@@ -373,12 +373,10 @@ contains
        ! perform the core letkf equations and apply transformation matrix
        ! to the background ensemble for EACH localization group
        ! ------------------------------------------------------------
-       loc_groups = localizer_class%get_groups(ij)
-
+       call localizer_class%get_groups(ij, loc_groups)
        !TODO, do a check to make sure each slab is handled in exactly 1 of the groups
 
        lg_loop: do lg=1,size(loc_groups)         
-
           ! determine observation localization
           ! if an observation has localization of 0, move it to the end of the array
           ! so that it can be ignored by the letkf_core.
@@ -399,6 +397,11 @@ contains
                 lhdxb(:,ob_cnt_lg) = hdxb(:,i)
                 lrdiag(ob_cnt_lg) = rdiag(i)
                 ldep(ob_cnt_lg) = dep(i)
+                ! TODO: disable this if not debugging
+!                do j=1, size(loc_groups(lg)%slab)
+!                   slab = loc_groups(lg)%slab(j)
+!                   diag_count_ij(slab,ij) = diag_count_ij(slab,ij)+rloc(i)
+!                end do
              end if
           end do loc_loop
           call timer_stop(timerloc)

@@ -56,13 +56,13 @@ module letkf_loc
        character(:), allocatable :: I_letkf_loc_getstr
      end function I_letkf_loc_getstr
      
-     pure function I_letkf_loc_getgroups(self, ij)
+     pure subroutine I_letkf_loc_getgroups(self, ij, grps)
        import localizer
        import localizer_group
        class(localizer), intent(in) :: self
        integer,          intent(in) :: ij
-       type(localizer_group), allocatable :: I_letkf_loc_getgroups(:)
-     end function I_letkf_loc_getgroups
+       type(localizer_group), intent(out),  allocatable :: grps(:)
+     end subroutine I_letkf_loc_getgroups
 
      pure function I_letkf_loc_maxhz(self, ij)
        import localizer
@@ -303,18 +303,27 @@ contains
     localizer_novrt_desc = "Single column horizontal localization only scheme"
   end function localizer_novrt_desc
 
-  
-  pure function localizer_novrt_groups(self, ij) result(grps)
+  ! TODO: not a clean way of doing this, make it so that i'm not returning
+  ! an allocatable array.
+  pure subroutine localizer_novrt_groups(self, ij, grps)
     class(localizer_novrt), intent(in) :: self
     integer, intent(in) :: ij
-    type(localizer_group), allocatable :: grps(:)
+    type(localizer_group), intent(out), allocatable :: grps(:)
     integer:: i
+
+    if (allocated(grps)) then
+       do i=1,size(grps)
+          deallocate(grps(i)%slab)
+       end do
+       deallocate(grps)
+    end if
+
     allocate(grps(1))
     allocate(grps(1)%slab(grid_ns))
     do i=1,grid_ns
        grps(1)%slab(i) = i
     end do
-  end function localizer_novrt_groups
+  end subroutine localizer_novrt_groups
 
   
   pure function localizer_novrt_maxhz(self, ij) result(d)
@@ -335,17 +344,17 @@ contains
     real,                   intent(out):: rloc(:)
 
     integer :: i
-
+    real :: r,l
+    ! TODO, remove the hardcoding of localization distance
     do i = 1, ob_num
-       rloc(i) = loc_gc(ob_dist(i), 720e3)
-    end do
-    
 
-  !   else
-  !      grd_depth = -5.0 + grd_lg*10.0  
-  !      val = loc_gc(ob_dist, tmp) * &
-  !           loc_gc( abs(obs_list(ob_idx)%depth - grd_depth), 20.0)
-  !   end if    
+       ! Horizontal localization 
+       r=abs(lat_ij(ij))/90.0
+       l=r*200e3 + (1.0-r)*720e3
+       rloc(i) = loc_gc(ob_dist(i), l)
+
+    end do
+
   end subroutine localizer_novrt_localize
 
 

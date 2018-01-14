@@ -20,7 +20,7 @@ module letkf_state_nc
 !     procedure :: mask     => stateio_mask
   end type stateio_nc
 
-  integer, parameter :: grid_nz = 40
+!  integer, parameter :: grid_nz = 40
 
   real, allocatable :: nom_lon(:), nom_lat(:), depths(:)
 

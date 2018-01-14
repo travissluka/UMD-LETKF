@@ -22,6 +22,7 @@ module letkf_state
   ! ------------------------------------------------------------
   integer, public, protected :: grid_nx
   integer, public, protected :: grid_ny
+  integer, public, protected :: grid_nz
   integer, public, protected :: grid_ns
 
   real,    public, protected, allocatable :: lat_ij(:)
@@ -157,7 +158,7 @@ contains
     character(len=:), allocatable :: ioclass
 
 
-    namelist /letkf_state/ ioclass, grid_nx, grid_ny, grid_ns
+    namelist /letkf_state/ ioclass, grid_nx, grid_ny, grid_nz, grid_ns
 
 
     if(pe_isroot) then
