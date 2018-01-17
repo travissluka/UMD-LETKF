@@ -7,34 +7,38 @@ module letkf_mpi
   implicit none
   private
 
-#define SCATTER_CUSTOMPACK
-
 
   ! public module methods
   !------------------------------------------------------------
   public :: letkf_mpi_preinit, letkf_mpi_init, letkf_mpi_final
   public :: letkf_mpi_setgrid
-  public :: letkf_mpi_obs, letkf_mpi_ij2grd !, letkf_mpi_grd2ij
+  public :: letkf_mpi_obs, letkf_mpi_ij2grd
   public :: letkf_mpi_ens2ij, letkf_mpi_ij2ens
   public :: letkf_mpi_barrier
 
+  public :: letkf_mpi_wait, letkf_mpi_wait_recv
+
   public :: letkf_mpi_grd2ij_real
   public :: letkf_mpi_grd2ij_logical
+
   !TODO, why does this interface not work
 !   interface letkf_mpi_grd2ij
 !      module procedure letkf_mpi_grd2ij_real
 !      module procedure letkf_mpi_grd2ij_logical
 !   end interface
 
+
   ! public module variables
   ! ------------------------------------------------------------
   integer, public, protected :: mem
-  !! Number of ensemble members
+    !! Number of ensemble members
+
+  integer, public, protected :: ens_count
+    !! number of ensemble members for which this process is responsible for the I/O
 
   integer, public, protected, allocatable :: ens_list(:)
-    !! lists which process is responsible for the I/O for
-    !! each ensemble member number.
-    !! ***Size is ([[letkf_mpi:mem]])***
+    !! lists which I/O members this proc is responsible for
+    !! ***Size is ([[letkf_mpi:ens_count]])***
 
   integer,public, protected, allocatable :: ens_map(:)
     !! for each index MEM, the number of the PE
@@ -47,12 +51,11 @@ module letkf_mpi
   logical, public, protected :: pe_isroot
   integer, public, protected :: mpi_comm_letkf
 
-  
+  integer, public, protected, allocatable :: io_order(:)
+
 
   ! private variables
   ! ------------------------------
-  integer :: ens_count
-    !! number of ensemble members for which is process is responsible for the I/O
 
   integer, allocatable :: ij_list(:)
     !! A list of grid point locations that this process
@@ -61,7 +64,6 @@ module letkf_mpi
   integer, allocatable :: scatterv_count(:)
   integer, allocatable :: scatterv_displ(:)
 
-  logical :: interleave = .true.
   integer :: grid_nx
     !! number of grid points in the x direction (longitude usually)  
 
@@ -72,12 +74,23 @@ module letkf_mpi
     !! total number of 2d slices. This is equal to grid_nz *num_3d_vars + num_2d_vars
 
   ! custom MPI object types
-  !------------------------------------------------------------
-  integer :: state_mpi_type
-  
-contains
+  integer :: mpitype_grd_nxy_ns
+  integer :: mpitype_grd_nxy
+  integer :: mpitype_grd_nm_ns_nij
+  integer :: mpitype_grd_ns_nij
 
+  ! queued mpi send/recv wait requests
+  integer, parameter :: max_wait_size = 1024 ! TODO, remove this hardcoding
+  integer :: rcv_wait(max_wait_size)  
+  integer :: snd_wait(max_wait_size)
+  integer :: rcv_wait_count = 0
+  integer :: snd_wait_count = 0
   
+
+
+contains
+  
+
 
 
   !================================================================================
@@ -87,8 +100,6 @@ contains
     integer :: i, j
     integer :: count, prev
 
-    real, allocatable :: load_weights(:)
-
     grid_nx = nx
     grid_ny = ny
     grid_ns = ns
@@ -97,19 +108,13 @@ contains
     ! ----------------------------------------
     if (pe_isroot) print *, ""
 
-    ! determine the process load weights
-    ! TODO: remove load weights... this was leftover from a previous failed idea
-    allocate(load_weights(pe_size))
-    load_weights = 1.0
-    load_weights = load_weights / sum(load_weights)
 
-
-    ! calculate actual numer of gridpoints to use
+    ! calculate actual numer of gridpoints to use for each proc
     allocate(scatterv_count(pe_size))
     allocate(scatterv_displ(pe_size))
     prev = 0
     do i=0, pe_size-1
-       count = nint(grid_nx*grid_ny * load_weights(i+1))
+       count = nint(1.0*grid_nx*grid_ny / pe_size)
        if (i == pe_size-1) count = grid_nx*grid_ny - prev
 
        if (i == pe_rank) then
@@ -123,7 +128,6 @@ contains
        scatterv_displ(i+1) = prev
        prev = prev+count
     end do
-    deallocate(load_weights)
    
     if (pe_isroot) then
        print *, ""
@@ -141,6 +145,47 @@ contains
     call init_state_mpi_type()
 
   end subroutine letkf_mpi_setgrid
+  !================================================================================
+
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_mpi_wait()
+    call letkf_mpi_wait_recv()
+    call letkf_mpi_wait_send()
+  end subroutine letkf_mpi_wait
+  !================================================================================
+
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_mpi_wait_send()
+    integer :: status(mpi_status_size)
+    integer :: ierr
+    if (snd_wait_count > 0) then
+       call mpi_waitall(snd_wait_count, snd_wait, status, ierr)
+       snd_wait_count = 0
+    end if
+  end subroutine letkf_mpi_wait_send
+  !================================================================================
+
+
+
+
+  !================================================================================
+  !================================================================================
+  subroutine letkf_mpi_wait_recv()
+    integer :: status(mpi_status_size)
+    integer :: ierr
+    if (rcv_wait_count > 0) then
+       call mpi_waitall(rcv_wait_count, rcv_wait, status, ierr)
+       rcv_wait_count = 0
+    end if
+  end subroutine letkf_mpi_wait_recv
   !================================================================================
 
 
@@ -182,119 +227,80 @@ contains
       !! The gridpoints this given process is responsible for computing.
       !! ***Shape is ([[letkf_mpi:mem]], [[letkf_mpi:grid_ns]],[[letkf_mpi:ij_count]] )***
 
-#ifdef SCATTER_CUSTOMPACK
-    !custom buffer / packing method
-    !------------------------------------------------------------
-       integer :: ierr, s, i, j, m
-       real :: wrk(ij_count)
-       real :: wrk2(grid_nx*grid_ny)
-    ! TODO, is there any way to do this with fewer mpi_scatter calls?
-    do m=1,mem
-       do s=1,size(ens,2)
-          if(.not. interleave) then
-             call mpi_scatterv(ens(:,s,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real, &
-                  wrk, ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
-          else
-             if(ens_map(m) == pe_rank) then
-                do i=1,pe_size
-                   do j=1,scatterv_count(i)
-                      wrk2(scatterv_displ(i)+j) = ens((j-1)*pe_size+i,s,ens_idx(m))
-                   end do
-                end do
-             end if
-             call mpi_scatterv(wrk2, scatterv_count, scatterv_displ, mpi_real, &
-                  wrk, ij_count, mpi_real, ens_map(m), mpi_comm_letkf, ierr)
-          end if
+    integer :: m, p, ierr
+    integer :: status(mpi_status_size), recv_req(mem), send_req(pe_size*ens_count)
 
-          ij(m,s,:) = wrk
-
-          if(ierr /= 0) then
-             print *, "ERROR: with letkf_mpi_ens2ij",ierr
-             stop 1
-          end if
-       end do
-    end do
-
-
-#else
-
-    ! using MPI custom types method
     !------------------------------------------------------------
     ! TODO, possible cache miss performance issues by specifying data by ns length then nij?
     !  trying toing by nij then x ns?
-    integer :: mpitype_col_send
-    integer :: mpitype_col_recv
-    integer(kind=mpi_address_kind) :: lb, ex, ex_real
-    integer :: j, m, p, ierr
-    integer :: status(mpi_status_size), recv_req(mem), send_req(pe_size*ens_count)
 
-
-    ! how big is a real?
-    call mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
-
-    ! define the outgoing structure for a single grid column
-    call mpi_type_vector(grid_ns, 1, grid_nx*grid_ny, mpi_real, mpitype_col_send, ierr)
-    lb=0; ex=ex_real*pe_size
-    call mpi_type_create_resized(mpitype_col_send, lb, ex, mpitype_col_send, ierr)
-    call mpi_type_commit(mpitype_col_send, ierr)
-
-    ! define the incoming structure for a single grid column
-    call mpi_type_vector(grid_ns, 1, mem, mpi_real, mpitype_col_recv, ierr)
-    lb=0; ex=ex_real*grid_ns*mem
-    call mpi_type_create_resized(mpitype_col_recv, lb, ex, mpitype_col_recv, ierr)
-    call mpi_type_commit(mpitype_col_recv, ierr)
-
+    ! initialize asynchronous receives for our segment of  each ensemble member
     do m=1,mem      
-       ! initialize receive
-       call mpi_Irecv(ij(m,1,1), scatterv_count(pe_rank+1), mpitype_col_recv, ens_map(m), 0, mpi_comm_letkf, recv_req(m), ierr)
+       call mpi_Irecv(ij(m,1,1), scatterv_count(pe_rank+1), mpitype_grd_nm_ns_nij,&
+            ens_map(m), 0, mpi_comm_letkf, recv_req(m), ierr)
     end do
 
-    ! FAST 
+    ! initialize asynchronous scatters of each whole ensemble we have stored
     do m=1,ens_count
        do p=0,pe_size-1
-          call mpi_Isend(ens(p+1,1,m), scatterv_count(p+1), mpitype_col_send, p, 0, mpi_comm_letkf, &
-              send_req((m-1)*pe_size+p+1), ierr)
+          call mpi_Isend(ens(p+1,1,m), scatterv_count(p+1), mpitype_grd_nxy_ns,&
+               p, 0, mpi_comm_letkf, send_req((m-1)*pe_size+p+1), ierr)
        end do
     end do
-    ! do m=1,ens_count
-    !    do p=0,pe_size-1
-    !       call mpi_send(ens(p+1,1,m), scatterv_count(p+1), mpitype_col_send, p, 0, mpi_comm_letkf, ierr)
-    !    end do
-    ! end do
 
-
-
-    ! wait for receive to finish
+    ! wait for receives to finish
     call mpi_waitall(mem, recv_req, status, ierr)
-    if(j>0) then
-       call mpi_waitall(j, send_req, status, ierr)
-    end if
 
-    call mpi_type_free(mpitype_col_send, ierr)
-    call mpi_type_free(mpitype_col_recv, ierr)
-
-#endif
+    ! wait for the sends to finish
+    if(ens_count>0) call mpi_waitall(pe_size*ens_count, send_req, status, ierr)
 
   end subroutine letkf_mpi_ens2ij
   !================================================================================
 
 
 
-  subroutine init_state_mpi_type
-!    mpi_type_Create_indexed_block(grid_nx*grid_ny, 1, 
-!    state_mpi_type
-!    integer :: ierr
-!    integer :: state_col_snd_mpi_type
 
-!    call mpi_type_vector(grid_ns, 1, grid_nx*grid_ny, mpi_real, state_col_snd_mpi_type, ierr)
-!    call mpi_type_commit(state_col_mpi_type, ierr)
+  !================================================================================
+  !================================================================================
+  subroutine init_state_mpi_type
+    integer(kind=mpi_address_kind) :: lb, ex, ex_real
+    integer :: ierr
+
+    ! TODO, possible cache miss performance issues by specifying data by ns length then nij?
+
+    ! how big is a real?
+    call mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
+
+
+    call mpi_type_vector(grid_ns, 1, grid_nx*grid_ny, mpi_real, mpitype_grd_nxy_ns, ierr)
+    lb=0; ex=ex_real*pe_size
+    call mpi_type_create_resized(mpitype_grd_nxy_ns, lb, ex, mpitype_grd_nxy_ns, ierr)
+    call mpi_type_commit(mpitype_grd_nxy_ns, ierr)
+
+
+    call mpi_type_vector(grid_ns, 1, mem, mpi_real, mpitype_grd_nm_ns_nij, ierr)
+    lb=0; ex=ex_real*grid_ns*mem
+    call mpi_type_create_resized(mpitype_grd_nm_ns_nij, lb, ex, mpitype_grd_nm_ns_nij, ierr)
+    call mpi_type_commit(mpitype_grd_nm_ns_nij, ierr)
+
+
+    lb=0; ex=ex_real*pe_size
+    call mpi_type_create_resized(mpi_real, lb, ex, mpitype_grd_nxy, ierr)
+    call mpi_type_commit(mpitype_grd_nxy, ierr)
+
+
+    call mpi_type_vector(grid_ns, 1, 1, mpi_real, mpitype_grd_ns_nij, ierr)
+    call mpi_type_commit(mpitype_grd_ns_nij, ierr)
 
   end subroutine init_state_mpi_type
+  !================================================================================
+
+
 
 
   !================================================================================
   !================================================================================
-  subroutine letkf_mpi_ij2ens(ij, ens)
+  subroutine letkf_mpi_ij2ens(ij, ens, async)
     !! Takes gridpoints that are scattered across the processors and
     !! combines them and sends individual whole ensemble members to the processors
     !! responsible for saving them
@@ -308,46 +314,51 @@ contains
       !! ***Shape is ([[letkf_mpi:grid_nx]], [[letkf_mpi:grid_ny]],
       !!    [[letkf_mpi:grid_ny]], [[letkf_mpi:mem]])***
 
-    integer :: ierr, s, m, i, j
-    real :: wrk(ij_count)
-    real :: wrk2(grid_nx*grid_ny)
+    logical, intent(in), optional :: async
 
-    ! TODO, is there any way to do this with fewer mpi_gather calls?
-    do m=1,mem
-       do s=1,size(ens,2)
-          wrk = ij(m,s,:)
-          if(.not. interleave) then
-             call mpi_gatherv(wrk, ij_count, mpi_real,&
-                  ens(:,s,ens_idx(m)), scatterv_count, scatterv_displ, mpi_real,&
-                  ens_map(m), mpi_comm_letkf, ierr)
-          else
-             call mpi_gatherv(wrk, ij_count, mpi_real,&
-                  wrk2, scatterv_count, scatterv_displ, mpi_real,&
-                  ens_map(m), mpi_comm_letkf, ierr)
-             if(ens_map(m) == pe_rank) then
-                do i=1,pe_size
-                   do j=1,scatterv_count(i)
-                      ens((j-1)*pe_size+i,s,ens_idx(m)) = wrk2(scatterv_displ(i)+j)
-                   end do
-                end do
-             end if
-          end if
-          if(ierr /= 0) then
-             print *, "ERROR: with letkf_mpi_ij2ens",ierr
-             stop 1
-          end if
+    logical :: async0
+    integer ::m, p, ierr
+    integer :: status(mpi_status_size), send_req(mem), recv_req(pe_size*ens_count)
+
+    async0 = merge(async, .false., async)
+
+    ! initialize the asynchronous receives for our whole ensembme members
+    do m=1,ens_count
+       do p=0,pe_size-1
+          call mpi_Irecv(ens(p+1,1,m), scatterv_count(p+1), mpitype_grd_nxy_ns, &
+               p, 0, mpi_comm_letkf, recv_req((m-1)*pe_size+p+1), ierr)
        end do
     end do
+
+    !initialize the asynchronous sends
+    do m=1,mem
+       call mpi_Isend(ij(m,1,1), scatterv_count(pe_rank+1), mpitype_grd_nm_ns_nij, &
+            ens_map(m), 0, mpi_comm_letkf, send_req(m), ierr)
+    end do
+
+    if(async0) then
+       ! we will wait somewhere OUTSIDE this subroutine for the send/recv to finish
+       if(ens_count>0) then
+          rcv_wait(rcv_wait_count+1:rcv_wait_count+(pe_size*ens_count)) = recv_req(:)
+          rcv_wait_count = rcv_wait_count + pe_size*ens_count
+       end if
+       snd_wait(snd_wait_count+1:snd_wait_count+mem) = send_req(:)
+       snd_wait_count = snd_wait_count + mem
+    else
+       ! wait here for the send/recv to finish
+       if(ens_count>0) call mpi_waitall(pe_size*ens_count, recv_req, status, ierr)
+       call mpi_waitall(mem, send_req, status, ierr)
+    end if
 
   end subroutine letkf_mpi_ij2ens
   !================================================================================
 
 
 
-
+  
   !================================================================================
   !================================================================================
-  subroutine letkf_mpi_grd2ij_real(grd, ij)
+  subroutine letkf_mpi_grd2ij_real(grd, ij, root)
     !! Takes a single grid on the root process and distributes
     !! portions of it to the worker processes
 
@@ -359,30 +370,37 @@ contains
       !! The gridpoints this process is responsible for using.
       !! ***Shape is ([[letkf_mpi:ij_count]])***
 
-    integer :: ierr,i,j
-    real :: wrk(grid_nx*grid_ny)
+    integer, intent(in), optional :: root
+    
+    integer :: recv_req, send_req(pe_size)
+    integer :: status(mpi_status_size)
 
-    if(.not.interleave) then
-       call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_real, &
-            ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
-    else
-       if (pe_isroot) then
-          do i=1,pe_size
-             do j=1,scatterv_count(i)
-                wrk(scatterv_displ(i)+j) = grd((j-1)*pe_size+i)
-             end do
-          end do
-       end if
-       call mpi_scatterv(wrk, scatterv_count, scatterv_displ, mpi_real, &
-            ij, ij_count, mpi_real, pe_root, mpi_comm_letkf, ierr)
+    integer :: root0, p, ierr
+    
+    root0 = merge(root, pe_root, present(root))
+
+    ! initialize asynchronous receives
+    call mpi_Irecv(ij, scatterv_count(pe_rank+1), mpi_real,&
+         root0, 0, mpi_comm_letkf, recv_req, ierr)
+         
+    ! initialize the asynchronous send
+    if(root0 == pe_rank) then
+       do p=0,pe_size-1
+          call mpi_Isend(grd(p+1), scatterv_count(p+1), mpitype_grd_nxy,&
+               p, 0, mpi_comm_letkf, send_req(p+1), ierr)
+       end do
     end if
 
-    if(ierr /= 0) then
-       print *, "ERROR: with letkf_mpi_grd2ij",ierr
-       stop 1
-    end if
+    ! wait for receives to finish
+    call mpi_waitall(1, recv_req, status, ierr)
+    
+    ! wait for sends to finish
+    if( root0 ==pe_rank) call mpi_waitall(pe_size, send_req, status, ierr)
+
+
   end subroutine letkf_mpi_grd2ij_real
   !================================================================================
+
 
 
 
@@ -403,20 +421,15 @@ contains
     integer :: ierr,i,j
     logical :: wrk(grid_nx*grid_ny)
 
-    if(.not.interleave) then
-       call mpi_scatterv(grd, scatterv_count, scatterv_displ, mpi_logical, &
-            ij, ij_count, mpi_logical, pe_root, mpi_comm_letkf, ierr)
-    else
-       if (pe_isroot) then
-          do i=1,pe_size
-             do j=1,scatterv_count(i)
-                wrk(scatterv_displ(i)+j) = grd((j-1)*pe_size+i)
-             end do
+    if (pe_isroot) then
+       do i=1,pe_size
+          do j=1,scatterv_count(i)
+             wrk(scatterv_displ(i)+j) = grd((j-1)*pe_size+i)
           end do
-       end if
-       call mpi_scatterv(wrk, scatterv_count, scatterv_displ, mpi_logical, &
-            ij, ij_count, mpi_logical, pe_root, mpi_comm_letkf, ierr)
+       end do
     end if
+    call mpi_scatterv(wrk, scatterv_count, scatterv_displ, mpi_logical, &
+         ij, ij_count, mpi_logical, pe_root, mpi_comm_letkf, ierr)
 
     if(ierr /= 0) then
        print *, "ERROR: with letkf_mpi_grd2ij",ierr
@@ -430,40 +443,49 @@ contains
 
   !================================================================================
   !================================================================================
-  subroutine letkf_mpi_ij2grd(ij, grd, rank)
-    real, intent(in)    :: ij(ij_count)
-    real, intent(inout) :: grd(grid_nx* grid_ny)
+  subroutine letkf_mpi_ij2grd(ij, grd, rank, async)
+    real, intent(in)    :: ij(grid_ns, ij_count)
+    real, intent(out)   :: grd(grid_nx* grid_ny, grid_ns)
     integer, intent(in), optional :: rank
+    logical, intent(in), optional :: async
 
+    logical :: async0
     integer :: rank0
-    integer :: ierr,i,j
-    real :: wrk(grid_nx*grid_ny)
+    integer :: recv_req(pe_size), send_req
+    integer :: status(mpi_status_size)
+    integer :: p, ierr
 
-    if(present(rank)) then
-       rank0 = rank
-    else
-       rank0 = pe_root
+    async0=merge(async, .false., present(async))
+    rank0=merge(rank, pe_root,present(rank))
+
+    ! initialize asynchronous receives
+    if(rank0 == pe_rank) then
+       grd=0
+       do p=0, pe_size-1
+          call mpi_Irecv(grd(p+1,1), scatterv_count(p+1), mpitype_grd_nxy_ns, &
+               p, 0, mpi_comm_letkf, recv_req(p+1), ierr)
+       end do
     end if
 
-    if(.not.interleave) then
-       call mpi_gatherv(ij, ij_count, mpi_real, &
-            grd, scatterv_count, scatterv_displ, mpi_real, rank0, mpi_comm_letkf, ierr)
-    else
-       call mpi_gatherv(ij, ij_count, mpi_real, &
-            wrk, scatterv_count, scatterv_displ, mpi_real, rank0, mpi_comm_letkf, ierr)
+    ! initialize the asynchronous send
+    call mpi_Isend(ij, scatterv_count(pe_rank+1), mpitype_grd_ns_nij, &
+         rank0, 0, mpi_comm_letkf, send_req, ierr)
+
+
+    if(async0) then
+       ! we will wait somewhere OUTSIDE this subroutine for the send/recv to finish
        if(rank0 == pe_rank) then
-          do i=1,pe_size
-             do j=1,scatterv_count(i)
-                grd((j-1)*pe_size+i) = wrk(scatterv_displ(i)+j)
-             end do
-          end do
+          rcv_wait(rcv_wait_count+1:rcv_wait_count+pe_size) = recv_req(:)
+          rcv_wait_count = rcv_wait_count+pe_size
        end if
+       snd_wait_count = snd_wait_count + 1
+       snd_wait(snd_wait_count) = send_req
+    else
+       ! wait here for the send /recv to finish
+       if(rank0 == pe_rank) call mpi_waitall(pe_size, recv_req, status, ierr)
+       call mpi_waitall(1, send_req, status, ierr)
     end if
 
-    if(ierr /= 0) then
-       print *, "ERROR: with letkf_mpi_ij2grd", ierr
-       stop 1
-    end if
   end subroutine letkf_mpi_ij2grd
   !================================================================================
 
@@ -528,6 +550,8 @@ contains
 
     pe_isroot = pe_root == pe_rank
 
+    rcv_wait_count = 0
+    snd_wait_count = 0
   end subroutine letkf_mpi_preinit
   !================================================================================
 
@@ -540,8 +564,11 @@ contains
     character(len=*), intent(in) :: filename
     integer :: i, j
     integer :: count, prev, unit
+    integer :: counts(pe_size)
+    character(len=1024) :: c
+    integer :: ppn, n
 
-    namelist /letkf_mpi/ mem, interleave
+    namelist /letkf_mpi/ mem,  ppn
 
     if(pe_isroot) then
        print "(A)", ""
@@ -572,17 +599,32 @@ contains
 
     end if
 
+    ! determine the order that we should choose PE numbers for IO
+    allocate(io_order(pe_size))
+    n=((pe_size-1)/ppn)+1
+    do i=0,pe_size
+       j=mod(i,n)
+       io_order(i+1) = j*ppn+(i-j)/n
+    end do
+
+
     ! determine which ensemble members number this PE should deal with
     ! ----------------------------------------
+    counts(:)=0   
+    do i=0, mem-1
+       j=io_order(mod(i, pe_size)+1)+1
+       counts(j)=counts(j)+1
+    end do
+
+    count = 0
     prev = 0
     if (pe_isroot) then
        print *, ""
        print *, "ensemble member I/O list:"
     end if
     do i=0, pe_size-1
-       ! for each proc, determine the number of members required
-       count = mem / pe_size
-       if (i < mod(mem, pe_size)) count = count + 1
+       count = counts(i+1)
+
        if (i == pe_rank) then
           ! if we are the mpi rank we are currently calculating for... save this
           ens_count = count
@@ -594,29 +636,23 @@ contains
        do j=1,count
           ens_map(prev+j) = i
        end do
+       ! print out info about each PE
+       ! TODO, this is temporary
+       if (pe_rank == i) then
+          call hostnm(c)
 
-       ! if root proc, print out info about each PE
-       if (pe_isroot) then
           if (count > 1) then
-             print '(A5,I4,A,I4,A,I4,A,I4)', "proc", i,' is I/O for ',count,&
-                  ' ensemble member(s): ', prev+1, ' to ',count+prev
+             print '(A5,I4,3A,I4,A,I4,A,I4)', "proc", i,' on ',trim(c),' is I/O for ',count,&
+                   ' ensemble member(s): ', prev+1, ' to ',count+prev
           else if (count == 1) then
-             print '(A5,I4,A,I4)', " proc ", i,' is I/O for    1 ensemble member(s): ', prev+1
-          else
-             print '(A5,I4,A)', " proc ", i,' is I/O for    0 ensemble member(s)'
+             print '(A5,I4,3A,I4)', " proc ", i,' on ',trim(c),' is I/O for    1 ensemble member:    ', prev+1
           end if
        end if
+       call letkf_mpi_barrier(.true.)
 
        prev = prev + count
     end do
-
-#ifdef SCATTER_CUSTOMPACK
-    if (pe_isroot) then
-       print *,""
-       print *,"NOTE: using secondary buffering for scatter /gether calls"
-    end if
-#endif
-
+    
   end subroutine letkf_mpi_init
   !================================================================================
 

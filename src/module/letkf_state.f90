@@ -270,7 +270,7 @@ contains
   !================================================================================
   subroutine letkf_state_read
     real, allocatable :: gues(:,:,:,:)
-    integer :: tbgscatter, tbgread
+    integer :: tbgread
     character(len=1024) :: filename
     integer :: m, i, j
 
@@ -304,27 +304,21 @@ contains
 
 
     ! read in the background members that our process is responsible for
-    allocate(gues(grid_nx, grid_ny, grid_ns, size(ens_list)))
-    tbgread = timer_init("    bkg_read", TIMER_SYNC)
+    allocate(gues(grid_nx, grid_ny, grid_ns, ens_count))
+    tbgread = timer_init("    file I/O", TIMER_SYNC)
     call timer_start(tbgread)
     do m=1,size(ens_list)
-!       write (filename, '(A,I0.4,A)') 'INPUT/gues/',ens_list(m)
        print '(A,I5,A,I5)', " PROC ",pe_rank," is READING ens member: ", ens_list(m)
-
        call stateio_class%read(ens_list(m), gues(:,:,:, m))
-       print '(A,I5,A,I5)', " PROC ",pe_rank," DONE"
-       
+       print '(A,I5,A,I5)', " PROC ",pe_rank," DONE"       
     end do
     call timer_stop(tbgread)
-
-
-    ! console output synchronization
-    call letkf_mpi_barrier(syncio=.true.)
 
 
     ! before scattering, see if the obs module needs the full
     ! background in order to generate test observations
     if (obs_test) then
+       call letkf_mpi_barrier(syncio=.true.)
        if(pe_isroot) then
           print *,""
           print *, "Generating test observations from background..."
@@ -387,19 +381,14 @@ contains
     allocate(ana_sprd_ij(grid_ns, ij_count))
 
 
-    ! scatter background, 
-    if(pe_isroot) then
-       print *,""
-       print *, "scattering background..."
-    end if
-
-    tbgscatter = timer_init("    bkg_scatter", TIMER_SYNC)
-    call timer_start(tbgscatter)
+    ! scatter background
     ! TODO: do a scatter after each state read
     ! (in case we have a single proc reading multiple members, with
     !  amount of memory large enough that we would run out)
+!    tbgscatter = timer_init("    bkg_scatter") !, TIMER_SYNC)
+!    call timer_start(tbgscatter)
     call letkf_mpi_ens2ij(gues, bkg_ij)
-    call timer_stop(tbgscatter)
+!    call timer_stop(tbgscatter)
 
 
     ! cleanup no longer needed arrays
@@ -443,16 +432,12 @@ contains
     real, allocatable :: wrk4(:,:,:,:)
     character(len=1024) :: filename
 
-    integer :: t_mpi, t_write, t_mpi1,t_mpi2, t_write1,t_write2
+    integer :: t_state, t_write
 
-    t_mpi    = timer_init("  mpi gather", TIMER_SYNC)
-    t_mpi1   = timer_init("   mean/sprd")
-    t_mpi2   = timer_init("   ens members")
-
-    t_write  = timer_init("  write", TIMER_SYNC)
-    t_write1 = timer_init("   mean/sprd")
-    t_write2 = timer_init("   ens members")
+    t_state  = timer_init("  state", TIMER_SYNC)
+    t_write  = timer_init("    file I/O")
     
+    call timer_start(t_state)
 
     if(pe_isroot) then
        print *, ""
@@ -462,118 +447,81 @@ contains
        print "(A)", '============================================================'
     end if
 
+
     ! determine which processes are going to output which of the bkg/ana mean/spread
-    ! so that we can write them in parallel    
-    proc = 0;              rank_bm = proc
-    proc = nextProc(proc); rank_bs = proc
-    proc = nextProc(proc); rank_am = proc
-    proc = nextProc(proc); rank_as = proc
+    rank_bm = io_order(mod(mem,pe_size)+1)
+    rank_bs = io_order(mod(mem+1,pe_size)+1)
+    rank_am = io_order(mod(mem+2,pe_size)+1)
+    rank_as = io_order(mod(mem+3,pe_size)+1)
 
-    if (pe_isroot) then
-       print *, ""
-       print *, "Saving ana/bkg mean/sprd"
-       print '(A,I5,3A)', " PROC ",rank_bm, " is WRITING file: OUTPUT/bkg_mean"
-       print '(A,I5,3A)', " PROC ",rank_bs, " is WRITING file: OUTPUT/bkg_sprd"
-       print '(A,I5,3A)', " PROC ",rank_am, " is WRITING file: OUTPUT/ana_mean"
-       print '(A,I5,3A)', " PROC ",rank_as, " is WRITING file: OUTPUT/ana_sprd"
-    end if
-
-    ! gather the mean/spread
-    if(pe_isroot) print *, "gathering..."
-    allocate(wrkij(ij_count))
-    call timer_start(t_mpi)
-    call timer_start(t_mpi1)
-
+    ! initialize the gathers for those fields
     if (pe_rank == rank_bm) allocate(wrk_bm(grid_nx, grid_ny, grid_ns))
-    do i=1,grid_ns
-       wrkij = bkg_mean_ij(i,:)
-       call letkf_mpi_ij2grd(wrkij, wrk_bm(:,:,i), rank_bm)
-    end do    
     if (pe_rank == rank_bs) allocate(wrk_bs(grid_nx, grid_ny, grid_ns))
-    do i=1,grid_ns
-       wrkij = bkg_sprd_ij(i,:)
-       call letkf_mpi_ij2grd(wrkij, wrk_bs(:,:,i), rank_bs)
-    end do    
     if (pe_rank == rank_am) allocate(wrk_am(grid_nx, grid_ny, grid_ns))
-    do i=1,grid_ns
-       wrkij = ana_mean_ij(i,:)
-       call letkf_mpi_ij2grd(wrkij, wrk_am(:,:,i), rank_am)
-    end do    
     if (pe_rank == rank_as) allocate(wrk_as(grid_nx, grid_ny, grid_ns))
-    do i=1,grid_ns
-       wrkij = ana_sprd_ij(i,:)
-       call letkf_mpi_ij2grd(wrkij, wrk_as(:,:,i), rank_as)
-    end do    
 
-    call timer_stop(t_mpi1)
-    call timer_stop(t_mpi)
-    deallocate(wrkij)
+    call letkf_mpi_ij2grd(bkg_mean_ij, wrk_bm, rank_bm, .true.)
+    call letkf_mpi_ij2grd(bkg_sprd_ij, wrk_bs, rank_bs, .true.)
+    call letkf_mpi_ij2grd(ana_mean_ij, wrk_am, rank_am, .true.)
+    call letkf_mpi_ij2grd(ana_sprd_ij, wrk_as, rank_as, .true.)
 
 
-    ! write out the mean/spread
-    if(pe_isroot) print *, "writing..."
+    ! initialize the main ensemble gather operation
+    allocate(wrk4(grid_nx,grid_ny, grid_ns, ens_count))
+    call letkf_mpi_ij2ens(ana_ij, wrk4, .true.) 
+
+
+    ! wait for this proc to receive all the MPI messages its waiting for
+    call letkf_mpi_wait_recv()
+
+
+    ! Write the ana/bkg mean/spread
     call timer_start(t_write)
-    call timer_start(t_write1)
-
     if (pe_rank == rank_bm) then
+       print '(A,I5,3A)', " PROC ",rank_bm, " is WRITING file: OUTPUT/bkg_mean"
        call stateio_class%write('OUTPUT/bkg_mean', wrk_bm)       
        deallocate(wrk_bm)
     end if
     if (pe_rank == rank_bs) then
+       print '(A,I5,3A)', " PROC ",rank_bs, " is WRITING file: OUTPUT/bkg_sprd"
        call stateio_class%write('OUTPUT/bkg_sprd', wrk_bs)
        deallocate(wrk_bs)
     end if
     if (pe_rank == rank_am) then
+       print '(A,I5,3A)', " PROC ",rank_am, " is WRITING file: OUTPUT/ana_mean"
        call stateio_class%write('OUTPUT/ana_mean', wrk_am)
        deallocate(wrk_am)
     end if
     if (pe_rank == rank_as) then
+       print '(A,I5,3A)', " PROC ",rank_as, " is WRITING file: OUTPUT/ana_sprd"
        call stateio_class%write('OUTPUT/ana_sprd', wrk_as)
        deallocate(wrk_as)
     end if
-    
-    call timer_stop(t_write1)
     call timer_stop(t_write)
-    call letkf_mpi_barrier(.true.)
-    if(pe_isroot) print *, "Done."
 
 
-    ! analysis ensemble members
-    if(pe_isroot) then
-       print *,""
-       print *, "Saving analyais ensemble members"
-       print *, "mpi collect..."
-    end if
-    allocate(wrk4(grid_nx,grid_ny, grid_ns, size(ens_list)))
-
-    call timer_start(t_mpi)
-    call timer_start(t_mpi2)
-    call letkf_mpi_ij2ens(ana_ij, wrk4)
-    call timer_stop(t_mpi2)
-    call timer_stop(t_mpi)
-
-    call timer_start(t_write)
-    call timer_start(t_write2)
-    do m=1,size(ens_list)
+    ! write out any ensemble members this proc is responsible for
+    do m=1,ens_count
        write (filename, '(A,I0.4,A)') 'OUTPUT/', ens_list(m)
        print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",trim(filename)
+       call timer_start(t_write)
        call stateio_class%write(filename, wrk4(:,:,:,m))
+       call timer_stop(t_write)
     end do
-    call timer_stop(t_write2)
-    call timer_stop(t_write)
 
-    call letkf_mpi_barrier()
+!    print *, " PROC ",pe_rank," DONE"
+    ! cleanup
     deallocate(wrk4)
-
-
-  contains
-    function nextProc(p)
-      integer, intent(in) :: p
-      integer :: nextProc
-
-      nextProc=mod(p+1, pe_size)
-    end function nextProc
+    if(allocated(wrk_bm)) deallocate(wrk_bm)
+    if(allocated(wrk_bs)) deallocate(wrk_bs)
+    if(allocated(wrk_am)) deallocate(wrk_am)
+    if(allocated(wrk_as)) deallocate(wrk_as)
+    call letkf_mpi_wait()
     
+    call timer_stop(t_state)
+    call letkf_mpi_barrier()
+
+
   end subroutine letkf_state_write
   !================================================================================
 
