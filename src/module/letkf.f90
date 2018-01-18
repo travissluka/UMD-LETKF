@@ -121,11 +121,8 @@ contains
   !================================================================================
   !================================================================================
   subroutine letkf_driver_run()
-    real, allocatable :: wrk1(:)
-    real, allocatable :: wrk3(:,:,:)
     integer :: t_letkf, t_output, timer
     integer :: unit
-    integer :: i
 
     namelist /letkf_inflation/ infl_mul, infl_rtps, infl_rtpp
 
@@ -229,24 +226,25 @@ contains
     call getmem_print()
 
     ! write out other diagnostics
-    if(pe_isroot) then
-       print *, ""
-       print *, "Writing diagnostics files..."
-    end if
-    if (pe_isroot) allocate(wrk3(grid_nx, grid_ny, grid_ns))
-    allocate(wrk1(ij_count))
-    do i=1,grid_ns
-       wrk1=diag_count_ij(i,:)
-       call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
-    end do
-    if(pe_isroot) then
-       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
-            'OUTPUT/diag_count', '.nc'
-       call stateio_class%write('OUTPUT/diag_count', wrk3)
-    end if
-    if(pe_isroot) deallocate(wrk3)
-    deallocate(wrk1)
-    call getmem_print()
+!    if(pe_isroot) then
+!       print *, ""
+!       print *, "Writing diagnostics files..."
+!    end if
+!    if (pe_isroot) allocate(wrk3(grid_nx, grid_ny, grid_ns))
+!    call letkf_mpi_ij2grd(diag_count_ij, wrk3, pe_root)
+!    allocate(wrk1(ij_count))
+!    do i=1,grid_ns
+!       wrk1=diag_count_ij(i,:)
+!       call letkf_mpi_ij2grd(wrk1, wrk3(:,:,i))
+!    end do
+!    if(pe_isroot) then
+!       print '(A,I5,3A)', " PROC ",pe_rank, " is WRITING file: ",&
+!            'OUTPUT/diag_count', '.nc'
+!       call stateio_class%write('OUTPUT/diag_count', wrk3)
+!    end if
+!    if(pe_isroot) deallocate(wrk3)
+!    deallocate(wrk1)
+!    call getmem_print()
 
     ! all done, cleanup
     call timer_stop(t_output)
@@ -280,7 +278,7 @@ contains
     
 
     integer :: timer1, timer2, n, timer3, timerloc
-    integer :: i, j, lg, slab
+    integer :: i, lg, slab
     integer, parameter :: progress_bar_size = 45
     real :: loc_hz_max
     real :: loc_hz_ij

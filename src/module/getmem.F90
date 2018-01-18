@@ -51,6 +51,12 @@ contains
     real :: mem_min, mem_max, mem_avg
     integer :: ierr
 
+    if(pe_isroot) then
+       print *, ""
+       print *, "NOTE: memory diagnostics are disabled"
+    end if
+    return
+
     call readmem(cur, max)
     call mpi_reduce(cur, mem_min, 1, mpi_real, mpi_min, pe_root, pe_comm, ierr)
     call mpi_reduce(cur, mem_max, 1, mpi_real, mpi_max, pe_root, pe_comm, ierr)

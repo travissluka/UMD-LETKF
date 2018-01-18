@@ -25,7 +25,7 @@ module timing
   ! private module variables
   !------------------------------------------------------------
   integer, parameter :: max_timers = 1024
-  integer            :: active_timers = 0
+  integer            :: active_timers
   type(timer_obj)    :: timer_objs(max_timers)
   integer :: mp_comm, mp_root, mp_rank, mp_size
 
@@ -42,6 +42,8 @@ contains
     integer, intent(in) :: comm
     integer, intent(in) :: root
     integer :: ierr
+
+    active_timers = 0
     mp_root = root
     mp_comm = comm
     call mpi_comm_rank(mp_comm, mp_rank, ierr)

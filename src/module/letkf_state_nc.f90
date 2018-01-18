@@ -181,10 +181,16 @@ contains
        print *, 'reading ',trim(data_entries(i2)%w1),' from "', trim(data_entries(i2)%w2),&
             '" of file "',trim(data_entries(i2)%w3),'"'
     end if
-    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid))
-    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid))
-    call check(nf90_get_var(ncid, varid, lat))
-    call check(nf90_close(ncid))
+
+    call check(nf90_open(data_entries(i2)%w3, nf90_nowrite, ncid),&
+         "File: "//trim(data_entries(i2)%w3))
+    call check(nf90_inq_varid(ncid, data_entries(i2)%w2, varid),&
+         "File: "//trim(data_entries(i2)%w3)//" Var: "//trim(data_entries(i2)%w2))
+    call check(nf90_get_var(ncid, varid, lat),&
+         "File: "//trim(data_entries(i2)%w3)//" Var: "//trim(data_entries(i2)%w2))
+    call check(nf90_close(ncid),&
+         "File: "//trim(data_entries(i2)%w3))
+
 
     ! read in the lon
     i1 = getline('grid_lon_1d')
@@ -312,12 +318,12 @@ contains
     real, intent(out) :: state(:,:,:)
 
     character(len=1024)  :: filename
-    integer :: ncid, varid
+    integer :: ncid, varid, stat
     integer :: i, j, i1,i2, i3, i4, k
 
     do i=1,size(state_var)
         j =  getline(state_var(i))
-! !       print *, state_var(i), trim(data_entries(j)%w2), "  ",trim(data_entries(j)%w3)
+!       print *, state_var(i), trim(data_entries(j)%w2), "  ",trim(data_entries(j)%w3)
 
 
         ! TODO, add logic to use ENS0X, and/or ENSX
@@ -334,14 +340,14 @@ contains
            if(slab_var(k) == i) i4 = k
         end do
 
-!        print '(I5,A,A10,A,I3,A,I3,4A)', ens," ", state_var(i) ," into ",i3,":",i4,&
-!             ' from ',trim(data_entries(j)%w2), "  ",trim(filename)
-
-              
-        call check(nf90_open(trim(filename), nf90_nowrite, ncid))
-        call check(nf90_inq_varid(ncid, trim(data_entries(j)%w2), varid))
-        call check(nf90_get_var(ncid, varid, state(:,:,i3:i4)))
-        call check(nf90_close(ncid))
+        call check(nf90_open(trim(filename), nf90_nowrite, ncid), &
+             "File: "//trim(filename))
+        call check(nf90_inq_varid(ncid, trim(data_entries(j)%w2), varid),&
+             "File: "//trim(filename)//" Var:"//trim(data_entries(j)%w2))
+        call check(nf90_get_var(ncid, varid, state(:,:,i3:i4)),&
+             "File: "//trim(filename)//" Var:"//trim(data_entries(j)%w2))
+        call check(nf90_close(ncid), &
+             "File: "//trim(filename))
     end do
 
   end subroutine stateio_read
@@ -426,10 +432,15 @@ contains
   end function toupper
 
 
-  subroutine check(status)
+  subroutine check(status, message)
     integer, intent(in) :: status
+    character(*), optional, intent(in) :: message
     if(status /= nf90_noerr) then
-       write (*,*) trim(nf90_strerror(status))
+       if(present(message)) then
+          write (*,*) trim(nf90_strerror(status)),":  ", trim(message)
+       else
+          write (*,*) trim(nf90_strerror(status))
+       end if
        stop 1
     end if
   end subroutine check

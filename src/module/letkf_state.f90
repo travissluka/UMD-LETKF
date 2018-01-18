@@ -421,10 +421,9 @@ contains
   !================================================================================
   !================================================================================
   subroutine letkf_state_write()
-    integer :: i, m, proc
+    integer :: m
     integer :: rank_bm, rank_bs, rank_am, rank_as
 
-    real, allocatable :: wrkij(:)
     real, allocatable :: wrk_bm(:,:,:)
     real, allocatable :: wrk_bs(:,:,:)
     real, allocatable :: wrk_am(:,:,:)

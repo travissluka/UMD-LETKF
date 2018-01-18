@@ -663,26 +663,7 @@ contains
   !================================================================================
   subroutine letkf_mpi_final
     integer :: ierr
-    ! real :: cur, mem, mem_avg, mem_min, mem_max, mem_sum
-    ! ! calculate memore hiwater mark
-    ! call getMem(cur, mem)
-    ! call mpi_reduce(mem, mem_min, 1, mpi_real, mpi_min, pe_root, mpi_comm_letkf, ierr)
-    ! call mpi_reduce(mem, mem_max, 1, mpi_real, mpi_max, pe_root, mpi_comm_letkf, ierr)
-    ! call mpi_reduce(mem, mem_sum, 1, mpi_real, mpi_sum, pe_root, mpi_comm_letkf, ierr)
-    ! mem_avg = mem_sum / pe_size
-
-    ! if(pe_isroot) then
-    !    print *, new_line('a'), &
-    !         new_line('a'), "============================================================",&
-    !         new_line('a'), " Max memory usage",&
-    !         new_line('a'), "============================================================"
-    !    print *, "per core:"
-    !    print '(A,F5.2,A)', "   avg: ",mem_avg," GB"
-    !    print '(A,F5.2,A)', "   min: ",mem_min," GB"
-    !    print '(A,F5.2,A)', "   max: ",mem_max," GB"
-    !    print *,"total:"
-    !    print '(A,F5.2,A)', "    ",mem_sum," GB"
-    ! end if
+  
     call mpi_finalize(ierr)
   end subroutine letkf_mpi_final
   !================================================================================

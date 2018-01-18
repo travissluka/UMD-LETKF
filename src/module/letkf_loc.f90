@@ -12,7 +12,6 @@ module letkf_loc
   !------------------------------------------------------------
   public :: letkf_loc_init
   public :: letkf_loc_register
-
   public :: loc_gc, loc_gaus
 
 
@@ -127,9 +126,6 @@ contains
   
   !================================================================================
   !================================================================================
-
-
-  
   subroutine letkf_loc_init(nml_filename)
     character(len=*), intent(in) :: nml_filename
 
@@ -184,18 +180,18 @@ contains
     if (pe_isroot) print *, 'Using "', trim(localizer_class%get_name()), '"'
     
   end subroutine letkf_loc_init
+  !================================================================================
+
 
   
   
   !================================================================================
   !================================================================================
-
-  
-
   pure function loc_gc(z, L)
     !! Gaspari-Cohn localization function
     !! Possibly faster than the Gaussian function, depending on computer architecture.
     !! Similar shape to Gaussian, except it is compact, goes to 0 at (\ 2L sqrt( 0.3) \ )
+
     real, intent(in) :: z
     real, intent(in) :: L
     !! (\ e^(0.5) \)
@@ -220,27 +216,25 @@ contains
             (5.0/8.0)*z_c**3 - (5.0/3.0)*z_c**2 + 1
     end if
   end function loc_gc
+  !================================================================================
+
 
 
 
   !================================================================================
   !================================================================================
-
-
-
   pure function loc_gaus(z, L)
     real, intent(in) :: z, L
     real :: loc_gaus
     loc_gaus = exp( -0.5 *  z*z / L*L)
   end function loc_gaus
+  !================================================================================
+
 
 
 
   !================================================================================
   !================================================================================
-  
-
-
   subroutine letkf_loc_register(cls)
     class(localizer), pointer :: cls
     integer :: i
@@ -261,14 +255,13 @@ contains
     localizer_reg_num = localizer_reg_num + 1
     localizer_reg(localizer_reg_num)%p => cls
   end subroutine letkf_loc_register
+  !================================================================================
+
 
 
 
   !================================================================================
-  !================================================================================
-
-
-  
+  !================================================================================ 
   function toupper(in_str) result(out_str)
     character(*), intent(in) :: in_str
     character(len(in_str)) :: out_str
@@ -282,6 +275,8 @@ contains
        end if
     end do
   end function toupper
+  !================================================================================
+
 
 
 

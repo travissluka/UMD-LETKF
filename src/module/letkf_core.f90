@@ -34,8 +34,9 @@ contains
     !! initializes the LETKF core for future calls to letkf_core_solve
     !! (mainly just sets the size of a temporary working matix used
     !! by calls to BLAS/LAPACK)
+
     integer, intent(in) :: nbvi
-    !! number of ensemble members
+      !! number of ensemble members
 
     nbv = nbvi
     evwork_size = (64+2) * nbv
@@ -94,7 +95,6 @@ contains
     call ssyev('V','U', nbv, work1, nbv, eival, evwork, size(evwork), err)
     eivec = work1
 
-
     ! Pa = [hdxb^T Rinv hdxb + (m-1) I] inv
     do i=1,nbv
        work1(:,i) = eivec(:,i) / eival(i)
@@ -128,10 +128,6 @@ contains
        trans(:,j) = trans(:,j) + work3
     end do
 
-!    if (pe_isroot) then
-!       print *, trans
-!       stop 1
-!    end if
     ! adaptive inflation
     ! TODO
 
