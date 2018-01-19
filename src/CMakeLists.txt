@@ -19,30 +19,34 @@ else()
 endif()
 
 
-
-# ## TODO, shouldn't need this!!
-# #include_directories( "/usr/lib64/gfortran/modules")
-
+# determine the repository version and time 
+execute_process(COMMAND git describe --dirty --tags --always OUTPUT_VARIABLE GIT_VERSION RESULT_VARIABLE RES OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT ${RES} EQUAL "0")
+  set(GIT_VERSION "Unknown")
+endif()
+add_definitions(-DCVERSION=\"${GIT_VERSION}\")
+string(TIMESTAMP TS %Y-%m-%d )
+add_definitions(-DCTIME=\"${TS}\")
 
 
 # other global variables
 # ------------------------------------------------------------
-LIST(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../cmake)
+LIST(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/mod)
-include ( "../cmake/pickFortranCompilerFlags.cmake" )
-include ( "../cmake/checkOutOfSource.cmake" )
+include ( "cmake/pickFortranCompilerFlags.cmake" )
+include ( "cmake/checkOutOfSource.cmake" )
 
 
 # required packages
 # ------------------------------------------------------------
-set(NETCDF_F77 "YES")
-find_package(NetCDF REQUIRED)
-find_package(LAPACK REQUIRED)
+find_package(LAPACK)
 find_package(MPI REQUIRED)
 
+set(NETCDF_INCLUDES $ENV{NETCDF_INCS})
+set(NETCDF_LIBRARIES_F77 $ENV{NETCDF_LIBS})
 
 # subprojects
 # ------------------------------------------------------------

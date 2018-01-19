@@ -34,6 +34,14 @@ module letkf
   integer :: t_total,  t_init
 
 
+! use this to get the repository version at compile time
+#ifndef CVERSION
+#define CVERSION "Unknown"
+#endif
+
+#ifndef CTIME
+#define CTIME "Unknown"
+#endif
 
   
 contains
@@ -68,8 +76,9 @@ contains
        print "(A)", "============================================================"
        print "(A)", " Universal Multi-Domain Local Ensemble Transform Kalman Filter"
        print "(A)", " (UMD-LETKF)"
-       print "(A)", " version 0.1.0"
-       print "(A)", " Travis Sluka (tsluka@umd.edu, travis.sluka@noaa.gov)"
+       print *, ""
+       print "(2A)"," version:  ", CVERSION
+       print "(2A)"," compiled: ", CTIME
        print "(A)", "============================================================"
        print "(A)", "============================================================"
        print "(A)", ""
