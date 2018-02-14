@@ -57,6 +57,8 @@ module letkf_mpi
   ! private variables
   ! ------------------------------
 
+  logical :: skip_masked = .true.
+
   integer, allocatable :: ij_list(:)
     !! A list of grid point locations that this process
     !! is responsible for doing core LETKF algorithm on

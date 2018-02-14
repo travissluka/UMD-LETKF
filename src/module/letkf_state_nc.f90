@@ -360,22 +360,31 @@ contains
     real, intent(in) :: state(:,:,:)
 
     integer :: ncid
-    integer :: d_x, d_y, d_z, v_x, v_y, v_z
+    integer :: d_x, d_y, d_z, d_t
+    integer :: v_x, v_y, v_z, v_t
     integer :: v_v(size(state_var))
     integer :: i3, i4, i ,j, k
 
     call check(nf90_create(trim(filename)//'.nc', nf90_write, ncid))
+
+    call check(nf90_def_dim(ncid, "time", nf90_unlimited,  d_t))
+    call check(nf90_def_var(ncid, "time", nf90_real, (/d_t/), v_t))
+    call check(nf90_put_att(ncid, v_t, "axis", "T"))
+
     call check(nf90_def_dim(ncid, "grid_x", grid_nx, d_x))
     call check(nf90_def_var(ncid, "grid_x", nf90_real, (/d_x/), v_x))
     call check(nf90_put_att(ncid, v_x, "units", "degrees_east"))
+    call check(nf90_put_att(ncid, v_x, "axis", "X"))
 
     call check(nf90_def_dim(ncid, "grid_y", grid_ny, d_y))
     call check(nf90_def_var(ncid, "grid_y", nf90_real, (/d_y/), v_y))
     call check(nf90_put_att(ncid, v_y, "units", "degrees_north"))
+    call check(nf90_put_att(ncid, v_y, "axis", "Y"))
 
     call check(nf90_def_dim(ncid, "grid_z", grid_nz, d_z))
     call check(nf90_def_var(ncid, "grid_z", nf90_real, (/d_z/), v_z))
     call check(nf90_put_att(ncid, v_z, "units", "meters"))
+    call check(nf90_put_att(ncid, v_z, "axis", "Z"))
 
     
     do i=1,size(state_var)
@@ -388,8 +397,8 @@ contains
         end do
         
         !TODO, allow for 2d variables as well
-        call check(nf90_def_var(ncid, trim(data_entries(j)%w2),  nf90_real, (/d_x,d_y,d_z/), v_v(i)))
-              
+        call check(nf90_def_var(ncid, trim(data_entries(j)%w2),  nf90_real, (/d_x,d_y,d_z,d_t/), v_v(i)))
+!        call check(nf90_def_var_deflate(ncid, v_v(i), 1, 1, 1))
     end do
     call check(nf90_enddef(ncid))
 
