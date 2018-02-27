@@ -224,8 +224,7 @@ contains
     call stateio_class%init(lat, lon, mask) 
 
     ! tell the mpi module about the grid layout
-    call letkf_mpi_setgrid(grid_nx, grid_ny, grid_ns)
-
+    call letkf_mpi_setgrid(grid_nx, grid_ny, grid_ns, mask)
 
     ! scatter grids to mpi procs
     if (pe_isroot) then

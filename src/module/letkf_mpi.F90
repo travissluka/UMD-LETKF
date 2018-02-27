@@ -97,43 +97,65 @@ contains
 
   !================================================================================
   !================================================================================
-  subroutine letkf_mpi_setgrid(nx,ny,ns)
+  subroutine letkf_mpi_setgrid(nx,ny,ns, mask)
     integer, intent(in) :: nx, ny, ns
+    logical, intent(in) :: mask(:,:)
     integer :: i, j
-    integer :: count, prev
+    integer :: gridpoint_count, cnt, prev
 
     grid_nx = nx
     grid_ny = ny
     grid_ns = ns
 
+    
     ! determine how many gridpoints this PE should deal with
     ! ----------------------------------------
-    if (pe_isroot) print *, ""
+    if (pe_isroot) then
+       print *,""
+       print *, "Gridpoint/proc distributions..."
+    end if
 
 
+    ! determine the actual number of gridpoints DA is to be done for
+    ! if we are using a mask
+    gridpoint_count = count(.not. mask)
+    if (pe_isroot)  then
+       print *, " total    gridpoints: ", grid_nx*grid_ny
+       print *, " unmasked gridpoints: ", gridpoint_count
+       print *, ""
+       if (skip_masked) then
+          print *, " will scatter only UNMAKSED gridpoints"
+          print *, "NOT YET IMPLEMENTED"
+          stop 1
+       else
+          print *, " will scatter ALL gridpoints"
+       end if
+    end if
+    if (.not. skip_masked) gridpoint_count = grid_nx*grid_ny
+
+    cnt = nint(1.0*gridpoint_count / pe_size)
+    
     ! calculate actual numer of gridpoints to use for each proc
     allocate(scatterv_count(pe_size))
     allocate(scatterv_displ(pe_size))
     prev = 0
     do i=0, pe_size-1
-       count = nint(1.0*grid_nx*grid_ny / pe_size)
-       if (i == pe_size-1) count = grid_nx*grid_ny - prev
+       if (i == pe_size-1) cnt = gridpoint_count - prev
 
        if (i == pe_rank) then
-          ij_count = count
-          allocate(ij_list(count))
-          do j = 1,count
+          ij_count = cnt
+          allocate(ij_list(cnt))
+          do j = 1,cnt
              ij_list(j) = prev + j
           end do
        end if
-       scatterv_count(i+1) = count
+       scatterv_count(i+1) = cnt
        scatterv_displ(i+1) = prev
-       prev = prev+count
+       prev = prev+cnt
     end do
    
     if (pe_isroot) then
        print *, ""
-       print *, "gridpoint assignment balancing:"
        i = minval(scatterv_count)
        j = maxval(scatterv_count)
        if (i==j) then
@@ -570,7 +592,7 @@ contains
     character(len=1024) :: c
     integer :: ppn, n
 
-    namelist /letkf_mpi/ mem,  ppn
+    namelist /letkf_mpi/ mem,  ppn, skip_masked
 
     if(pe_isroot) then
        print "(A)", ""
