@@ -1,5 +1,8 @@
 module letkf_loc
   !! observation localization routines
+  !! TODO:
+  !!  * still need to generalize the horizontal / vertical / variable localization routines
+  
   use letkf_mpi
   use letkf_obs
   use letkf_state
@@ -14,6 +17,8 @@ module letkf_loc
   public :: letkf_loc_register
   public :: loc_gc, loc_gaus
 
+  !! TODO: this is temporary for the ocean development, need to make horizontal localization specification generalized
+  real, private :: loc_hz(2) = (/720e3, 200e3/)
 
   !================================================================================
   !================================================================================
@@ -132,7 +137,7 @@ contains
     character(len=:), allocatable :: locclass
     integer :: unit, i
     
-    namelist /letkf_loc/ locclass
+    namelist /letkf_loc/ locclass, loc_hz
     
     if(pe_isroot)then
        print "(A)", ""
@@ -324,8 +329,9 @@ contains
   pure function localizer_novrt_maxhz(self, ij) result(d)
     class(localizer_novrt), intent(in) :: self
     integer,                intent(in) :: ij
-    real :: d
-    d = 720e3 
+    real :: d, r
+    r=abs(lat_ij(ij))/90.0
+    d=r*loc_hz(1) + (1.0-r)*loc_hz(0)
   end function localizer_novrt_maxhz
 
   
@@ -340,12 +346,12 @@ contains
 
     integer :: i
     real :: r,l
-    ! TODO, remove the hardcoding of localization distance
-    do i = 1, ob_num
 
+    do i = 1, ob_num
        ! Horizontal localization 
+       !TODO: hardcoded to lat based hz loc distance, generalize this
        r=abs(lat_ij(ij))/90.0
-       l=r*200e3 + (1.0-r)*720e3
+       l=r*loc_hz(1) + (1.0-r)*loc_hz(0)
        rloc(i) = loc_gc(ob_dist(i), l)
 
     end do
