@@ -2,6 +2,7 @@ module letkf_obs
   use mpi !  TODO, can we put everything we need inside letkf_mpi?
   use letkf_mpi
   use kdtree
+  use, intrinsic :: IEEE_ARITHMETIC, only : IEEE_IS_FINITE
 
   implicit none
   private
@@ -343,6 +344,8 @@ contains
        call obs_read(obsio_class)
     end if
 
+    ! TODO, remove bad obs before putting in the tree
+
     ! add observations to the kd tree
     allocate(obs_lons(size(obs_list)))
     allocate(obs_lats(size(obs_list)))
@@ -529,7 +532,8 @@ contains
     class(obsio), intent(in) :: reader
     !! abstract reader class
 
-    integer :: i, ierr
+    integer :: i, j, ierr
+    logical :: found
     character(len=1024) :: filename
 
     type(observation), allocatable :: obs_t(:)
@@ -638,11 +642,50 @@ contains
     ! basic QC checks on the observations
     do i=1,size(obs_list)
        if (obs_qc(i) == 0) then
+
+          ! make sure we are gettingvalid numbers 
+          ! TODO, we shouldn't have gotten to this point, what's
+          ! wrong with the obsop output?
+          if (.not. IEEE_IS_FINITE(obs_ohx_mean(i))) obs_qc(i) = -1
+          if (.not. IEEE_IS_FINITE(obs_list(i)%val)) obs_qc(i) = -1
+          if (.not. IEEE_IS_FINITE(obs_list(i)%err)) obs_qc(i) = -1
+          if (obs_qc(1) /= 0) cycle
+                       
           ! make sure increment is within several standard deviations of bg err
-          if( abs(obs_ohx_mean(i)-obs_list(i)%val)/obs_list(i)%err  > obsqc_maxstd) obs_qc(i) = -1
+          ! TODO, add a flag to disable this if desired
+          if( abs(obs_ohx_mean(i)-obs_list(i)%val)/obs_list(i)%err  > obsqc_maxstd) then
+             obs_qc(i) = -1
+             cycle
+          end if
 
           ! make sure there is sufficient spread in the observation increment ensemble
-          if( maxval(obs_ohx(:,i)) < mem*10*tiny(1.0e0)) obs_qc(i)=-1
+          ! TODO, add a namelist param for the min value required
+          if( maxval(obs_ohx(:,i)) < mem*10*tiny(1.0e0)) then
+             obs_qc(i)=-1
+             cycle
+          end if
+
+          ! don't use observations of unkown type
+          ! TODO: add namelist parameter to determine if we remove these obs
+          do j=1,size(obsdef_list)
+             found = .false.
+             if (obs_list(i)%id == obsdef_list(j)%id) then
+                found = .true.
+                exit
+             end if
+          end do
+          if (.not. found) obs_qc(i) = -1
+          
+          do j=1,size(platdef_list)
+             found = .false.
+             if (obs_list(i)%plat == platdef_list(j)%id) then
+                found = .true.
+                exit
+             end if
+          end do
+          if (.not. found) obs_qc(i) = -1
+          
+          !... and if we made it to this point, the ob is good, huzzah
        end if
     end do
 
@@ -659,10 +702,11 @@ contains
   subroutine obs_stats_print()
     integer, allocatable :: obstat_count(:,:)
     integer, allocatable :: obplat_count(:,:)
-    integer :: cnt, i, j
+    integer :: cnt, i, j, cnt_total
 
     ! print statistics about the observations
     if (pe_isroot) then
+       cnt_total=0
        print *, ""
        print *, "Observation statistics"
        print *, "------------------------------------------------------------"
@@ -678,6 +722,7 @@ contains
        do i=1,size(obs_list)
           if (obs_qc(i) == 0) then
              cnt = 2
+             cnt_total = cnt_total + 1
           else if (obs_qc(i) > 0) then
              cnt = 3
           else
@@ -740,6 +785,9 @@ contains
              print '(A10,I10,3A10,A)', 'unknown', obplat_count(i,1),'X','X','0',' (  0.0)%'
           end if
        end do
+
+       print *, ""
+       print '(I11,A)', cnt_total, " observations used"
 
        !cleanup
        deallocate(obstat_count)

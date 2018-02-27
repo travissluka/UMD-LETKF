@@ -51,12 +51,6 @@ contains
     real :: mem_min, mem_max, mem_avg
     integer :: ierr
 
-    if(pe_isroot) then
-       print *, ""
-       print *, "NOTE: memory diagnostics are disabled"
-    end if
-    return
-
     call readmem(cur, max)
     call mpi_reduce(cur, mem_min, 1, mpi_real, mpi_min, pe_root, pe_comm, ierr)
     call mpi_reduce(cur, mem_max, 1, mpi_real, mpi_max, pe_root, pe_comm, ierr)
@@ -67,6 +61,10 @@ contains
        print '(A,4F8.2)', "Current Mem in GB (min/max/avg/tot): ",&
             mem_min, mem_max, mem_avg, mem_avg*pe_size
     end if
+
+    !TODO: there's a way with some linux kernels to clear the previous max memory
+    ! try this out? otherwise the process total max is going to be wrong near
+    ! the end of the program
     call mpi_reduce(max, mem_min, 1, mpi_real, mpi_min, pe_root, pe_comm, ierr)
     call mpi_reduce(max, mem_max, 1, mpi_real, mpi_max, pe_root, pe_comm, ierr)
     call mpi_reduce(max, mem_avg, 1, mpi_real, mpi_sum, pe_root, pe_comm, ierr)
