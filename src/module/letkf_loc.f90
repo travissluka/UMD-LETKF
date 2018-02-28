@@ -331,7 +331,7 @@ contains
     integer,                intent(in) :: ij
     real :: d, r
     r=abs(lat_ij(ij))/90.0
-    d=r*loc_hz(1) + (1.0-r)*loc_hz(0)
+    d=r*loc_hz(2) + (1.0-r)*loc_hz(1)
   end function localizer_novrt_maxhz
 
   
@@ -351,7 +351,7 @@ contains
        ! Horizontal localization 
        !TODO: hardcoded to lat based hz loc distance, generalize this
        r=abs(lat_ij(ij))/90.0
-       l=r*loc_hz(1) + (1.0-r)*loc_hz(0)
+       l=r*loc_hz(2) + (1.0-r)*loc_hz(1)
        rloc(i) = loc_gc(ob_dist(i), l)
 
     end do
