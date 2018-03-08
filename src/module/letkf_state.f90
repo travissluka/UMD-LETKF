@@ -408,7 +408,7 @@ contains
     do i=1,grid_ns
        do j=1,ij_count
           bkg_ij(:,i,j) = bkg_ij(:,i,j) - bkg_mean_ij(i,j)
-          bkg_sprd_ij(i,j) =  sqrt(dot_product(bkg_ij(:,i,j),bkg_ij(:,i,j)) / mem)
+          bkg_sprd_ij(i,j) =  sqrt(dot_product(bkg_ij(:,i,j),bkg_ij(:,i,j)) / (mem-1) )
        end do
     end do
 

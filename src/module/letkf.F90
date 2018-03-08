@@ -460,7 +460,7 @@ contains
           ana_ij(:,i,ij) = ana_ij(:,i,ij) - ana_mean_ij(i,ij)
        end do
        do i = 1, grid_ns
-          ana_sprd_ij(i,ij) = sqrt(dot_product(ana_ij(:,i,ij),ana_ij(:,i,ij)) /mem)
+          ana_sprd_ij(i,ij) = sqrt(dot_product(ana_ij(:,i,ij),ana_ij(:,i,ij)) / (mem-1) )
        end do
 
 
