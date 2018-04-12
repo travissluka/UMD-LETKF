@@ -16,18 +16,18 @@ set(LETKF_LIBRARIES ${LETKF_LIBRARIES_STATIC} PARENT_SCOPE)
 # ------------------------------------------------------------
 include_directories(${NETCDF_INCLUDES})
 include_directories(${MPI_Fortran_INCLUDE_PATH})
-
+file( GLOB KDTREE_SRC "../geoKdTree/*.[f,F]90")
 
 # build target
 #------------------------------------------------------------
 file( GLOB SRCS "*.[f,F]90")
-#add_library( ${LIB_NAME}_shared SHARED ${SRCS})
+#add_library( ${LIB_NAME}_shared SHARED ${SRCS} ${KDTREE_SRC})
 #set_target_properties( ${LIB_NAME}_shared
 #  PROPERTIES
 #  OUTPUT_NAME ${LIB_NAME}
 #)
 
-add_library( ${LIB_NAME}_static STATIC ${SRCS})
+add_library( ${LIB_NAME}_static STATIC ${SRCS} ${KDTREE_SRC})
 set_target_properties( ${LIB_NAME}_static
   PROPERTIES
   OUTPUT_NAME ${LIB_NAME}
