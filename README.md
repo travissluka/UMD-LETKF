@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/travissluka/UMD-LETKF.svg?branch=dev)](https://travis-ci.org/travissluka/UMD-LETKF)
+
 Brief Description
 ----------
 The following library is a rewrite of the local ensemble transform Kalman filter (LETKF) originally developed by Hunt et al., 2007 [1], coded by Takemasa Miyoshi [2], with additional modifications by Steve Penny [3]. It should be seen as an intermediate step of generalizing the current LETKF code before incorporating into the JEDI project for NCEP. 
