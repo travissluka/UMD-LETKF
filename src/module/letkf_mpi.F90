@@ -188,7 +188,7 @@ contains
   !================================================================================
   !================================================================================
   subroutine letkf_mpi_wait_send()
-    integer :: status(mpi_status_size)
+    integer :: status(mpi_status_size, max_wait_size)
     integer :: ierr
     if (snd_wait_count > 0) then
        call mpi_waitall(snd_wait_count, snd_wait, status, ierr)
@@ -203,7 +203,7 @@ contains
   !================================================================================
   !================================================================================
   subroutine letkf_mpi_wait_recv()
-    integer :: status(mpi_status_size)
+    integer :: status(mpi_status_size, max_wait_size)
     integer :: ierr
     if (rcv_wait_count > 0) then
        call mpi_waitall(rcv_wait_count, rcv_wait, status, ierr)
@@ -252,7 +252,7 @@ contains
       !! ***Shape is ([[letkf_mpi:mem]], [[letkf_mpi:grid_ns]],[[letkf_mpi:ij_count]] )***
 
     integer :: m, p, ierr
-    integer :: status(mpi_status_size), recv_req(mem), send_req(pe_size*ens_count)
+    integer :: status(mpi_status_size, max_wait_size), recv_req(mem), send_req(pe_size*ens_count)
 
     !------------------------------------------------------------
     ! TODO, possible cache miss performance issues by specifying data by ns length then nij?
@@ -342,7 +342,7 @@ contains
 
     logical :: async0
     integer ::m, p, ierr
-    integer :: status(mpi_status_size), send_req(mem), recv_req(pe_size*ens_count)
+    integer :: status(mpi_status_size, max_wait_size), send_req(mem), recv_req(pe_size*ens_count)
 
     async0 = merge(async, .false., async)
 
@@ -397,7 +397,7 @@ contains
     integer, intent(in), optional :: root
     
     integer :: recv_req, send_req(pe_size)
-    integer :: status(mpi_status_size)
+    integer :: status(mpi_status_size, pe_size)
 
     integer :: root0, p, ierr
     
@@ -416,7 +416,7 @@ contains
     end if
 
     ! wait for receives to finish
-    call mpi_waitall(1, recv_req, status, ierr)
+    call mpi_wait(recv_req, status(:,1), ierr)
     
     ! wait for sends to finish
     if( root0 ==pe_rank) call mpi_waitall(pe_size, send_req, status, ierr)
@@ -476,7 +476,7 @@ contains
     logical :: async0
     integer :: rank0
     integer :: recv_req(pe_size), send_req
-    integer :: status(mpi_status_size)
+    integer :: status(mpi_status_size, max_wait_size)
     integer :: p, ierr
 
     async0=merge(async, .false., present(async))
@@ -507,7 +507,7 @@ contains
     else
        ! wait here for the send /recv to finish
        if(rank0 == pe_rank) call mpi_waitall(pe_size, recv_req, status, ierr)
-       call mpi_waitall(1, send_req, status, ierr)
+       call mpi_wait(send_req, status(:,1), ierr)
     end if
 
   end subroutine letkf_mpi_ij2grd

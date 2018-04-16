@@ -2,8 +2,7 @@ module letkf_obs
   use mpi !  TODO, can we put everything we need inside letkf_mpi?
   use letkf_mpi
   use kdtree
-  use, intrinsic :: IEEE_ARITHMETIC, only : IEEE_IS_FINITE
-
+    
   implicit none
   private
 
@@ -646,9 +645,9 @@ contains
           ! make sure we are gettingvalid numbers 
           ! TODO, we shouldn't have gotten to this point, what's
           ! wrong with the obsop output?
-          if (.not. IEEE_IS_FINITE(obs_ohx_mean(i))) obs_qc(i) = -1
-          if (.not. IEEE_IS_FINITE(obs_list(i)%val)) obs_qc(i) = -1
-          if (.not. IEEE_IS_FINITE(obs_list(i)%err)) obs_qc(i) = -1
+          if (obs_ohx_mean(i) /= obs_ohx_mean(i)) obs_qc(i) = -1
+          if (obs_list(i)%val /= obs_list(i)%val) obs_qc(i) = -1
+          if (obs_list(i)%err /= obs_list(i)%err) obs_qc(i) = -1
           if (obs_qc(1) /= 0) cycle
                        
           ! make sure increment is within several standard deviations of bg err
