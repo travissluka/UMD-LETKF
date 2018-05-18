@@ -1,0 +1,353 @@
+MODULE letkf_mpi
+  USE mpi
+
+  IMPLICIT NONE
+  PRIVATE
+
+  ! Public methods
+  !--------------------------------------------------------------------------------
+  PUBLIC :: letkf_mpi_preinit
+  PUBLIC :: letkf_mpi_init
+  PUBLIC :: letkf_mpi_final
+  PUBLIC :: letkf_mpi_abort
+
+  PUBLIC :: letkf_mpi_setgrid
+  PUBLIC :: letkf_mpi_barrier
+  PUBLIC :: letkf_mpi_nextio
+
+  PUBLIC :: letkf_mpi_grd2ij
+  INTERFACE letkf_mpi_grd2ij
+     MODULE PROCEDURE letkf_mpi_grd2ij_real
+     MODULE PROCEDURE letkf_mpi_grd2ij_logical
+  END INTERFACE letkf_mpi_grd2ij
+
+  PUBLIC :: letkf_mpi_ij2grd
+  INTERFACE letkf_mpi_ij2grd
+     MODULE PROCEDURE letkf_mpi_ij2grd_real
+  END INTERFACE letkf_mpi_ij2grd
+
+  !--------------------------------------------------------------------------------
+  ! Public variables
+  !--------------------------------------------------------------------------------
+
+  ! MPI parameters
+  INTEGER, PUBLIC, PROTECTED :: pe_rank   !< PE of this MPI rank
+  INTEGER, PUBLIC, PROTECTED :: pe_size   !< number of MPI PEs
+  INTEGER, PUBLIC, PROTECTED :: pe_root   !< the root MPI PE
+  LOGICAL, PUBLIC, PROTECTED :: pe_isroot !< true of this PE is root
+  INTEGER, PUBLIC, PROTECTED :: letkf_mpi_comm !< the MPI communicator LETKF should use
+
+  INTEGER, PUBLIC, PROTECTED :: ij_count  !< number of grid points this PE is responsible for
+
+  ! ensemble parameters
+  INTEGER, PUBLIC, PROTECTED :: ens_size  !< ensemble size
+
+
+  !--------------------------------------------------------------------------------
+  ! Private variables
+  !--------------------------------------------------------------------------------
+  ! grid definition
+  INTEGER :: grid_nx  !< size of the global x dimension
+  INTEGER :: grid_ny  !< size of the global y dimension
+  INTEGER :: grid_ns  !< size of the vertical/variable dimension (slabs)
+
+  ! MPI scatter/gether parameters
+  INTEGER, PUBLIC, ALLOCATABLE :: ij_count_pe(:)  !< number of gridpoints, for each PE
+
+  INTEGER :: mpitype_grid_nxy_logical
+  INTEGER, PUBLIC :: mpitype_grid_nxy_real
+  INTEGER, PUBLIC :: mpitype_grid_nk_ns
+  INTEGER, PUBLIC :: mpitype_grid_ns
+  !integer :: mpitype_grid_nxy_ns_real
+
+  INTEGER :: nextio
+
+
+CONTAINS
+
+
+
+  !--------------------------------------------------------------------------------
+
+  !< Initialize MPI (so that all console output is done through the root PE).
+  !! Should be done before pretty much every other module
+  !! initialization routine. Including before letkf_mpi_init().
+  !! TODO - modify this to allow specification of an MPI communicator
+  SUBROUTINE letkf_mpi_preinit()
+    INTEGER :: ierr
+
+    ! initialize MPI
+    CALL mpi_init(ierr)
+
+    ! determine the communicator
+    letkf_mpi_comm = mpi_comm_world
+    pe_root = 0
+
+    nextio = 0
+
+    ! other initialization
+    CALL mpi_comm_size(letkf_mpi_comm, pe_size, ierr)
+    CALL mpi_comm_rank(letkf_mpi_comm, pe_rank, ierr)
+    pe_isroot = pe_root == pe_rank
+
+  END SUBROUTINE letkf_mpi_preinit
+
+
+
+  !--------------------------------------------------------------------------------
+
+  !< initialize the MPI module.
+  !! Read in a namelist, determine grid distribution.
+  SUBROUTINE letkf_mpi_init(nml_filename)
+    CHARACTER(len=*), INTENT(in) :: nml_filename
+
+    INTEGER :: unit
+
+    NAMELIST /letkf_mpi/ ens_size
+
+    ! read in our section of the namelist
+    OPEN(newunit=unit, file=nml_filename, status='OLD')
+    READ(unit, nml=letkf_mpi)
+    CLOSE(unit)
+    IF (pe_isroot) THEN
+       PRINT letkf_mpi
+    END IF
+
+
+    ! output basic MPI info
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "MPI processors: ", pe_size
+       IF (letkf_mpi_comm == mpi_comm_world) THEN
+          PRINT *, "MPI communicator: MPI_COMM_WORLD"
+       ELSE
+          PRINT *, "MPI communicaotr: ", letkf_mpi_comm
+       END IF
+    ENDIF
+
+  END SUBROUTINE letkf_mpi_init
+
+
+
+  !--------------------------------------------------------------------------------
+
+  !< Abort the program in a clean way
+  SUBROUTINE letkf_mpi_abort(str)
+    CHARACTER(*), INTENT(in) :: str
+    INTEGER :: ierr
+
+    PRINT *, "FATAL ERROR: ", str
+    CALL mpi_abort(letkf_mpi_comm, 1, ierr)
+  END SUBROUTINE letkf_mpi_abort
+
+
+
+  !--------------------------------------------------------------------------------
+
+  !< Shutdown MPI.
+  !! This should be the last thing called by the LETKF library
+  SUBROUTINE letkf_mpi_final
+    INTEGER :: ierr
+
+    CALL mpi_finalize(ierr)
+  END SUBROUTINE letkf_mpi_final
+
+
+
+  !--------------------------------------------------------------------------------
+  !> Given the grid dimension, determine how to split it up amongst the PEs
+  !! for any future scatter/gather calls. This should only be called once, at
+  !! initialization time, by the letkf_state module.
+  SUBROUTINE letkf_mpi_setgrid(nx, ny, ns)
+    INTEGER, INTENT(in) :: nx, ny, ns
+    INTEGER :: prev, cnt, i
+
+    grid_nx = nx
+    grid_ny = ny
+    grid_ns = ns
+
+    IF (pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "setting MPI scatter parameters using..."
+       PRINT *, " grid_nx:",grid_nx
+       PRINT *, " grid_ny:",grid_ny
+       PRINT *, " grid_ns:",grid_ns
+       PRINT *, ""
+    ENDIF
+
+    ! TODO implement masking
+
+    ! TODO allow for a tiled distribution, not just round robin
+
+    ! Calculate the number of gridpoints to be handled for each proc.
+    ! afterward, ij_count and ij_count_pe will be correctly set
+    ALLOCATE(ij_count_pe(0:pe_size-1))
+    prev = 0
+    cnt=NINT(1.0*grid_nx*grid_ny/pe_size)
+    DO i=0, pe_size-1
+       IF (i== pe_size-1) cnt = grid_nx*grid_ny - prev
+       IF( i==pe_rank) THEN
+          ij_count = cnt
+       END IF
+       ij_count_pe(i) = cnt
+       prev = prev + cnt
+    END DO
+
+    ! initialize the custom MPI types
+    CALL mpitypes()
+
+  CONTAINS
+
+    SUBROUTINE mpitypes()
+      INTEGER(kind=mpi_address_kind) :: lb, ex, ex_real, ex_logical
+      INTEGER :: ierr
+      ! TODO, possible cache miss performance issues caused by specifying data by ns
+      ! length and then nij?
+
+      ! how big is a real, logical
+      CALL mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
+      CALL mpi_type_get_extent(mpi_logical, lb, ex_logical, ierr)
+      lb=0;
+
+      ! scatter of 2D grid, skipping across PE counts
+      ex=ex_real*pe_size
+      CALL mpi_type_create_resized(mpi_real, lb, ex, mpitype_grid_nxy_real, ierr)
+      CALL mpi_type_commit(mpitype_grid_nxy_real, ierr)
+
+      ex=ex_logical*pe_size
+      CALL mpi_type_create_resized(mpi_logical, lb, ex, mpitype_grid_nxy_logical, ierr)
+      CALL mpi_type_commit(mpitype_grid_nxy_logical, ierr)
+
+      ! scatter of 2D grid, skipping across PE*
+      ex=ex_real*ens_size*grid_ns
+      !call mpi_type_vector(grid_ns, 1, grid_nx*grid_ny, mpi_real,&
+      !   mpitype_grid_nxy_ns_real, ierr)
+      CALL mpi_type_create_resized(mpi_real, lb, ex, mpitype_grid_nk_ns, ierr)
+      CALL mpi_type_commit(mpitype_grid_nk_ns, ierr)
+
+      ex=ex_real*grid_ns
+      CALL mpi_type_create_resized(mpi_real, lb, ex, mpitype_grid_ns, ierr)
+      CALL mpi_type_commit(mpitype_grid_ns, ierr)
+
+    END SUBROUTINE mpitypes
+  END SUBROUTINE letkf_mpi_setgrid
+
+
+  !-----------------------------------------------------------------------------
+  !>
+  SUBROUTINE letkf_mpi_ij2grd_real(root, ij, grd)
+    INTEGER, INTENT(in) :: root
+    REAL, INTENT(in) :: ij(ij_count)
+    REAL, INTENT(out) :: grd(grid_nx,grid_ny)
+
+    INTEGER :: p, ierr
+    INTEGER :: recvs(pe_size)
+
+
+    ! initialize asynchronous receives
+    IF (pe_rank == root) THEN
+       DO p=0,pe_size-1
+          CALL mpi_irecv(grd(p+1,1), ij_count_pe(p), mpitype_grid_nxy_real,&
+               p, 0, letkf_mpi_comm, recvs(p+1), ierr)
+       END DO
+    END IF
+
+    ! do the send
+    CALL mpi_send(ij, ij_count, mpi_real, root, 0, letkf_mpi_comm, ierr)
+
+    ! wait for the receives to finish
+    IF (pe_rank == root) &
+         CALL mpi_waitall(pe_size, recvs, MPI_STATUSES_IGNORE, ierr)
+  END SUBROUTINE letkf_mpi_ij2grd_real
+
+
+  !-----------------------------------------------------------------------------
+  !> Decompose a 2D grid from a single PE and scatter it across the PEs
+  SUBROUTINE letkf_mpi_grd2ij_real(root, grd, ij)
+    INTEGER, INTENT(in) :: root
+    REAL, allocatable, INTENT(in) :: grd(:,:)
+    REAL, INTENT(out) :: ij(ij_count)
+
+    INTEGER :: recv_req, send_req(0:pe_size-1), ierr, p
+
+    if (pe_isroot .and. .not. allocated(grd)) &
+         call letkf_mpi_abort("2D grid not allocated on root node")
+       
+    ! TODO, change this so that we're using mpi_scatter call instead?
+
+    ! initialize asynchronous receives
+    CALL mpi_irecv(ij, ij_count_pe(pe_rank), mpi_real, &
+         root, 0, letkf_mpi_comm, recv_req, ierr)
+
+    ! initialize asynchronous sends
+    IF ( pe_rank == root) THEN
+       DO p=0,pe_size-1
+          CALL mpi_Isend(grd(p+1,1), ij_count_pe(p), mpitype_grid_nxy_real, &
+               p, 0, letkf_mpi_comm, send_req(p), ierr)
+       END DO
+    END IF
+
+    ! wait for receves and sends to finish
+    CALL mpi_wait(recv_req, MPI_STATUS_IGNORE, ierr)
+    IF (pe_rank == root) &
+         CALL mpi_waitall(pe_size, send_req, MPI_STATUSES_IGNORE, ierr)
+
+  END SUBROUTINE letkf_mpi_grd2ij_real
+
+
+
+  !--------------------------------------------------------------------------------
+
+  !> Decompose a 2D grid from a single PE and scatter it across the PEs
+  SUBROUTINE letkf_mpi_grd2ij_logical(root, grd, ij)
+    INTEGER, INTENT(in) :: root
+    LOGICAL, INTENT(in) :: grd(grid_nx, grid_ny)
+    LOGICAL, INTENT(out) :: ij(ij_count)
+
+    INTEGER :: recv_req, send_req(0:pe_size-1), ierr, p
+
+    ! TODO, change this so that we're using mpi_scatter call instead?
+
+    ! initialize asynchronous receives
+    CALL mpi_irecv(ij, ij_count_pe(pe_rank), mpi_logical, &
+         root, 0, letkf_mpi_comm, recv_req, ierr)
+
+    ! initialize asynchronous sends
+    IF ( pe_rank == root) THEN
+       DO p=0,pe_size-1
+          CALL mpi_Isend(grd(p+1,1), ij_count_pe(p), mpitype_grid_nxy_logical, &
+               p, 0, letkf_mpi_comm, send_req(p), ierr)
+       END DO
+    END IF
+
+    ! wait for receves and sends to finish
+    CALL mpi_wait(recv_req, MPI_STATUS_IGNORE, ierr)
+    IF (pe_rank == root)&
+         CALL mpi_waitall(pe_size, send_req, MPI_STATUSES_IGNORE, ierr)
+
+  END SUBROUTINE letkf_mpi_grd2ij_logical
+
+
+
+  !--------------------------------------------------------------------------------
+
+  SUBROUTINE letkf_mpi_barrier
+    INTEGER :: ierr
+    CALL mpi_barrier(letkf_mpi_comm, ierr)
+
+  END SUBROUTINE letkf_mpi_barrier
+
+
+  FUNCTION letkf_mpi_nextio(forced_pe) RESULT(pe)
+    INTEGER, OPTIONAL, INTENT(in) :: forced_pe
+    ! TODO IO proc choice should be strided across nodes
+    INTEGER :: pe
+
+    pe = MERGE(forced_pe, nextio, PRESENT(forced_pe))
+    ! TODO allow option to place an upper bound on this, in case we are
+    ! severely memory limited
+    nextio = MOD(pe+1, pe_size)
+  END FUNCTION letkf_mpi_nextio
+
+
+END MODULE letkf_mpi

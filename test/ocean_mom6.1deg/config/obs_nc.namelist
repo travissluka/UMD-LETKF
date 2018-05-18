@@ -1,0 +1,32 @@
+&letkf_mpi
+  ens_size=20
+/
+
+&letkf_obs
+  obsdef_file="obsdef.cfg"
+  platdef_file="platdef.cfg"
+  ioclass="obsio_nc"
+/
+
+&obsio_nc
+  filename_obs="obs/obs.nc"
+  filename_obs_hx="obs/obs.#ENS4#.nc"
+/
+
+&letkf_state
+  ioclass="stateio_nc"
+  write_bkg_meansprd = F
+/
+
+&stateio_nc
+  statedef_file="statedef.cfg"
+  compression=0
+/
+
+&letkf_loc
+  loc_class="loc_novrt"
+/
+
+&letkf_loc_novrt
+  hzloc = 700.0d3, 100.0d3
+/

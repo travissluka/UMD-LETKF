@@ -11,6 +11,6 @@ addons:
 
 script:
   # build UMD-LETKF
-  - FC=mpif90 make
+  - mkdir build; cd build; FC=mpif90 cmake ../; make
 
   # TODO: add the testing scripts
