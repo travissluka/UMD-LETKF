@@ -63,16 +63,15 @@ CONTAINS
     character (len=1024) :: line, strs(9)
     character (:), allocatable :: testobs_file
     integer :: unit
-    integer :: max_obs = 10
     logical :: ex
-    integer :: pos
+
     integer :: n
     integer :: lvl, s, j, k, m
     
     type(letkf_obsplatdef) :: def
     type(letkf_statevar_spec) :: state_def
     
-    namelist /obsio_test/ max_obs, testobs_file
+    namelist /obsio_test/ testobs_file
     
     if (pe_isroot) then
        print '(/A)', ""

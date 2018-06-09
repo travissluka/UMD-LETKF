@@ -16,7 +16,7 @@ find_package(NetCDF REQUIRED)
 include_directories(${NETCDF_INCLUDE_DIRS})
 
 # LAPACK / BLAS
-find_package(LAPACK)
+find_package(LAPACK REQUIRED)
 
 #------------------------------------------------------------
 

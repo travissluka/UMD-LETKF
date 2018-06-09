@@ -468,8 +468,8 @@ CONTAINS
     type(running_stats), allocatable :: osprd_stats(:), psprd_stats(:)
     
     INTEGER :: cnt, i, j, cnt_total
-    real :: d,d2, r(ens_size)
 
+    
     IF(.NOT. pe_isroot) RETURN
 
     cnt_total=0

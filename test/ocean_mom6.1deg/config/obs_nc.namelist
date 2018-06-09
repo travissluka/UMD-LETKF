@@ -1,5 +1,5 @@
 &letkf_mpi
-  ens_size=20
+  ens_size=5
 /
 
 &letkf_obs
@@ -14,12 +14,14 @@
 /
 
 &letkf_state
+  verbose=T
   ioclass="stateio_nc"
   write_bkg_meansprd = F
 /
 
 &stateio_nc
-  statedef_file="statedef.cfg"
+  griddef_file="griddef.cfg"
+  statedef_file="statedef.ts.cfg"
   compression=0
 /
 

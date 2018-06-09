@@ -9,18 +9,18 @@
 /
 
 &obsio_test
-  max_obs = 10
   testobs_file="testobs.cfg"
 /
 
 &letkf_state
-  verbose=.false.
+  verbose=T
   ioclass="stateio_nc"
   write_bkg_meansprd = T
 /
 
 &stateio_nc
-  statedef_file="statedef.cfg"
+  griddef_file="griddef.cfg"
+  statedef_file="statedef.ts.cfg"
   compression=0
 /
 

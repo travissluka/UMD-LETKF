@@ -15,6 +15,8 @@ MODULE letkf_state
   PUBLIC :: letkf_state_write_ens
   PUBLIC :: letkf_state_write_meansprd
   public :: letkf_state_var_getdef
+  public :: letkf_state_hzgrid_getdef
+  public :: letkf_state_vtgrid_getdef
 
   !-----------------------------------------------------------------------------
   ! Public types
@@ -45,11 +47,11 @@ MODULE letkf_state
 
   !> state variable specifications
   TYPE, PUBLIC :: letkf_statevar_spec
-     INTEGER           :: grid_s_idx
-     INTEGER           :: levels
      CHARACTER(len=20) :: name
      CHARACTER(len=20) :: hzgrid
-     CHARACTER(len=20) :: vtgrid
+     CHARACTER(len=20) :: vtgrid     
+     INTEGER           :: grid_s_idx
+     INTEGER           :: levels
   END TYPE letkf_statevar_spec
 
 
@@ -375,13 +377,13 @@ CONTAINS
 
              ! write out to file
              CALL timing_start("io_write")
-             if (stateio_class%verbose) &
-                  PRINT '(X,A,I0.3,4A)', " PE ", pe_rank, " writing ", &
-                  TRIM(statevars(i)%name), " for ",TRIM(mode)// &
-                  MERGE(" mean  "," spread", j==1)
+!             if (stateio_class%verbose) &
+!                  PRINT '(X,A,I0.3,4A)', " PE ", pe_rank, " writing ", &
+!                  TRIM(statevars(i)%name), " for ",TRIM(mode)// &
+!                  MERGE(" mean  "," spread", j==1)
              CALL stateio_class%write_state(mode, &
                   MERGE(ENS_BKG_MEAN, ENS_BKG_SPRD,j==1),&
-                  statevars(i)%name, tmp_r_3d(:,:,:))
+                  trim(statevars(i)%name), tmp_r_3d(:,:,:))
              CALL timing_stop("io_write")
 
           END IF
@@ -622,18 +624,19 @@ CONTAINS
     if(pe_isroot) print '(/,X,A)', "Writing analysis ensemble members..."
     call timing_start("write_ens", TIMER_SYNC)
 
-    !initialize output files
-    do i=1,ens_size
-       if (letkf_mpi_nextio() == pe_rank) &
-            call stateio_class%write_init('ana', i)
-    end do
-    call letkf_mpi_barrier()
 
     ! determine who does the IO
     do i=1,ens_size
        pe_ens_io(i) = letkf_mpi_nextio()
     end do
 
+    !initialize output files
+    do i=1,ens_size
+       if (pe_ens_io(i) == pe_rank) &
+            call stateio_class%write_init('ana', i)
+    end do
+
+    
     ! initialize all the sends
     allocate(sends(grid_ns*ens_size))
     sends_num=0
@@ -659,7 +662,7 @@ CONTAINS
           call timing_start("mpi_gather")
           call timing_stop("mpi_gather")
 
-          if (pe_ens_io(i) == pe_rank) then
+          if (pe_ens_io(j) == pe_rank) then
              call timing_start("mpi_gather")
              if (allocated(tmp_r_3d)) deallocate(tmp_r_3d)
              allocate(tmp_r_3d(grid_nx, grid_ny, statevars(i)%levels))
@@ -673,18 +676,21 @@ CONTAINS
                    call mpi_irecv(tmp_r_3d(p+1,1,k), ij_count_pe(p), &
                         mpitype_grid_nxy_real, p, tag, letkf_mpi_comm, &
                         recvs(recvs_num), ierr)
+                   call mpi_wait(recvs(recvs_num), MPI_STATUS_IGNORE, ierr)
                 end do
              end do
 
              ! wait for the receives to finish
              call mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
+
              call timing_stop("mpi_gather")
              
 
              ! write out to file
              call timing_start("io_write")
              ! TODO add verbose output
-             call stateio_class%write_state('ana', j, statevars(i)%name, tmp_r_3d)
+             call stateio_class%write_state(&
+                  'ana', j, trim(statevars(i)%name), tmp_r_3d)
              call timing_stop("io_write")
              
           end if
@@ -694,9 +700,7 @@ CONTAINS
     ! wait for the sends to finish
     call mpi_waitall(sends_num, sends, MPI_STATUSES_IGNORE, ierr)
     call timing_stop("write_ens")
-
     
-!    IF (pe_isroot) call letkf_mpi_abort("WARNING: state ens write not yet implemented!!")
   END SUBROUTINE letkf_state_write_ens
 
 
@@ -820,8 +824,54 @@ CONTAINS
   END SUBROUTINE letkf_state_register
 
 
+
+  !--------------------------------------------------------------------------------
+  function letkf_state_hzgrid_getdef(name) result(res)
+    character(len=*), intent(in) :: name
+    type(letkf_hzgrid_spec) :: res
+
+    character(:), allocatable :: name0
+    integer :: i
+
+    ! TODO, convert to upper, but make sure all the other instances
+    ! are already in uppercase
+    !    name0 = trim(toupper(name))
+    name0 = trim(name)
+    do i=1,size(hzgrids)
+       if(hzgrids(i)%name == name0) exit
+    end do
+    if (i > size(hzgrids)) &
+         call letkf_mpi_abort("hzgrid definition for '"//name0//"' not found")
+    res = hzgrids(i)
+  end function letkf_state_hzgrid_getdef
+
+
   
   !--------------------------------------------------------------------------------
+  function letkf_state_vtgrid_getdef(name) result(res)
+    character(len=*), intent(in) :: name
+    type(letkf_vtgrid_spec) :: res
+
+    character(:), allocatable :: name0
+    integer :: i
+
+    ! TODO, convert to upper, but make sure all the other instances
+    ! are already in uppercase
+    !    name0 = trim(toupper(name))
+    name0 = trim(name)
+    do i=1,size(vtgrids)
+       if(vtgrids(i)%name == name0) exit
+    end do
+    if (i > size(vtgrids)) &
+         call letkf_mpi_abort("vtgrid definition for '"//name0//"' not found")
+    res = vtgrids(i)
+  end function letkf_state_vtgrid_getdef
+
+
+  
+  
+  !--------------------------------------------------------------------------------
+
   function letkf_state_var_getdef(name) result(res)
     character(len=*), intent(in) :: name
     type(letkf_statevar_spec) :: res

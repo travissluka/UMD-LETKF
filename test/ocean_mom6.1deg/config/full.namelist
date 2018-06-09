@@ -19,8 +19,9 @@
 /
 
 &stateio_nc
+  griddef_file="griddef.cfg"
   statedef_file="statedef.cfg"
-  compression=0
+  compression=1
 /
 
 &letkf_loc
