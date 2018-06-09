@@ -192,7 +192,7 @@ CONTAINS
        ! calc final analysis members, spread
        do i = 1, grid_ns
           state_sprd_ij(i,ij) = sqrt(&
-               dot_product(state_ij(:,i,ij), state_ij(:,i,ij))/ens_size)
+               dot_product(state_ij(:,i,ij), state_ij(:,i,ij))/(ens_size-1))
           state_ij(:,i,ij) = state_ij(:,i,ij) + state_mean_ij(i,ij)
        end do
 
