@@ -1,5 +1,5 @@
 &letkf_mpi
-  ens_size=5
+  ens_size=20
 /
 
 &letkf_obs
@@ -20,7 +20,7 @@
 
 &stateio_nc
   griddef_file="griddef.cfg"
-  statedef_file="statedef.ts.cfg"
+  statedef_file="statedef.cfg"
   compression=0
 /
 

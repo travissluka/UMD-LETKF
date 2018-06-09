@@ -7,7 +7,7 @@ MODULE letkf
   USE letkf_obs_test
   USE letkf_solver
   USE letkf_state
-  USE letkf_state_nc  
+  USE letkf_state_nc
   USE timing
   USE getmem
   USE netcdf
@@ -27,7 +27,13 @@ MODULE letkf
   ! private variables
   CHARACTER(:), ALLOCATABLE :: nml_filename
 
-  
+  ! use this to get the repository version at compile time
+#ifndef CVERSION
+#define CVERSION "Unknown"
+#endif
+
+
+
 CONTAINS
 
 
@@ -37,7 +43,7 @@ CONTAINS
   !! This needs to be done before any other user-called functions are performed
   SUBROUTINE letkf_init(nml)
     character(len=*) :: nml
-    
+
     ! temprary pointers for initializing and registering the default classes
     CLASS(letkf_obsio),     POINTER :: obsio_ptr
     CLASS(letkf_stateio),   POINTER :: stateio_ptr
@@ -60,7 +66,8 @@ CONTAINS
        PRINT *, "=========================================================================================="
        PRINT *, "=========================================================================================="
        PRINT *, "Universal Multi-Domain Local Ensemble Transform Kalman Filter"
-       PRINT *, "  (UMD-LETKF"
+       PRINT *, " (UMD-LETKF)"
+       print *, " version:  ", CVERSION
        PRINT *, "=========================================================================================="
        PRINT *, "=========================================================================================="
     END IF
@@ -108,7 +115,7 @@ CONTAINS
     CALL timing_start("init", TIMER_SYNC)
     CALL letkf_mpi_init(nml_filename)
     CALL letkf_state_init(nml_filename)
-    CALL letkf_obs_init(nml_filename)    
+    CALL letkf_obs_init(nml_filename)
     CALL letkf_obs_read()
     CALL letkf_loc_init(nml_filename)
     call letkf_solver_init(nml_filename)
@@ -118,7 +125,7 @@ CONTAINS
     CALL letkf_solver_run()
     CALL letkf_mpi_barrier()
 
-    
+
     ! LETKF final output
     ! ------------------------------------------------------------
     CALL timing_start("output", TIMER_SYNC)
@@ -132,14 +139,14 @@ CONTAINS
 
     ! ensemble mean, spread
     call letkf_state_write_meansprd("ana")
-    
+
     ! save ensemble members
     call letkf_state_write_ens()
-    
+
     CALL timing_stop("output")
 
 
-    
+
     ! all done
     call letkf_mpi_barrier()
     CALL timing_print()
@@ -159,7 +166,7 @@ CONTAINS
   END SUBROUTINE letkf_register_hook
 
 
-  
+
   SUBROUTINE letkf_write_diag()
     INTEGER :: p
     REAL, ALLOCATABLE :: tmp_2d_real(:,:)
