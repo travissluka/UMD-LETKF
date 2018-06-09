@@ -309,24 +309,28 @@ CONTAINS
        obs_hx(:,i) = obs_hx(:,i) - obs_hx_mean(i)
     END DO
 
-    
-    ! print out observation statistics
-    if (pe_isroot) CALL obs_print_stats(obs_def)
+
+    if (nobs > 0) then
+       ! print out observation statistics
+       if (pe_isroot) CALL obs_print_stats(obs_def)
  
-    ! TODO, make sure no bad qc obs go into the tree
+       ! TODO, make sure no bad qc obs go into the tree
 
-    ! add obs to KD tree
-    IF(pe_isroot) PRINT '(//,X,A)', "Adding observations to local KDTree..."
-    ALLOCATE(obs_lons(nobs))
-    ALLOCATE(obs_lats(nobs))
-    DO i=1,nobs
-       obs_lons(i) = obs_def(i)%lon
-       obs_lats(i) = obs_def(i)%lat
-    END DO
-    CALL kd_init(obs_tree, obs_lons, obs_lats)
-    DEALLOCATE(obs_lons)
-    DEALLOCATE(obs_lats)
-
+       ! add obs to KD tree
+       IF(pe_isroot) PRINT '(//,X,A)', "Adding observations to local KDTree..."
+       ALLOCATE(obs_lons(nobs))
+       ALLOCATE(obs_lats(nobs))
+       DO i=1,nobs
+          obs_lons(i) = obs_def(i)%lon
+          obs_lats(i) = obs_def(i)%lat
+       END DO
+       CALL kd_init(obs_tree, obs_lons, obs_lats)
+       DEALLOCATE(obs_lons)
+       DEALLOCATE(obs_lats)
+    else
+       if (pe_isroot) print *, "WARNING: there are NO observations to assimilate"
+    end if
+    
     CALL timing_stop('read_obs')
 
   END SUBROUTINE letkf_obs_read
@@ -381,7 +385,10 @@ CONTAINS
     REAL,    INTENT(out) :: rdist(:) !< distance of each observation (meters)
     INTEGER, INTENT(out) :: rnum     !< number of observations found
 
-    CALL kd_search_radius(obs_tree, slon, slat, sradius, robs, rdist, rnum, .FALSE.)
+    rnum = 0
+    if (size(obs_def) > 0) then
+       CALL kd_search_radius(obs_tree, slon, slat, sradius, robs, rdist, rnum, .FALSE.)
+    end if
 
   END SUBROUTINE letkf_obs_get
 
