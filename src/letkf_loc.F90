@@ -65,7 +65,7 @@ MODULE letkf_loc
        IMPORT letkf_localizer_group
        CLASS(letkf_localizer), INTENT(inout)  :: self
        INTEGER, INTENT(in)    :: ij      !< gridpoint index to localize around
-       CLASS(letkf_localizer_group), ALLOCATABLE, INTENT(out) :: groups(:)
+       type(letkf_localizer_group), ALLOCATABLE, INTENT(inout) :: groups(:)
      END SUBROUTINE I_letkf_loc_groups
 
      FUNCTION I_letkf_loc_maxhz(self, ij) RESULT(dist)
@@ -81,7 +81,7 @@ MODULE letkf_loc
        IMPORT letkf_observation
        CLASS(letkf_localizer),      INTENT(inout) :: self
        INTEGER,                     INTENT(in) :: ij
-       CLASS(letkf_localizer_group),INTENT(in) :: group
+       type(letkf_localizer_group), INTENT(in) :: group
        TYPE(letkf_observation),     INTENT(in) :: obs
        real,                        INTENT(in) :: dist
        REAL :: loc

@@ -69,7 +69,7 @@ CONTAINS
   SUBROUTINE loc_novrt_groups(self, ij, groups)
     CLASS(loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
-    CLASS(letkf_localizer_group), ALLOCATABLE, INTENT(out) :: groups(:)
+    type(letkf_localizer_group), ALLOCATABLE, INTENT(inout) :: groups(:)
 
     integer :: i
     
@@ -103,7 +103,7 @@ CONTAINS
   FUNCTION loc_novrt_localize(self, ij, group, obs, dist) RESULT(loc)
     CLASS(loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in) :: ij
-    CLASS(letkf_localizer_group), INTENT(in) :: group
+    type(letkf_localizer_group), INTENT(in) :: group
     TYPE(letkf_observation), INTENT(in) :: obs
     real, intent(in) :: dist
     REAL :: loc, r

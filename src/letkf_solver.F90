@@ -66,8 +66,7 @@ CONTAINS
     real    :: obs_lg_dep(max_obs)
     real    :: obs_lg_rloc(max_obs)
 
-    class(letkf_localizer_group), allocatable :: loc_groups(:)
-
+    type(letkf_localizer_group), allocatable :: loc_groups(:)
     
     
     CALL timing_start('solver', TIMER_SYNC)
@@ -197,6 +196,9 @@ CONTAINS
           state_ij(:,i,ij) = state_ij(:,i,ij) + state_mean_ij(i,ij)
        end do
 
+       ! cleanup
+       deallocate(loc_groups)
+       
     END DO ij_loop
 
     CALL timing_stop('solver')
