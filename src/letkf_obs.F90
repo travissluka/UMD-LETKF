@@ -1,3 +1,11 @@
+!================================================================================
+!> Module for handling the observation I/O.
+!!
+!! There are two classes available by default (OBSIO_NC, OBSIO_TEST).
+!! If a user wants to implement their own type of observation IO, they can do so
+!! by deriving from the letkf_obs::letkf_obsio class, implmenting the required
+!! methods, and registering the class with LETKF via letkf_obs::letkf_obs_register
+!--------------------------------------------------------------------------------
 MODULE letkf_obs
   USE mpi
   USE timing
@@ -9,9 +17,15 @@ MODULE letkf_obs
   PRIVATE
 
 
-  !--------------------------------------------------------------------------------
-  ! public subroutines
-  !--------------------------------------------------------------------------------
+
+  
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
+  
   PUBLIC :: letkf_obs_register
   PUBLIC :: letkf_obs_init
   PUBLIC :: letkf_obs_read
@@ -19,50 +33,73 @@ MODULE letkf_obs
   public :: letkf_obs_getdef
 
 
+  
+  !================================================================================
+  !> Container for a single observation definition.
+  !!
+  !! The per-ensemble observation opererator values are stored instead in the 
+  !! letkf_obs::obs_hx variable
   !--------------------------------------------------------------------------------
-  ! Public types
-  !--------------------------------------------------------------------------------
-
-  !> container for a single observation
   TYPE, PUBLIC :: letkf_observation
      INTEGER :: obsid   !< observation type id, as specified in 'obsdef' config file
      INTEGER :: platid  !< platform type id, as specified in 'platdef' config file
      REAL    :: lat     !< latitude (in degrees)
      REAL    :: lon     !< longitude (in degrees)
-     REAL    :: zdim    !< z coordinate, in whatever unit is appropriate for the domain
-     !! if this is a 2d observation, this value is ignored
+     REAL    :: zdim    !< z coordinate, in whatever unit is appropriate for the domain.
+                        !! If this is a 2d observation, this value is ignored
      REAL    :: time    !< time (in hours) from base analysis time
      REAL    :: val     !< observation value
      REAL    :: err     !< standard deviation of observation error
      INTEGER :: qc      !< quality control flag. obs with non-zero values will not be used
   END TYPE letkf_observation
+  !================================================================================
 
+  
 
-
+  !================================================================================
   !> container for a single user-defined observation or platform type
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_obsplatdef
      CHARACTER(len=10)  :: name      !< unique short name of observation/plat type
      INTEGER            :: id        !< unique integer identifier, used in obs types
      CHARACTER(len=200) :: name_long !< longer name / description
   END TYPE letkf_obsplatdef
+  !================================================================================
 
+  
 
-
+  !================================================================================
   !> Abstract base class for observation file reading and writing.
+  !!
   !! All user-defined, and built-in, observation file I/O classes for
   !! specific file types should inherit this class
+  !--------------------------------------------------------------------------------
   TYPE, ABSTRACT, PUBLIC :: letkf_obsio
    CONTAINS
-     PROCEDURE(I_letkf_obsio_getstr), NOPASS, DEFERRED :: name  !< Get the unique name of the reader
-     PROCEDURE(I_letkf_obsio_getstr), NOPASS, DEFERRED :: desc  !< Get a descriptive string for the reader
-     PROCEDURE(I_letkf_obsio_init),           DEFERRED :: init  !< initialize the class (usually reading its section of the namelist
+     !> Get the unique name of the reader
+     PROCEDURE(I_letkf_obsio_getstr), NOPASS, DEFERRED :: name
+     
+     !> Get a descriptive string for the reader
+     PROCEDURE(I_letkf_obsio_getstr), NOPASS, DEFERRED :: desc
+     
+     !> initialize the class (usually reading its section of the namelist)
+     PROCEDURE(I_letkf_obsio_init),           DEFERRED :: init
+     
+     !> read the observations
      PROCEDURE(I_letkf_obsio_read_obs),       DEFERRED :: read_obs
+     
+     !> read the observation operator values for a given ensemble member
      PROCEDURE(I_letkf_obsio_read_hx),        DEFERRED :: read_hx
   END TYPE letkf_obsio
+  !================================================================================
 
+
+  
+  !================================================================================
+  ! Interface methods for the letkf_obsio class
+  !--------------------------------------------------------------------------------
   ABSTRACT INTERFACE
      FUNCTION I_letkf_obsio_getstr()
-       IMPORT letkf_obsio
        CHARACTER(:), ALLOCATABLE :: I_letkf_obsio_getstr
      END FUNCTION I_letkf_obsio_getstr
 
@@ -86,65 +123,94 @@ MODULE letkf_obs
        REAL, ALLOCATABLE, INTENT(out) :: hx(:)
      END SUBROUTINE I_letkf_obsio_read_hx
   END INTERFACE
+  !================================================================================
 
+  
+  !> The list of valid observation definitions
+  TYPE(letkf_observation), PUBLIC, PROTECTED, ALLOCATABLE :: obs_def(:)
 
+  !> per-ensemble observation operator perturbations
+  REAL, PUBLIC, PROTECTED, ALLOCATABLE :: obs_hx(:,:)
 
+  !> The mean of the per-ensemble observation operators
+  REAL, PUBLIC, PROTECTED, ALLOCATABLE :: obs_hx_mean(:)
 
+  
 
+  
+  !================================================================================
+  !================================================================================
+  ! Private module components
+  !================================================================================
+  !================================================================================
+
+  
+  !================================================================================
+  !> simple wrapper for letkf_obsio so that we can have an arary of pointers
   !--------------------------------------------------------------------------------
-  ! Public variables
-  !--------------------------------------------------------------------------------
-
-
-
-  !--------------------------------------------------------------------------------
-  ! Private types
-  !--------------------------------------------------------------------------------
-
-  !< simple wrapper for letkf_obsio so that we can have an arary of pointers
   TYPE obsio_ptr
      CLASS(letkf_obsio), POINTER :: p
   END TYPE obsio_ptr
+  !================================================================================
 
 
-
-  !--------------------------------------------------------------------------------
-  ! Private variables
-  !--------------------------------------------------------------------------------
   ! configuration paramters
-  TYPE(letkf_obsplatdef), ALLOCATABLE :: obsdef_list(:)  !< list of all observation types
-  TYPE(letkf_obsplatdef), ALLOCATABLE :: platdef_list(:) !< list of all platform types
+  !------------------------------------------------------------
+  
+  !> list of all observation types
+  TYPE(letkf_obsplatdef), ALLOCATABLE :: obsdef_list(:)
 
+  !> list of all platform types
+  TYPE(letkf_obsplatdef), ALLOCATABLE :: platdef_list(:) 
+
+  
   ! mpi derived types
-  INTEGER :: observation_mpi_type   !< MPI derived type instantiation
+  !------------------------------------------------------------
+  !> MPI derived type for letkf_obs::observation
+  INTEGER :: observation_mpi_type   
 
+  
   ! registration of built-in and user-defined obsio classes
-  INTEGER, PARAMETER  :: obsio_reg_max = 100      !< max classes to handle
-  INTEGER             :: obsio_reg_num = 0        !< current number of classes registered
-  TYPE(obsio_ptr)     :: obsio_reg(obsio_reg_max) !< list of registered classes
-  CLASS(letkf_obsio), POINTER :: obsio_class      !< The actual I/O module selected
+  !------------------------------------------------------------
 
-  ! stored observations
-  TYPE(letkf_observation), PUBLIC, PROTECTED, ALLOCATABLE :: obs_def(:)
-  REAL,                    PUBLIC, PROTECTED, ALLOCATABLE :: obs_hx(:,:)
-  REAL,                    PUBLIC, PROTECTED, ALLOCATABLE :: obs_hx_mean(:)
+  !> max number of classes to handle
+  INTEGER, PARAMETER  :: obsio_reg_max = 100      
 
+  !> current number of classes registered
+  INTEGER             :: obsio_reg_num = 0
+
+  !> list of registered classes
+  TYPE(obsio_ptr)     :: obsio_reg(obsio_reg_max)
+
+  !> The actual I/O module selected
+  CLASS(letkf_obsio), POINTER :: obsio_class      
+
+  !------------------------------------------------------------
+  
+  !> A kdtree of all the loaded observations, for quick searches of nearest obs
   TYPE(kd_root) :: obs_tree
 
-  !--------------------------------------------------------------------------------
-  !--------------------------------------------------------------------------------
 
 
+  
+  !================================================================================   
+  !================================================================================
 CONTAINS
+  !================================================================================  
+  !================================================================================  
 
-
-
-  !--------------------------------------------------------------------------------
-
+  
+  
+  !================================================================================
+  !> \cond INTERNAL
   !> Initialize the letkf_obs module.
+  !!
   !! Reads in our section of the namelist, and any observation definition and platorm
   !! definition configuration files.
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_obs_init(nml_filename)
+
+    !> filename of the namelist to load
     CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
 
     INTEGER :: unit, i
@@ -216,13 +282,16 @@ CONTAINS
     IF (pe_isroot) PRINT *, "Intializing I/O class: ",obsio_class%name()
     CALL obsio_class%init(nml_filename)
 
-  END SUBROUTINE letkf_obs_init
+  END SUBROUTINE letkf_obs_init  
+  !> \endcond
+  !================================================================================
+  
 
 
-
+  !================================================================================
+  !> \cond INTERNAL
+  !> Initialize the mpi derived type for "letkf_observation"
   !--------------------------------------------------------------------------------
-
-  !< Initializze the mpi derived type for "letkf_observation"
   SUBROUTINE init_mpi_observation()
     INTEGER, PARAMETER :: n = 9
     INTEGER :: TYPE(n), blocklen(n)
@@ -254,12 +323,15 @@ CONTAINS
     CALL mpi_type_commit(observation_mpi_type, ierr)
 
   END SUBROUTINE init_mpi_observation
+  !> \endcond
+  !================================================================================
 
+  
 
-
+  !================================================================================
+  !> \cond INTERNAL
+  !> Read the observations.
   !--------------------------------------------------------------------------------
-
-  !> read the observations
   SUBROUTINE letkf_obs_read()
     INTEGER :: i, nobs, ierr
     REAL, ALLOCATABLE :: obs_lats(:), obs_lons(:), tmp_r(:)
@@ -283,7 +355,7 @@ CONTAINS
     CALL mpi_bcast(obs_def, nobs, observation_mpi_type, pe_root, letkf_mpi_comm, ierr)
 
     ! read in the observation operator
-    ! TODO, parallelize this
+    !> \todo, parallelize this
     ALLOCATE(obs_hx(ens_size, nobs))
     IF (pe_isroot) THEN
        ALLOCATE(tmp_r(nobs))
@@ -293,12 +365,12 @@ CONTAINS
        END DO
        DEALLOCATE(tmp_r)
 
-       ! TODO make sure nobs agrees for all files
+       !> \todo make sure nobs agrees for all files
 
     END IF
     CALL mpi_bcast(obs_hx, nobs*ens_size, mpi_real, pe_root, letkf_mpi_comm, ierr)
 
-    ! TODO make sure bad obs are removed, do extra QC checks
+    !> \todo make sure bad obs are removed, do extra QC checks
 
     ! calculate hx_mean
     ALLOCATE(obs_hx_mean(nobs))
@@ -314,7 +386,7 @@ CONTAINS
        ! print out observation statistics
        if (pe_isroot) CALL obs_print_stats(obs_def)
  
-       ! TODO, make sure no bad qc obs go into the tree
+       !> \todo, make sure no bad qc obs go into the tree
 
        ! add obs to KD tree
        IF(pe_isroot) PRINT '(//,X,A)', "Adding observations to local KDTree..."
@@ -334,16 +406,21 @@ CONTAINS
     CALL timing_stop('read_obs')
 
   END SUBROUTINE letkf_obs_read
+  !> \endcond
+  !================================================================================
 
 
 
+  !================================================================================
+  !> Register user-defined observation I/O classes to be available for use by LETKF.
+  !!
+  !! Actual observation I/O class to be used is specified in the namelist.
   !--------------------------------------------------------------------------------
-
-  !> register user-defined and built-in observation I/O classes to be
-  !! available for use by LETKF. Actual observation I/O class to be used
-  !! is specified in the namelist.
   SUBROUTINE letkf_obs_register(ioclass)
-    CLASS(letkf_obsio), POINTER :: ioclass !< the observation I/O class to be registered
+
+    !> An allocated instance of the observation I/O class to be registered
+    CLASS(letkf_obsio), POINTER :: ioclass
+    
     INTEGER :: i
 
     ! make sure we han't reached our max number of classes
@@ -369,14 +446,18 @@ CONTAINS
     obsio_reg(obsio_reg_num)%p => ioclass
 
   END SUBROUTINE letkf_obs_register
+  !================================================================================
 
 
-
-  !--------------------------------------------------------------------------------
+  
+  !================================================================================
   !> For a given search lat/lon point and radius (slat,slon,sradius), return all
-  !! the points that are within that radius. An array of indexes (robs) are returned
-  !! which point to the appropriate observations in the module's obs arrays
-  !! (obs_def, obs_hx, obs_hx_mean)
+  !! the points that are within that radius.
+  !!
+  !! An array of indexes (robs) are returned which point to the appropriate
+  !! observations in the module's obs arrays (letkf_obs::obs_def,
+  !! letkf_obs::obs_hx, letkf_obs::obs_hx_mean)
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_obs_get(slat, slon, sradius, robs, rdist, rnum)
     REAL,    INTENT(in)  :: slat     !< Center of search latitude (degrees)
     REAL,    INTENT(in)  :: slon     !< Center of search longitudee (degrees)
@@ -391,15 +472,20 @@ CONTAINS
     end if
 
   END SUBROUTINE letkf_obs_get
+  !================================================================================
 
+  
 
-
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> read the obsdef or platdef configuration files
+  !--------------------------------------------------------------------------------  
   SUBROUTINE obsplatdef_read(file, array)
+    !> filename of the configuration file to load
     CHARACTER(len=*), INTENT(in) :: file
+
+    !> the output array of observation or platform definitions
     TYPE(letkf_obsplatdef), ALLOCATABLE, INTENT(out) :: array(:)
+    
     LOGICAL :: ex
     INTEGER, PARAMETER :: MAX_DEF = 1024
     INTEGER :: i, pos, unit, iostat
@@ -459,13 +545,16 @@ CONTAINS
        PRINT *, ""
     END IF
   END SUBROUTINE obsplatdef_read
+  !================================================================================
 
 
-
+  
+  !================================================================================
+  !> print out statistics about the loaded observations
   !--------------------------------------------------------------------------------
-
-  !< print out statistics about the loaded observations
   SUBROUTINE obs_print_stats(obs_t)
+    
+    !> The list of observations to print statistics about
     TYPE(letkf_observation) :: obs_t(:)
 
     INTEGER, ALLOCATABLE :: obst_count(:,:) 
@@ -475,7 +564,6 @@ CONTAINS
     type(running_stats), allocatable :: osprd_stats(:), psprd_stats(:)
     
     INTEGER :: cnt, i, j, cnt_total
-
     
     IF(.NOT. pe_isroot) RETURN
 
@@ -612,14 +700,18 @@ CONTAINS
     END DO    
     
   END SUBROUTINE obs_print_stats
-
+  !================================================================================
+  
   
 
+  !================================================================================
+  !> Get and observation or platform definition information.
   !--------------------------------------------------------------------------------
   function letkf_obs_getdef(obs_plat, name) result(res)
-    character(len=1), intent(in) :: obs_plat
-    character(len=*), intent(in) :: name
-    type(letkf_obsplatdef) :: res
+    character(len=1), intent(in) :: obs_plat !< set to 'P' or 'O' if a platform or
+                                             !! observation definiont is requested
+    character(len=*), intent(in) :: name     !< platform or observation name to get
+    type(letkf_obsplatdef) :: res            !< the returned definition
     
     character(:), allocatable :: name0
     integer :: i
@@ -650,15 +742,17 @@ CONTAINS
     end if
        
   end function letkf_obs_getdef
-
-
+  !================================================================================
   
-  !--------------------------------------------------------------------------------
 
-  !< Convert a string to uppercase
+
+  !================================================================================
+  !> Convert a string to uppercase
+  !--------------------------------------------------------------------------------
   FUNCTION toupper(in_str) RESULT(out_str)
-    CHARACTER(*), INTENT(in) :: in_str
-    CHARACTER(LEN(in_str)) :: out_str
+    CHARACTER(*), INTENT(in) :: in_str !< input string    
+    CHARACTER(LEN(in_str)) :: out_str  !< output string
+    
     INTEGER :: i
     INTEGER, PARAMETER :: offset = 32
 
@@ -668,7 +762,9 @@ CONTAINS
           out_str(i:i) = ACHAR(IACHAR(out_str(i:i)) - offset)
        END IF
     END DO
+    
   END FUNCTION toupper
+  !================================================================================
 
 
 END MODULE letkf_obs

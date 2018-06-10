@@ -1,3 +1,7 @@
+!================================================================================
+!> Module providing model state IO and access to the PE-scattered state.
+!!
+!--------------------------------------------------------------------------------
 MODULE letkf_state
   USE timing
   USE mpi
@@ -7,9 +11,15 @@ MODULE letkf_state
   PRIVATE
 
 
-  !-----------------------------------------------------------------------------
-  ! Public methods
-  !-----------------------------------------------------------------------------
+
+  
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
+
   PUBLIC :: letkf_state_register
   PUBLIC :: letkf_state_init
   PUBLIC :: letkf_state_write_ens
@@ -18,46 +28,65 @@ MODULE letkf_state
   public :: letkf_state_hzgrid_getdef
   public :: letkf_state_vtgrid_getdef
 
-  !-----------------------------------------------------------------------------
-  ! Public types
-  !-----------------------------------------------------------------------------
 
-  !> horizontal grid spec
-  !! TODO, remove the nominal lat/lon and keep only in child IO class?
+  
+  !================================================================================
+  !> Horizontal grid specification
+  !!
+  !! \todo remove the nominal lat/lon and keep only in child IO class?
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_hzgrid_spec
-     CHARACTER(len=20)         :: name
-     REAL,         ALLOCATABLE :: lat(:,:)
-     REAL,         ALLOCATABLE :: lon(:,:)
-     real,         ALLOCATABLE :: lat_nom(:) 
-     real,         ALLOCATABLE :: lon_nom(:)
-     LOGICAL,      ALLOCATABLE :: mask(:,:)
+     CHARACTER(len=20)         :: name      !< unique name of the horizontal grid
+     REAL,         ALLOCATABLE :: lat(:,:)  !< 2D lattidue grid (in degrees)
+     REAL,         ALLOCATABLE :: lon(:,:)  !< 2D longitude grid (in degrees)
+     real,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees) 
+     real,         ALLOCATABLE :: lon_nom(:)!< nominal 1D longitude grid (in degrees)
+     LOGICAL,      ALLOCATABLE :: mask(:,:) !< 2D mask
   END TYPE letkf_hzgrid_spec
+  !================================================================================
 
 
-  !> veritical grid specifications
-  !> TODO remove nominal vertical grid and keep only in child IO class?
-  ! TODO need to scatter the vertical grids the same as the horizontal
+
+  !================================================================================
+  !> Veritical grid specification
+  !!
+  !! \todo remove nominal vertical grid and keep only in child IO class?
+  !! \todo need to scatter the vertical grids the same as the horizontal
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_vtgrid_spec
-     CHARACTER(len=20)         :: name
-     INTEGER                   :: dims !< 1 or 3
-     REAL,         ALLOCATABLE :: vert(:,:,:)
-     real,         ALLOCATABLE :: vert_nom(:)
+     CHARACTER(len=20)         :: name !< unique name of the vertical grid
+     INTEGER                   :: dims !< dimensions of the grid (0, 1, 2, or 3)
+     REAL,         ALLOCATABLE :: vert(:,:,:) !< vertical grid
+     real,         ALLOCATABLE :: vert_nom(:) !< nominal 1D vertival grid
   END TYPE letkf_vtgrid_spec
+  !--------------------------------------------------------------------------------
 
 
+  
+  !================================================================================
   !> state variable specifications
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_statevar_spec
+     !> unique name of the state variable
      CHARACTER(len=20) :: name
+     !> name of horizontal grid (letkf_obs::letkf_hzgrid_spec) this variable is on
      CHARACTER(len=20) :: hzgrid
-     CHARACTER(len=20) :: vtgrid     
+     !> name of vertial grid (letkf_obs::letkf_vtgrid_spec) this variable is on
+     CHARACTER(len=20) :: vtgrid
+     !> the internal starting index of the "slab" this variable is on
      INTEGER           :: grid_s_idx
+     !> number of vertical levels this state variable consists of 
      INTEGER           :: levels
   END TYPE letkf_statevar_spec
+  !--------------------------------------------------------------------------------
+  
 
-
+  
+  !================================================================================
   !> Abstract base class for model state reading and writing.
   !! All user-defined and built-in state file I/O classes for
   !! specific file types should inherit this class
+  !--------------------------------------------------------------------------------
   TYPE, ABSTRACT, PUBLIC :: letkf_stateio
      logical :: verbose = .false.
    CONTAINS
@@ -69,11 +98,6 @@ MODULE letkf_state
      PROCEDURE(I_letkf_stateio_write_state),    DEFERRED :: write_state
      PROCEDURE(I_letkf_stateio_write_init),     DEFERRED :: write_init
   END TYPE letkf_stateio
-
-  INTEGER, PUBLIC, PARAMETER :: ENS_BKG_MEAN = -1
-  INTEGER, PUBLIC, PARAMETER :: ENS_ANA_MEAN = -2
-  INTEGER, PUBLIC, PARAMETER :: ENS_BKG_SPRD = -3
-  INTEGER, PUBLIC, PARAMETER :: ENS_ANA_SPRD = -4
 
   ABSTRACT INTERFACE
      FUNCTION I_letkf_stateio_getstr()
@@ -120,23 +144,57 @@ MODULE letkf_state
      END SUBROUTINE I_letkf_stateio_write_state
 
   END INTERFACE
+  !================================================================================
+
+  
+  ! enumerations for the stateio_write_* methods
+  !------------------------------------------------------------
+  INTEGER, PUBLIC, PARAMETER :: ENS_BKG_MEAN = -1
+  INTEGER, PUBLIC, PARAMETER :: ENS_ANA_MEAN = -2
+  INTEGER, PUBLIC, PARAMETER :: ENS_BKG_SPRD = -3
+  INTEGER, PUBLIC, PARAMETER :: ENS_ANA_SPRD = -4
 
 
-  !-----------------------------------------------------------------------------
-  ! Public variables
-  !-----------------------------------------------------------------------------
   ! grid definition, after being distributed across PEs
+  !------------------------------------------------------------
+
+  !> Latitude of gridpoints (in degrees) that have been scattered to this PE
   REAL,    PUBLIC, PROTECTED, ALLOCATABLE :: lat_ij(:)
+
+  !> Longitude of gridpoints (in degrees) that have been scattered to this PE
   REAL,    PUBLIC, PROTECTED, ALLOCATABLE :: lon_ij(:)
+
+  !> mask values of gridpoints that have been scattered to this PE
   LOGICAL, PUBLIC, PROTECTED, ALLOCATABLE :: mask_ij(:)
 
+  
   ! state variables after being distributed across PEs
+  !------------------------------------------------------------
+
+  !> ensemble state variables that have been scattered to this PE.
+  !! initially this is the background state perturbations, but stores
+  !! the final analysis state after the LETKF solver is run
   REAL, PUBLIC, ALLOCATABLE :: state_ij(:,:,:)
+  
+  !> state variables mean that have been scattered to this PE.
+  !! initially this is the background state mean, but stores the analysis
+  !! state mean after the LETKF solver is run
   REAL, PUBLIC, ALLOCATABLE :: state_mean_ij(:,:)
+
+  !> state variables spread that have been scattered to this PE.
+  !! Initially this is the background state spread, but stores the analysis
+  !! state spread after the LETKF solver is run
   REAL, PUBLIC, ALLOCATABLE :: state_sprd_ij(:,:)
 
+  !> number of gridpoints in the X direction.
+  !! \todo generalize this for handling multiple horizontal grids
   INTEGER, PUBLIC, PROTECTED :: grid_nx
+
+  !> number of gridpoints in the Y direction.
+  !! \todo generalize this for handling multiple horizontal grids  
   INTEGER, PUBLIC, PROTECTED :: grid_ny
+
+  !> number of state slabs (i.e. state variables times vertical levels
   INTEGER, PUBLIC, PROTECTED :: grid_ns
 
   ! master grid and variable definitions
@@ -144,30 +202,31 @@ MODULE letkf_state
   TYPE(letkf_vtgrid_spec),  PUBLIC, PROTECTED, ALLOCATABLE :: vtgrids(:)
   TYPE(letkf_statevar_spec),PUBLIC, PROTECTED, ALLOCATABLE :: statevars(:)
 
-  !-----------------------------------------------------------------------------
-  ! Private methods
-  !-----------------------------------------------------------------------------
-  ! only needed here temporarily for my own sanity
 
+  
+  
+  !================================================================================
+  !================================================================================
+  ! Private module components
+  !================================================================================
+  !================================================================================
+  
 
-
-  !-----------------------------------------------------------------------------
-  ! Private types
-  !-----------------------------------------------------------------------------
-
-  !> simple wrapper for letkf_stateio so that we can have an array of pointers
+  
+  !================================================================================
+  !> simple wrapper for letkf_stateio so that we can have an array of pointers.
   !! to abstract classes
+  !--------------------------------------------------------------------------------
   TYPE stateio_ptr
      CLASS(letkf_stateio), POINTER :: p
   END TYPE stateio_ptr
+  !================================================================================
 
-
-  !-----------------------------------------------------------------------------
-  ! Private variables
-  !-----------------------------------------------------------------------------
 
 
   ! registration of built-in and user-defined stateio classes
+  !------------------------------------------------------------
+  
   INTEGER, PARAMETER :: stateio_reg_max = 100         !< max classes to handle
   INTEGER            :: stateio_reg_num = 0           !< current number of classes registered
   TYPE(stateio_ptr)  :: stateio_reg(stateio_reg_max)  !< list of registered classes
@@ -175,18 +234,23 @@ MODULE letkf_state
 
 
 
-  !--------------------------------------------------------------------------------
-  !--------------------------------------------------------------------------------
 
+  !================================================================================
+  !================================================================================ 
 CONTAINS
+  !================================================================================
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
+  !> \cond INTERNAL
   !> Initialize the letkf state module.
+  !!
   !! The namefile is read, stateio class is initialized (reading in the grid specs),
   !! ensemble background state read in in parallel, mean and spread are calculated
   !! and saved to a file.
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_init(nml_filename)
     CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
     INTEGER :: unit, i,  s, n
@@ -276,14 +340,19 @@ CONTAINS
     CALL timing_stop("bkg_mean_sprd")
 
   END SUBROUTINE letkf_state_init
+  !> \endcond
+  !================================================================================
 
+  
 
-
-  !-----------------------------------------------------------------------------
+  !================================================================================
+  !> \cond INTERNAL
   !> Writes the ensemble mean and spread out to a set of files.
+  !!
   !! This subroutine handles both the analysis and background cases, depending
   !! on the value of the argument. The current contents of "state_mean_ij" and
   !! "state_sprd_ij" are used for the output.
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_write_meansprd(mode)
     CHARACTER(*), INTENT(in) :: mode !< either "ana" or "bkg"
     INTEGER, ALLOCATABLE :: sends(:)
@@ -377,10 +446,6 @@ CONTAINS
 
              ! write out to file
              CALL timing_start("io_write")
-!             if (stateio_class%verbose) &
-!                  PRINT '(X,A,I0.3,4A)', " PE ", pe_rank, " writing ", &
-!                  TRIM(statevars(i)%name), " for ",TRIM(mode)// &
-!                  MERGE(" mean  "," spread", j==1)
              CALL stateio_class%write_state(mode, &
                   MERGE(ENS_BKG_MEAN, ENS_BKG_SPRD,j==1),&
                   trim(statevars(i)%name), tmp_r_3d(:,:,:))
@@ -395,18 +460,20 @@ CONTAINS
     CALL timing_stop("write_meansprd")
 
   END SUBROUTINE letkf_state_write_meansprd
+  !> \endcond
+  !================================================================================
 
 
 
-
-  !-----------------------------------------------------------------------------
+  !================================================================================
+  !> \cond INTERNAL
   !> Reads in the grid specification (horizontal and vertical grids) and the
   !! specification of what state variables are involved with the state IO
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_init_spec()
     INTEGER :: i, j, ierr
 
     CALL timing_start("read_state_specs")
-
 
     ! Load the grid/state specification
     IF (pe_isroot) THEN
@@ -609,12 +676,15 @@ CONTAINS
     CALL timing_stop("read_state_specs")
 
   END SUBROUTINE letkf_state_init_spec
+  !> \endcond
+  !================================================================================
 
 
 
-
+  !================================================================================
+  !> \cond INTERNAL
+  !> Writes the state ensemble in parallel
   !--------------------------------------------------------------------------------
-  ! > Writes the state ensemble in parallel
   SUBROUTINE letkf_state_write_ens()
     integer :: i, j, k, p, s, tag, sends_num, recvs_num, ierr
     integer, allocatable :: recvs(:), sends(:)
@@ -702,14 +772,19 @@ CONTAINS
     call timing_stop("write_ens")
     
   END SUBROUTINE letkf_state_write_ens
+  !> \endcond
+  !================================================================================
 
+  
 
-
-  !--------------------------------------------------------------------------------
+  !================================================================================
+  !> \cond INTERNAL
   !> Reads the state ensemble in parallel.
+  !!
   !! Responsibility for reading in each variable of each ensemble member is spread
   !! across the PEs. After each variable is read, it is immediately scattered to
   !! all participating PEs
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_read_ens()
     INTEGER, ALLOCATABLE :: requests(:)
     INTEGER, ALLOCATABLE :: sends(:)
@@ -788,13 +863,16 @@ CONTAINS
     CALL timing_stop("read_state")
 
   END SUBROUTINE letkf_state_read_ens
+  !> \endcond
+  !================================================================================
 
 
-
-  !--------------------------------------------------------------------------------
+  
+  !================================================================================  
   !> register user-defined and built-in state I/O classes to be available
   !! for use by LETKF. Actual state I/O class to be used is specified in the
   !! namelist
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_register(ioclass)
     CLASS(letkf_stateio), POINTER :: ioclass
     INTEGER :: i
@@ -822,9 +900,12 @@ CONTAINS
     stateio_reg(stateio_reg_num)%p => ioclass
 
   END SUBROUTINE letkf_state_register
+  !================================================================================
 
 
-
+  
+  !================================================================================
+  !> Get horizontal grid definition
   !--------------------------------------------------------------------------------
   function letkf_state_hzgrid_getdef(name) result(res)
     character(len=*), intent(in) :: name
@@ -844,9 +925,12 @@ CONTAINS
          call letkf_mpi_abort("hzgrid definition for '"//name0//"' not found")
     res = hzgrids(i)
   end function letkf_state_hzgrid_getdef
+  !================================================================================
 
 
   
+  !================================================================================
+  !> get vertical grid definition
   !--------------------------------------------------------------------------------
   function letkf_state_vtgrid_getdef(name) result(res)
     character(len=*), intent(in) :: name
@@ -866,12 +950,13 @@ CONTAINS
          call letkf_mpi_abort("vtgrid definition for '"//name0//"' not found")
     res = vtgrids(i)
   end function letkf_state_vtgrid_getdef
-
+  !================================================================================
 
   
   
+  !================================================================================
+  !> Get state variable definition
   !--------------------------------------------------------------------------------
-
   function letkf_state_var_getdef(name) result(res)
     character(len=*), intent(in) :: name
     type(letkf_statevar_spec) :: res
@@ -890,11 +975,13 @@ CONTAINS
          call letkf_mpi_abort("state definition for variable '"//name0//"' not found")
     res = statevars(i)
   end function letkf_state_var_getdef
+  !================================================================================
+  
 
   
+  !================================================================================
+  !> Convert a string to uppercase
   !--------------------------------------------------------------------------------
-
-  !< Convert a string to uppercase
   FUNCTION toupper(in_str) RESULT(out_str)
     CHARACTER(*), INTENT(in) :: in_str
     CHARACTER(LEN(in_str)) :: out_str
@@ -909,6 +996,6 @@ CONTAINS
     END DO
 
   END FUNCTION toupper
-
+  !================================================================================
 
 END MODULE letkf_state

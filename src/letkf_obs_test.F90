@@ -9,7 +9,7 @@ MODULE letkf_obs_test
   PRIVATE
 
   
-  !> observation file I/O class for handling NetCDF files
+  ! observation file I/O class for handling NetCDF files
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_test
      TYPE(letkf_observation), ALLOCATABLE :: obs(:)
      REAL, ALLOCATABLE :: hx(:,:)

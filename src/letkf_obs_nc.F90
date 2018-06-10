@@ -1,4 +1,3 @@
-!> Module providing the NetCDF implementation of the obseration file I/O reader class
 MODULE letkf_obs_nc
   USE netcdf
   USE letkf_obs
@@ -7,7 +6,7 @@ MODULE letkf_obs_nc
   IMPLICIT NONE
   PRIVATE
 
-  !> observation file I/O class for handling NetCDF files
+  ! observation file I/O class for handling NetCDF files
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_nc
    CONTAINS
      PROCEDURE, NOPASS :: name => obsio_nc_get_name
