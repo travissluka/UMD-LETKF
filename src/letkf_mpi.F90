@@ -61,6 +61,7 @@ MODULE letkf_mpi
   !integer :: mpitype_grid_nxy_ns_real
 
   INTEGER :: nextio
+  INTEGER :: ppn
 
 
 CONTAINS
@@ -103,7 +104,7 @@ CONTAINS
 
     INTEGER :: unit
 
-    NAMELIST /letkf_mpi/ ens_size
+    NAMELIST /letkf_mpi/ ens_size, ppn
 
     ! read in our section of the namelist
     OPEN(newunit=unit, file=nml_filename, status='OLD')
@@ -346,7 +347,8 @@ CONTAINS
     pe = MERGE(forced_pe, nextio, PRESENT(forced_pe))
     ! TODO allow option to place an upper bound on this, in case we are
     ! severely memory limited
-    nextio = MOD(pe+1, pe_size)
+    nextio = pe+ppn
+    if (nextio >= pe_size) nextio = MOD(nextio+1, pe_size)
   END FUNCTION letkf_mpi_nextio
 
 

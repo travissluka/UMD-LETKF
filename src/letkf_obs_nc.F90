@@ -8,6 +8,7 @@ MODULE letkf_obs_nc
 
   ! observation file I/O class for handling NetCDF files
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_nc
+     logical :: read_inc
    CONTAINS
      PROCEDURE, NOPASS :: name => obsio_nc_get_name
      PROCEDURE, NOPASS :: desc => obsio_nc_get_desc
@@ -60,10 +61,11 @@ CONTAINS
   SUBROUTINE obsio_nc_init(self, nml_filename)
     CLASS(obsio_nc) :: self
     CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
+    logical :: read_inc
 
     INTEGER :: unit
 
-    NAMELIST /obsio_nc/ filename_obs, filename_obs_hx
+    NAMELIST /obsio_nc/ filename_obs, filename_obs_hx,read_inc
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -81,6 +83,7 @@ CONTAINS
     filename_obs_hx=TRIM(filename_obs_hx)
     IF (pe_isroot) PRINT obsio_nc
 
+    self%read_inc = read_inc
   END SUBROUTINE obsio_nc_init
 
 
@@ -199,6 +202,7 @@ CONTAINS
     CLASS(obsio_nc) :: self
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(out) :: hx(:)
+    real, allocatable :: val(:)
 
     LOGICAL :: ex
     INTEGER :: ncid, dimid, varid
@@ -237,10 +241,24 @@ CONTAINS
          '"obs" in '//filename_obs)
     CALL check( nf90_inquire_dimension(ncid, dimid, len=n) )
 
+
     ALLOCATE(hx(n))
-    CALL check( nf90_inq_varid(ncid, "hx", varid), &
-         '"hx" in'//filename )
-    CALL check( nf90_get_var(ncid, varid, hx) )
+
+    if(self%read_inc) then
+       allocate(val(n))
+       CALL check( nf90_inq_varid(ncid, "val", varid), &
+            '"val" in'//filename )
+       CALL check( nf90_get_var(ncid, varid, val) )
+       CALL check( nf90_inq_varid(ncid, "inc", varid), &
+            '"inc" in'//filename )
+       CALL check( nf90_get_var(ncid, varid, hx) )
+       hx = hx + val
+       deallocate(val)
+    else
+       CALL check( nf90_inq_varid(ncid, "hx", varid), &
+            '"hx" in'//filename )
+       CALL check( nf90_get_var(ncid, varid, hx) )
+    end if
 
     CALL check( nf90_close(ncid))
   END SUBROUTINE obsio_nc_read_hx

@@ -425,11 +425,12 @@ CONTAINS
           CALL timing_stop("mpi_recv")
 
           IF (dest == pe_rank) THEN
-             CALL timing_start("mpi_recv")
              IF(ALLOCATED(tmp_r_3d)) DEALLOCATE(tmp_r_3d)
              ALLOCATE(tmp_r_3d(grid_nx,grid_ny,statevars(i)%levels))
-             recvs_num=0
+
              ! initialize the receives
+             CALL timing_start("mpi_recv")
+             recvs_num=0
              DO p=0,pe_size-1
                 DO k=1,statevars(i)%levels
                    recvs_num = recvs_num + 1
@@ -746,13 +747,11 @@ CONTAINS
                    call mpi_irecv(tmp_r_3d(p+1,1,k), ij_count_pe(p), &
                         mpitype_grid_nxy_real, p, tag, letkf_mpi_comm, &
                         recvs(recvs_num), ierr)
-                   call mpi_wait(recvs(recvs_num), MPI_STATUS_IGNORE, ierr)
                 end do
              end do
 
              ! wait for the receives to finish
              call mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
-
              call timing_stop("mpi_gather")
              
 

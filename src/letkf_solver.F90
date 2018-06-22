@@ -50,7 +50,8 @@ CONTAINS
 
     real :: trans(ens_size, ens_size)
 
-    INTEGER, PARAMETER :: max_obs = 100
+    ! TODO, remove the hardcoding for this 
+    INTEGER,parameter :: max_obs = 100000
 
     INTEGER :: obs_ij_cnt
     INTEGER :: obs_ij_idx(max_obs)
@@ -68,7 +69,7 @@ CONTAINS
 
     type(letkf_localizer_group), allocatable :: loc_groups(:)
     
-    
+
     CALL timing_start('solver', TIMER_SYNC)
     IF (pe_isroot) THEN
        print '(//,A)', ""
