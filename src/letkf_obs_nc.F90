@@ -205,7 +205,7 @@ CONTAINS
     INTEGER :: n, i
     CHARACTER(len=6)  :: pattern
     CHARACTER(len=10) :: fmt
-    CHARACTER(len=LEN(filename_obs_hx)+10) :: filename
+    CHARACTER(len=1024) :: filename
 
     ! determine the filename to load in.
     ! filename_obs_hx provides the template into which we need to subsitute the

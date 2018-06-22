@@ -17,7 +17,9 @@ find_package(NetCDF REQUIRED)
 include_directories(${NETCDF_INCLUDE_DIRS})
 
 # LAPACK / BLAS
-find_package(LAPACK REQUIRED)
+#TODO, cmake not finding lapack with intel's MKL, but still compiles fine. fix this at some point
+# so that blas and lapack are REQUIRED.
+find_package(LAPACK)
 
 
 #------------------------------------------------------------
