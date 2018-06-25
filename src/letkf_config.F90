@@ -27,13 +27,19 @@ module letkf_config
     procedure, public :: found => get_found
 
     
-    procedure, private :: get_child_name, get_child_idx,&
-         get_integer_name, get_integer_idx, &
-         get_real4_name,   get_real4_idx, &
-         get_real8_name,   get_real8_idx, &         
-         get_string_name,  get_string_idx, &
-         get_logical_name
-    procedure, private :: get_child_name_f, get_child_idx_f
+    procedure :: get_child_name
+    procedure :: get_child_idx
+    procedure :: get_integer_name
+    procedure :: get_integer_idx
+    procedure :: get_real4_name
+    procedure :: get_real4_idx
+    procedure :: get_real8_name
+    procedure :: get_real8_idx
+    procedure :: get_string_name
+    procedure :: get_string_idx
+    procedure :: get_logical_name
+    procedure :: get_child_name_f
+    procedure :: get_child_idx_f
     
   end type configuration
 
