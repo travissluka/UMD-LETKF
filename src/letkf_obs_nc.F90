@@ -1,5 +1,6 @@
 MODULE letkf_obs_nc
   USE netcdf
+  use letkf_config
   USE letkf_obs
   USE letkf_mpi
 
@@ -58,14 +59,11 @@ CONTAINS
   !! This loads in a section of the namelist (&letkf_obs_nc) to determine what the
   !! input filenames should be.
   !! @param nml_filename path to the namelist we are to open
-  SUBROUTINE obsio_nc_init(self, nml_filename)
+  SUBROUTINE obsio_nc_init(self, config)
     CLASS(obsio_nc) :: self
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
+    type(configuration), intent(in) :: config
+
     logical :: read_inc
-
-    INTEGER :: unit
-
-    NAMELIST /obsio_nc/ filename_obs, filename_obs_hx,read_inc
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -74,16 +72,14 @@ CONTAINS
     END IF
 
     ! load in our section of the namelist
-    ALLOCATE(CHARACTER(1024) :: filename_obs);    WRITE(filename_obs,*)    "UNDEFINED"
-    ALLOCATE(CHARACTER(1024) :: filename_obs_hx); WRITE(filename_obs_hx,*) "UNDEFINED"
-    OPEN(newunit=unit, file=nml_filename, status='OLD')
-    READ(unit, nml=obsio_nc)
-    CLOSE(unit)
-    filename_obs=TRIM(filename_obs)
-    filename_obs_hx=TRIM(filename_obs_hx)
-    IF (pe_isroot) PRINT obsio_nc
-
-    self%read_inc = read_inc
+    call config%get("filename_obs", filename_obs)
+    call config%get("filename_obshx", filename_obs_hx)
+    call config%get("read_inc", self%read_inc)
+    if(pe_isroot) then
+       print '(A,A)', " filename_obs=",filename_obs
+       print '(A,A)', " filename_obshx=",filename_obs_hx
+       print *, "read_inc=",self%read_inc
+    end if
   END SUBROUTINE obsio_nc_init
 
 
@@ -278,7 +274,7 @@ CONTAINS
        else
           WRITE (*,*) TRIM(nf90_strerror(status))
        end if
-       CALL letkf_mpi_abort("NetCDF error")          
+       CALL letkf_mpi_abort("NetCDF error")
     END IF
   END SUBROUTINE check
 

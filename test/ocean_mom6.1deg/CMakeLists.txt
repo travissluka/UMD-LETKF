@@ -7,16 +7,16 @@ endforeach(F)
 
 add_test(
   NAME ocean_mom6_1deg_obstest
-  COMMAND letkfdriver obs_test.namelist
+  COMMAND letkfdriver letkf.obstest.json
 )
 
 add_test(
   NAME ocean_mom6_1deg_obsnc
-  COMMAND letkfdriver obs_nc.namelist
+  COMMAND letkfdriver letkf.obsnc.json
 )
 
-add_test(
-  NAME ocean_mom6_1deg
-  COMMAND letkfdriver full.namelist
-)
+#add_test(
+#  NAME ocean_mom6_1deg
+#  COMMAND letkfdriver full.namelist
+#)
 

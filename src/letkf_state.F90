@@ -5,6 +5,7 @@
 MODULE letkf_state
   USE timing
   USE mpi
+  use letkf_config
   USE letkf_mpi
 
   IMPLICIT NONE
@@ -12,7 +13,7 @@ MODULE letkf_state
 
 
 
-  
+
   !================================================================================
   !================================================================================
   ! Public module components
@@ -29,7 +30,7 @@ MODULE letkf_state
   public :: letkf_state_vtgrid_getdef
 
 
-  
+
   !================================================================================
   !> Horizontal grid specification
   !!
@@ -39,7 +40,7 @@ MODULE letkf_state
      CHARACTER(len=20)         :: name      !< unique name of the horizontal grid
      REAL,         ALLOCATABLE :: lat(:,:)  !< 2D lattidue grid (in degrees)
      REAL,         ALLOCATABLE :: lon(:,:)  !< 2D longitude grid (in degrees)
-     real,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees) 
+     real,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees)
      real,         ALLOCATABLE :: lon_nom(:)!< nominal 1D longitude grid (in degrees)
      LOGICAL,      ALLOCATABLE :: mask(:,:) !< 2D mask
   END TYPE letkf_hzgrid_spec
@@ -62,7 +63,7 @@ MODULE letkf_state
   !--------------------------------------------------------------------------------
 
 
-  
+
   !================================================================================
   !> state variable specifications
   !--------------------------------------------------------------------------------
@@ -75,13 +76,13 @@ MODULE letkf_state
      CHARACTER(len=20) :: vtgrid
      !> the internal starting index of the "slab" this variable is on
      INTEGER           :: grid_s_idx
-     !> number of vertical levels this state variable consists of 
+     !> number of vertical levels this state variable consists of
      INTEGER           :: levels
   END TYPE letkf_statevar_spec
   !--------------------------------------------------------------------------------
-  
 
-  
+
+
   !================================================================================
   !> Abstract base class for model state reading and writing.
   !! All user-defined and built-in state file I/O classes for
@@ -104,10 +105,11 @@ MODULE letkf_state
        CHARACTER(:), ALLOCATABLE :: I_letkf_stateio_getstr
      END FUNCTION I_letkf_stateio_getstr
 
-     SUBROUTINE I_letkf_stateio_init(self, nml_filename)
+     SUBROUTINE I_letkf_stateio_init(self, config)
        IMPORT letkf_stateio
-       CLASS(letkf_stateio)                  :: self
-       CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
+       import configuration
+       CLASS(letkf_stateio)             :: self
+       type(configuration), intent(in)  :: config
      END SUBROUTINE I_letkf_stateio_init
 
      SUBROUTINE I_letkf_stateio_read_specs(self, hzgrids, vtgrids, statevars)
@@ -146,7 +148,7 @@ MODULE letkf_state
   END INTERFACE
   !================================================================================
 
-  
+
   ! enumerations for the stateio_write_* methods
   !------------------------------------------------------------
   INTEGER, PUBLIC, PARAMETER :: ENS_BKG_MEAN = -1
@@ -167,7 +169,7 @@ MODULE letkf_state
   !> mask values of gridpoints that have been scattered to this PE
   LOGICAL, PUBLIC, PROTECTED, ALLOCATABLE :: mask_ij(:)
 
-  
+
   ! state variables after being distributed across PEs
   !------------------------------------------------------------
 
@@ -175,7 +177,7 @@ MODULE letkf_state
   !! initially this is the background state perturbations, but stores
   !! the final analysis state after the LETKF solver is run
   REAL, PUBLIC, ALLOCATABLE :: state_ij(:,:,:)
-  
+
   !> state variables mean that have been scattered to this PE.
   !! initially this is the background state mean, but stores the analysis
   !! state mean after the LETKF solver is run
@@ -191,7 +193,7 @@ MODULE letkf_state
   INTEGER, PUBLIC, PROTECTED :: grid_nx
 
   !> number of gridpoints in the Y direction.
-  !! \todo generalize this for handling multiple horizontal grids  
+  !! \todo generalize this for handling multiple horizontal grids
   INTEGER, PUBLIC, PROTECTED :: grid_ny
 
   !> number of state slabs (i.e. state variables times vertical levels
@@ -203,16 +205,16 @@ MODULE letkf_state
   TYPE(letkf_statevar_spec),PUBLIC, PROTECTED, ALLOCATABLE :: statevars(:)
 
 
-  
-  
+
+
   !================================================================================
   !================================================================================
   ! Private module components
   !================================================================================
   !================================================================================
-  
 
-  
+
+
   !================================================================================
   !> simple wrapper for letkf_stateio so that we can have an array of pointers.
   !! to abstract classes
@@ -226,7 +228,7 @@ MODULE letkf_state
 
   ! registration of built-in and user-defined stateio classes
   !------------------------------------------------------------
-  
+
   INTEGER, PARAMETER :: stateio_reg_max = 100         !< max classes to handle
   INTEGER            :: stateio_reg_num = 0           !< current number of classes registered
   TYPE(stateio_ptr)  :: stateio_reg(stateio_reg_max)  !< list of registered classes
@@ -236,7 +238,7 @@ MODULE letkf_state
 
 
   !================================================================================
-  !================================================================================ 
+  !================================================================================
 CONTAINS
   !================================================================================
   !================================================================================
@@ -251,15 +253,16 @@ CONTAINS
   !! ensemble background state read in in parallel, mean and spread are calculated
   !! and saved to a file.
   !--------------------------------------------------------------------------------
-  SUBROUTINE letkf_state_init(nml_filename)
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
+  SUBROUTINE letkf_state_init(config)
+    type(configuration), intent(in) :: config
+
+    type(configuration) :: config_ioclass
     INTEGER :: unit, i,  s, n
     CHARACTER(:), ALLOCATABLE :: ioclass
     LOGICAL :: write_bkg_meansprd = .TRUE.
     logical :: verbose = .false.
-    
-    NAMELIST /letkf_state/ ioclass, write_bkg_meansprd, verbose
 
+    
     ! print header
     IF (pe_isroot) THEN
        PRINT '(//A)', ""
@@ -269,44 +272,44 @@ CONTAINS
        PRINT *, ""
     END IF
 
-    ! read our section of the namelist
-    ALLOCATE(CHARACTER(1024) :: ioclass);   WRITE (ioclass, *) "UNDEFINED"
-    OPEN(newunit=unit, file=nml_filename, status='OLD')
-    READ(unit, nml=letkf_state)
-    CLOSE(unit)
-    ioclass=toupper(TRIM(ioclass))
-    IF (pe_isroot) PRINT letkf_state
-
+    ! read some global configuration settings
+    call config%get("verbose", verbose, default=.false.)
+    if (pe_isroot) print *, "state.verbose=",verbose
+    
     ! print a list of all stateio classes that have been registered
     IF (pe_isroot) THEN
        PRINT *, ""
        PRINT *, "List of stateio classes registered:"
        DO i=1, stateio_reg_num
-          PRINT *, " * ", toupper(stateio_reg(i)%p%name()), &
-               "  (", stateio_reg(i)%p%desc(), ")"
+          PRINT *, ' * "', tolower(stateio_reg(i)%p%name()), &
+               '"  (', stateio_reg(i)%p%desc(), ")"
        END DO
        PRINT *, ""
     END IF
 
     ! determine the stateio class to use
+    call config%get("ioclass", ioclass)
+    ioclass = tolower(ioclass)
+    if (pe_isroot) print '(A,A)',  " state.ioclass=",ioclass
     NULLIFY(stateio_class)
     DO i=1, stateio_reg_num
-       IF (stateio_reg(i)%p%name() == ioclass) THEN
+       IF (tolower(stateio_reg(i)%p%name()) == ioclass) THEN
           stateio_class => stateio_reg(i)%p
           EXIT
        END IF
     END DO
     IF (.NOT. ASSOCIATED(stateio_class)) THEN
-       CALL letkf_mpi_abort("stateio class "//ioclass//" not found.")
+       CALL letkf_mpi_abort('stateio class "'//ioclass//'" not found.')
     END IF
 
     ! initialize the stateio class
     stateio_class%verbose = verbose
-    CALL stateio_class%init(nml_filename)
+    config_ioclass = config ! TODO, get the correct tree
+    CALL stateio_class%init(config_ioclass)
 
     ! Read in the grid /variable specs
     CALL letkf_state_init_spec()
-    
+
     ! allocate the memory needed by this pe for the ensemble model state
     ALLOCATE( state_ij( ens_size, grid_ns, ij_count))
     ALLOCATE( state_mean_ij(      grid_ns, ij_count))
@@ -343,7 +346,7 @@ CONTAINS
   !> \endcond
   !================================================================================
 
-  
+
 
   !================================================================================
   !> \cond INTERNAL
@@ -500,7 +503,7 @@ CONTAINS
        END DO
 
        ! TODO make sure all the names are uppercase
-       
+
        ! determine the number of slabs required, and the slab start/stop
        ! point of each variable
        grid_ns = 0
@@ -536,7 +539,7 @@ CONTAINS
     ! tell the mpi module about the grid layout
     CALL letkf_mpi_setgrid(grid_nx, grid_ny, grid_ns)
 
-    
+
     ! broadcast horizontal grid spec to all mpi procs
     IF(pe_isroot) i=SIZE(hzgrids)
     CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
@@ -544,29 +547,29 @@ CONTAINS
     DO i=1,SIZE(hzgrids)
        CALL mpi_bcast(hzgrids(i)%name, 20, mpi_character, pe_root, &
             letkf_mpi_comm, ierr)
-       
+
        ! send nominal latitude
        if(pe_isroot) j=size(hzgrids(i)%lat_nom)
        call mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
        if(.not. pe_isroot) allocate(hzgrids(i)%lat_nom(j))
        call mpi_bcast(hzgrids(i)%lat_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
-       
+
        ! send nominal longitude
        if(pe_isroot) j=size(hzgrids(i)%lon_nom)
        call mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
        if(.not. pe_isroot) allocate(hzgrids(i)%lon_nom(j))
        call mpi_bcast(hzgrids(i)%lon_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
-       
+
        ! TODO, initializing with 0 size on non root nodes to silence gfortran
        ! runtime debug errors. Do I ever need the full 2d grid on other PEs?
        IF (.NOT. pe_isroot) THEN
           ALLOCATE(hzgrids(i)%lat(0,0))
           ALLOCATE(hzgrids(i)%lon(0,0))
           ALLOCATE(hzgrids(i)%mask(0,0))
-       END IF       
+       END IF
     END DO
 
-    
+
     ! scatter horizontal grid parameters
     ALLOCATE(lat_ij(ij_count))
     ALLOCATE(lon_ij(ij_count))
@@ -575,7 +578,7 @@ CONTAINS
     CALL letkf_mpi_grd2ij(pe_root, hzgrids(1)%lon, lon_ij)
     CALL letkf_mpi_grd2ij(pe_root, hzgrids(1)%mask, mask_ij)
 
-    
+
     ! print summary of horizontal grids
     IF (pe_isroot) THEN
        PRINT *, ""
@@ -616,7 +619,7 @@ CONTAINS
        call mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
        if(.not. pe_isroot) allocate(vtgrids(i)%vert_nom(j))
        call mpi_bcast(vtgrids(i)%vert_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
-       
+
     END DO
 
 
@@ -691,7 +694,7 @@ CONTAINS
     integer, allocatable :: recvs(:), sends(:)
     real, allocatable :: tmp_r_3d(:,:,:)
     integer :: pe_ens_io(ens_size)
-    
+
     if(pe_isroot) print '(/,X,A)', "Writing analysis ensemble members..."
     call timing_start("write_ens", TIMER_SYNC)
 
@@ -707,7 +710,7 @@ CONTAINS
             call stateio_class%write_init('ana', i)
     end do
 
-    
+
     ! initialize all the sends
     allocate(sends(grid_ns*ens_size))
     sends_num=0
@@ -738,7 +741,7 @@ CONTAINS
              if (allocated(tmp_r_3d)) deallocate(tmp_r_3d)
              allocate(tmp_r_3d(grid_nx, grid_ny, statevars(i)%levels))
              recvs_num =0
-             
+
              ! initialize the receives for this variable
              do p=0, pe_size-1
                 do k=1, statevars(i)%levels
@@ -753,7 +756,7 @@ CONTAINS
              ! wait for the receives to finish
              call mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
              call timing_stop("mpi_gather")
-             
+
 
              ! write out to file
              call timing_start("io_write")
@@ -761,7 +764,7 @@ CONTAINS
              call stateio_class%write_state(&
                   'ana', j, trim(statevars(i)%name), tmp_r_3d)
              call timing_stop("io_write")
-             
+
           end if
        end do
     end do
@@ -769,12 +772,12 @@ CONTAINS
     ! wait for the sends to finish
     call mpi_waitall(sends_num, sends, MPI_STATUSES_IGNORE, ierr)
     call timing_stop("write_ens")
-    
+
   END SUBROUTINE letkf_state_write_ens
   !> \endcond
   !================================================================================
 
-  
+
 
   !================================================================================
   !> \cond INTERNAL
@@ -866,8 +869,8 @@ CONTAINS
   !================================================================================
 
 
-  
-  !================================================================================  
+
+  !================================================================================
   !> register user-defined and built-in state I/O classes to be available
   !! for use by LETKF. Actual state I/O class to be used is specified in the
   !! namelist
@@ -886,10 +889,10 @@ CONTAINS
     ! make sure a class of this name hasn't already been registered
     IF ( pe_isroot ) THEN
        DO i=1, stateio_reg_num
-          IF (toupper(stateio_reg(i)%p%name()) == toupper(ioclass%name())) THEN
-             CALL letkf_mpi_abort("can't register stateio class '"// &
-                  toupper(ioclass%name())// &
-                  "', a class by that name already has been registered.")
+          IF (tolower(stateio_reg(i)%p%name()) == tolower(ioclass%name())) THEN
+             CALL letkf_mpi_abort("can't register stateio class "//'"'// &
+                  tolower(ioclass%name())// &
+                  '", a class by that name already has been registered.')
           END IF
        END DO
     END IF
@@ -902,7 +905,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !> Get horizontal grid definition
   !--------------------------------------------------------------------------------
@@ -927,7 +930,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !> get vertical grid definition
   !--------------------------------------------------------------------------------
@@ -951,8 +954,8 @@ CONTAINS
   end function letkf_state_vtgrid_getdef
   !================================================================================
 
-  
-  
+
+
   !================================================================================
   !> Get state variable definition
   !--------------------------------------------------------------------------------
@@ -975,13 +978,13 @@ CONTAINS
     res = statevars(i)
   end function letkf_state_var_getdef
   !================================================================================
-  
 
-  
+
+
   !================================================================================
-  !> Convert a string to uppercase
+  !> Convert a string to lower
   !--------------------------------------------------------------------------------
-  FUNCTION toupper(in_str) RESULT(out_str)
+  FUNCTION tolower(in_str) RESULT(out_str)
     CHARACTER(*), INTENT(in) :: in_str
     CHARACTER(LEN(in_str)) :: out_str
     INTEGER :: i
@@ -989,12 +992,12 @@ CONTAINS
 
     out_str = in_str
     DO i = 1, LEN(out_str)
-       IF (out_str(i:i) >= "a" .AND. out_str(i:i) <= "z") THEN
-          out_str(i:i) = ACHAR(IACHAR(out_str(i:i)) - offset)
+       IF (out_str(i:i) >= "A" .AND. out_str(i:i) <= "Z") THEN
+          out_str(i:i) = ACHAR(IACHAR(out_str(i:i)) + offset)
        END IF
     END DO
 
-  END FUNCTION toupper
+  END FUNCTION tolower
   !================================================================================
 
 END MODULE letkf_state

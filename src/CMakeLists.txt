@@ -3,9 +3,9 @@ set( letkf_lib_srcs
   getmem.F90
   timing.F90
   running_stats.F90
-  geoKdTree/kdtree.f90
    
   letkf.F90
+  letkf_config.F90
   letkf_core.F90
   letkf_loc.F90
   letkf_loc_novrt.F90
@@ -16,6 +16,9 @@ set( letkf_lib_srcs
   letkf_solver.F90
   letkf_state.F90
   letkf_state_nc.F90
+
+  ${JSON_SRC_FILES}
+  ${KDTREE_SRC_FILES}
   )
 
 # The modules that should be exported in the install directory

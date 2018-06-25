@@ -1,4 +1,5 @@
 MODULE letkf_loc
+  use letkf_config
   USE letkf_mpi
   USE letkf_obs
 
@@ -54,10 +55,11 @@ MODULE letkf_loc
        CHARACTER(:), ALLOCATABLE :: I_letkf_loc_str
      END FUNCTION I_letkf_loc_str
 
-     SUBROUTINE I_letkf_loc_init(self, nml_filename)
+     SUBROUTINE I_letkf_loc_init(self, config)
        IMPORT letkf_localizer
+       import configuration
        CLASS(letkf_localizer), INTENT(inout) :: self
-       CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
+       type(configuration), intent(in) :: config
      END SUBROUTINE I_letkf_loc_init
 
      SUBROUTINE I_letkf_loc_groups(self, ij, groups)
@@ -112,12 +114,11 @@ CONTAINS
 
   !--------------------------------------------------------------------------------
   !> initialize
-  SUBROUTINE letkf_loc_init(nml_filename)
-    CHARACTER(:), ALLOCATABLE,  INTENT(in) :: nml_filename
-    INTEGER :: i, unit
-    CHARACTER(:), ALLOCATABLE :: loc_class
+  SUBROUTINE letkf_loc_init(config)
+    type(configuration), intent(in) :: config
 
-    NAMELIST /letkf_loc/ loc_class
+    INTEGER :: i
+    CHARACTER(:), ALLOCATABLE :: loc_class
 
     IF(pe_isroot) THEN
        PRINT "(//A)", ""
@@ -125,13 +126,6 @@ CONTAINS
        PRINT *, " letkf_loc_init() : localization module initialization"
        PRINT *, "============================================================"
     END IF
-
-    ! read in our section of the namelist
-    ALLOCATE(CHARACTER(1024) :: loc_class); WRITE (loc_class, *) "UNDEFINED"
-    OPEN(newunit=unit, file=nml_filename, status='OLD')
-    READ(unit, nml=letkf_loc)
-    loc_class=toupper(TRIM(loc_class))
-    CLOSE(unit)
 
     ! print a list of all localizer classes that have been registered
     IF (pe_isroot) THEN
@@ -144,6 +138,8 @@ CONTAINS
     END IF
 
     ! determine the loc class to use
+    call config%get("class", loc_class)
+    loc_class=toupper(loc_class)
     NULLIFY(localizer_class)
     DO i=1, localizer_reg_num
        IF (localizer_reg(i)%p%name() == loc_class) THEN
@@ -156,7 +152,7 @@ CONTAINS
     END IF
 
     !initialize the localizer class
-    CALL localizer_class%init(nml_filename)
+    CALL localizer_class%init(config)
   END SUBROUTINE letkf_loc_init
 
 

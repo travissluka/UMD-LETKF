@@ -38,6 +38,7 @@ add_definitions(-DCVERSION=\"${GIT_VERSION}\")
 # subdirectories
 #------------------------------------------------------------
 enable_testing()
+add_subdirectory(pkg)
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(doc)

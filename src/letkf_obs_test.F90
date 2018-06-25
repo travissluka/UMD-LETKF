@@ -1,6 +1,7 @@
 MODULE letkf_obs_test
   USE kdtree
   USE mpi
+  use letkf_config
   USE letkf_mpi
   USE letkf_obs
   USE letkf_state
@@ -8,7 +9,7 @@ MODULE letkf_obs_test
   IMPLICIT NONE
   PRIVATE
 
-  
+
   ! observation file I/O class for handling NetCDF files
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_test
      TYPE(letkf_observation), ALLOCATABLE :: obs(:)
@@ -47,96 +48,59 @@ CONTAINS
 
   !-----------------------------------------------------------------------------
   !> initialize the test observation generation class
-  SUBROUTINE obsio_test_init(self, nml_filename)
+  SUBROUTINE obsio_test_init(self, config)
     CLASS(obsio_test) :: self
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
-    INTEGER :: nobs
+    type(configuration), intent(in) :: config
+    type(configuration) :: config_ob
 
+    INTEGER :: nobs
     INTEGER :: i, t, ierr
     TYPE(kd_root) :: grd_tree
     INTEGER, ALLOCATABLE :: grd_idx(:)
     REAL,    ALLOCATABLE :: grd_dist(:), min_dist(:), hx2(:,:)
     INTEGER, ALLOCATABLE :: ob_pe1(:), ob_pe2(:)
     character(len=60), allocatable :: ob_state_type(:)
-    
+
     integer :: iostat
     character (len=1024) :: line, strs(9)
     character (:), allocatable :: testobs_file
     integer :: unit
     logical :: ex
 
-    integer :: n
     integer :: lvl, s, j, k, m
+    character(:), allocatable :: str
     
     type(letkf_obsplatdef) :: def
     type(letkf_statevar_spec) :: state_def
-    
-    namelist /obsio_test/ testobs_file
-    
-    if (pe_isroot) then
-       print '(/A)', ""
-       print *, " obsio_test_init() : "
-       print *, "============================================================"
-    end if
-    
-    ! read in our section of the namelist
-    allocate(character(1024) :: testobs_file);  WRITE(testobs_file,*) "UNDEFINED"
-    open(newunit=unit, file=nml_filename, status='OLD')
-    read(unit, nml=obsio_test)
-    close(unit)
-    testobs_file=trim(testobs_file)
-    if (pe_isroot) print obsio_test
 
 
     ! read in the configuration file
-    ! TODO, this is not efficient, i'm reading the file once
-    ! just to get the number of obs, then again to get all the data
-    do n=1,2
-       if (n == 2) allocate(self%obs(nobs), ob_state_type(nobs))
-       nobs = 0
-       
-       inquire(file=testobs_file, exist=ex)
-       if(.not. ex) &
-            call letkf_mpi_abort("Test obs file missing: "//trim(testobs_file))
-       open(newunit=unit, file=testobs_file, action='read')
-       do while(.true.)
-          ! read a new line
-          read(unit, '(A)', iostat=iostat) line
-          if(iostat<0) exit
-          if(iostat>0) call letkf_mpi_abort("Problem reading testobs file")
+    nobs = config%count()
+    allocate(self%obs(nobs), ob_state_type(nobs))
+    do i=1,nobs
+       call config%get(i, config_ob)
 
-          ! convert tabs to spaces
-          do i=1,len(line)
-             if(line(i:i) == char(9)) line(i:i) = ' '
-          end do
+       call config_ob%get(1, str)
+       def = letkf_obs_getdef('O', str)
+       self%obs(i)%obsid = def%id
 
-          ! ignore comments / empty lines
-          line=adjustl(line)
-          if(line(1:1) == "#") cycle
-          if(len(trim(line))==0) cycle
-          
-          ! process the given observation
-          nobs = nobs + 1
+       call config_ob%get(2, str)
+       def = letkf_obs_getdef('P', str)
+       self%obs(i)%platid = def%id
 
-          if (n == 2) then
-             read(line,*) strs
-             def = letkf_obs_getdef('O', strs(1))
-             self%obs(nobs)%obsid  = def%id
-             def = letkf_obs_getdef('P', strs(2))
-             self%obs(nobs)%platid = def%id
-             ob_state_type(nobs) = trim(strs(3))
-             read(strs(4),*) self%obs(nobs)%lat
-             read(strs(5),*) self%obs(nobs)%lon
-             read(strs(6),*) self%obs(nobs)%zdim
-             read(strs(7),*) self%obs(nobs)%time
-             read(strs(8),*) self%obs(nobs)%val
-             read(strs(9),*) self%obs(nobs)%err
-             self%obs(nobs)%qc = 0
-          end if
-       end do
-       close(unit)
+       call config_ob%get(3, str)
+       ob_state_type(i) = str
+
+       call config_ob%get(4, self%obs(i)%lat)
+       call config_ob%get(5, self%obs(i)%lon)
+       call config_ob%get(6, self%obs(i)%zdim)
+       call config_ob%get(7, self%obs(i)%time)
+       call config_ob%get(8, self%obs(i)%val)
+       call config_ob%get(9, self%obs(i)%err)
+
+       self%obs(nobs)%qc = 0
     end do
-    
+
 
 
     ! generate the hx (observation operator on ensemble members)
@@ -184,12 +148,12 @@ CONTAINS
           j=1
           k=size(vtgrids(1)%vert_nom)
           do while(j < k-1)
-             m=(j+k)/2             
+             m=(j+k)/2
              if(vtgrids(1)%vert_nom(m) > self%obs(i)%zdim) then
                 k = m
              else
                 j = m
-             end if             
+             end if
           end do
           lvl = merge(j,k, &
                abs(vtgrids(1)%vert_nom(j)-self%obs(i)%zdim) < &

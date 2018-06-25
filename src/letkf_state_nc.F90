@@ -1,5 +1,6 @@
 MODULE letkf_state_nc
   USE netcdf
+  use letkf_config
   USE letkf_state
   USE letkf_mpi
 
@@ -15,16 +16,15 @@ MODULE letkf_state_nc
 
   INTEGER, PARAMETER :: fields_max = 100
 
-  
+
   !> state file I/O class for handling NetCDF files
-  PUBLIC :: stateio_nc
+  PUBLIC :: stateio_nc  
   TYPE, EXTENDS(letkf_stateio) :: stateio_nc
      INTEGER :: compression !< nc4 compression (0-9)
-     character(len=200) :: griddef_cfg(5,fields_max)
-     INTEGER            :: griddef_cfg_num = 0
-     character(len=200) :: statedef_cfg(6,fields_max)
-     INTEGER            :: statedef_cfg_num = 0
-
+     type(configuration) :: hzgriddef
+     type(configuration) :: vtgriddef
+     type(configuration) :: statedef
+     
    CONTAINS
 
      PROCEDURE, NOPASS :: name => stateio_nc_get_name
@@ -34,9 +34,6 @@ MODULE letkf_state_nc
      PROCEDURE         :: read_state  => stateio_nc_read_state
      PROCEDURE         :: write_init  => stateio_nc_write_init
      PROCEDURE         :: write_state => stateio_nc_write_state
-
-     PROCEDURE :: read_nc_d1
-     PROCEDURE :: read_nc_d2
   END TYPE stateio_nc
 
 
@@ -67,18 +64,15 @@ CONTAINS
 
   !--------------------------------------------------------------------------------
   !>
-  SUBROUTINE stateio_nc_init(self, nml_filename)
+  SUBROUTINE stateio_nc_init(self, config)
     CLASS(stateio_nc) :: self
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: nml_filename
+    type(configuration), intent(in) :: config
 
-    CHARACTER(:), ALLOCATABLE :: statedef_file, griddef_file
     CHARACTER(len=1024) :: line, strs(6)
     INTEGER :: unit, iostat, i
     LOGICAL :: ex
     INTEGER :: compression = 0
 
-    
-    NAMELIST /stateio_nc/ griddef_file, statedef_file, compression
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -86,75 +80,13 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
-    ! load in our section of the namelist
-    ALLOCATE(CHARACTER(1024) :: statedef_file);   WRITE(statedef_file, *)  "UNDEFINED"
-    ALLOCATE(CHARACTER(1024) :: griddef_file);   WRITE(griddef_file, *)  "UNDEFINED"
-    OPEN(newunit=unit, file=nml_filename, status='OLD')
-    READ(unit, nml=stateio_nc)
-    CLOSE(unit)
-    griddef_file=TRIM(griddef_file)
-    statedef_file=TRIM(statedef_file)
-    IF (pe_isroot) PRINT stateio_nc
-    self%compression = compression
+    ! load in our section of the configuration
+    call config%get("compression", self%compression)
+    if (pe_isroot) print *, " state.compression=", self%compression
+    call config%get("hzgrid", self%hzgriddef)
+    call config%get("vtgrid", self%vtgriddef)
+    call config%get("statedef", self%statedef)
 
-    ! make sure griddef file exists
-    INQUIRE(file=griddef_file, exist=ex)
-    IF (.NOT. ex) THEN
-       CALL letkf_mpi_abort("File does not exist: " // TRIM(griddef_file))
-    END IF
-
-    ! read in the griddef file
-    OPEN(newunit=unit, file=griddef_file, action='read')
-    DO WHILE(.TRUE.)
-       ! read a new line
-       READ(unit, "(A)", iostat=iostat) line
-       IF (iostat<0) EXIT
-       IF (iostat>0) CALL letkf_mpi_abort("Error reading file.")
-
-       ! convert tabs to spaces
-       DO i=1, LEN(line)
-          IF(line(i:i) == CHAR(9)) line(i:i) = ' '
-       END DO
-
-       ! ignore comments / empty lines
-       line = ADJUSTL(line)
-       IF(line(1:1) == '#') CYCLE
-       IF(LEN(TRIM(line)) == 0) CYCLE
-
-       ! parse into substrings
-       self%griddef_cfg_num = self%griddef_cfg_num+1
-       READ(line,*) self%griddef_cfg(:, self%griddef_cfg_num)
-    END DO
-
-    
-    ! make sure statedef file exists
-    INQUIRE(file=statedef_file, exist=ex)
-    IF (.NOT. ex) THEN
-       CALL letkf_mpi_abort("File does not exist: " // TRIM(statedef_file))
-    END IF
-
-    ! read in the statedef file
-    OPEN(newunit=unit, file=statedef_file, action='read')
-    DO WHILE(.TRUE.)
-       ! read a new line
-       READ(unit, "(A)", iostat=iostat) line
-       IF (iostat<0) EXIT
-       IF (iostat>0) CALL letkf_mpi_abort("Error reading file.")
-
-       ! convert tabs to spaces
-       DO i=1, LEN(line)
-          IF(line(i:i) == CHAR(9)) line(i:i) = ' '
-       END DO
-
-       ! ignore comments / empty lines
-       line = ADJUSTL(line)
-       IF(line(1:1) == '#') CYCLE
-       IF(LEN(TRIM(line)) == 0) CYCLE
-
-       ! parse into substrings
-       self%statedef_cfg_num = self%statedef_cfg_num+1
-       READ(line,*) self%statedef_cfg(:, self%statedef_cfg_num)
-    END DO
   END SUBROUTINE stateio_nc_init
 
 
@@ -167,6 +99,9 @@ CONTAINS
     TYPE(letkf_vtgrid_spec),   ALLOCATABLE, INTENT(out) :: vtgrids(:)
     TYPE(letkf_statevar_spec), ALLOCATABLE, INTENT(out) :: statevars(:)
 
+    type(configuration) :: config, cfg2
+    
+    character(len=:), allocatable :: str, filename, varname
     REAL, ALLOCATABLE :: tmp_r_1d(:)
     REAL, ALLOCATABLE :: tmp_r_2d(:,:)
 
@@ -175,49 +110,62 @@ CONTAINS
     nx = -1
     ny = -1
 
-
-    ! Read horizontal grid
+    ! Read horizontal grids
     ! ------------------------------------------------------------
     PRINT *, ""
     PRINT *, "Loading horizontal grid specs..."
-
-    ! determine the number of horizontal grids, and their unique names
-    grd_cnt = 0
-    do i = 1,self%griddef_cfg_num
-       if (self%griddef_cfg(1,i) /= "H") cycle
-       if (grd_cnt /= 0 ) then
-          do s=1,grd_cnt
-             if (strs(s) == self%griddef_cfg(2,i)) exit
-          end do
-          if (s <= grd_cnt) cycle
-       end if
-       grd_cnt = grd_cnt + 1
-       strs(grd_cnt) = self%griddef_cfg(2,i)
-    end do            
-    ALLOCATE(hzgrids(grd_cnt))
+    grd_cnt = self%hzgriddef%count()
+    allocate(hzgrids(grd_cnt))
     print *, "Found ",grd_cnt," horizontal grids definitions."
-
+    print *, ""
     
     !  for each horizontal grid:
-    ! TODO, the following only actually works with ONE horizontal grid
     do i=1,grd_cnt
+       
        ! grid name
-       hzgrids(i)%name = strs(i)
-
+       call self%hzgriddef%get(i, config, name=str)
+       print *, "loading horizontal grid: ", str
+       hzgrids(i)%name = str
+       
        ! latitude
-       CALL self%read_nc_d2("H", hzgrids(i)%name, "lat_2d", hzgrids(i)%lat)
-       CALL self%read_nc_d1("H", hzgrids(i)%name, "lat_1d", hzgrids(i)%lat_nom)
+       if(config%found("lat2d")) then
+          call config%get("lat2d", cfg2)
+          call cfg2%get(1, varname)
+          call cfg2%get(2, filename)
+          PRINT *,' loading 2D "lat2d" from "', varname, '" of "',filename,'"'          
+          call read_nc_d2(varname, filename, hzgrids(i)%lat)
+       end if
+       if(config%found("lat1d")) then
+          call config%get("lat1d", cfg2)
+          call cfg2%get(1, varname)
+          call cfg2%get(2, filename)
+          PRINT *,' loading 1D "lat1d" from "', varname, '" of "',filename,'"'          
+          call read_nc_d1(varname, filename, hzgrids(i)%lat_nom)
+       end if
        IF (ALLOCATED(hzgrids(i)%lat)) THEN
           ! 2d fields was read in
-          nx = SIZE(hzgrids(i)%lat, 1)
-          ny = SIZE(hzgrids(i)%lat, 2)
-       END IF
+          nx = size(hzgrids(i)%lat, 1)
+          ny = size(hzgrids(i)%lat, 2)
+       end if
        IF (ny < 0 .AND. ALLOCATED(hzgrids(i)%lat_nom)) &
             ny = SIZE(hzgrids(i)%lat_nom)
 
+
        ! longitude
-       CALL self%read_nc_d2("H", hzgrids(i)%name, "lon_2d", hzgrids(i)%lon)
-       CALL self%read_nc_d1("H", hzgrids(i)%name, "lon_1d", hzgrids(i)%lon_nom)
+       if(config%found("lon2d")) then
+          call config%get("lon2d", cfg2)
+          call cfg2%get(1, varname)
+          call cfg2%get(2, filename)
+          PRINT *,' loading 2D "lon2d" from "', varname, '" of "',filename,'"'          
+          call read_nc_d2(varname, filename, hzgrids(i)%lon)
+       end if
+       if(config%found("lon1d")) then
+          call config%get("lon1d", cfg2)
+          call cfg2%get(1, varname)
+          call cfg2%get(2, filename)
+          PRINT *,' loading 1D "lon1d" from "', varname, '" of "',filename,'"'          
+          call read_nc_d1(varname, filename, hzgrids(i)%lon_nom)
+       end if
        IF (nx < 0 .AND. ALLOCATED(hzgrids(i)%lon_nom)) &
             nx = SIZE(hzgrids(i)%lon_nom)
 
@@ -233,7 +181,7 @@ CONTAINS
           DO j=1,ny
              hzgrids(i)%lat(j,:) = hzgrids(i)%lat_nom(j)
           END DO
-       END IF       
+       END IF
 
        ! if we need to generate the 1d nominal lat/lon from the 2d lat/lon
        IF (.NOT. ALLOCATED(hzgrids(i)%lat_nom) .OR. .NOT. ALLOCATED(hzgrids(i)%lon_nom)) THEN
@@ -247,66 +195,76 @@ CONTAINS
        END IF
 
        ! read mask
-       CALL self%read_nc_d2("H", hzgrids(i)%name, "mask", tmp_r_2d)
-       ALLOCATE(hzgrids(i)%mask(nx,ny))
-       hzgrids(i)%mask = .FALSE.
-       IF (ALLOCATED(tmp_r_2d)) &
-            WHERE (tmp_r_2d <= 0) hzgrids(i)%mask = .TRUE.
+       allocate(hzgrids(i)%mask(nx,ny))
+       hzgrids(i)%mask = .FALSE.       
+       if(config%found("mask")) then
+          call config%get("mask", cfg2)
+          call cfg2%get(1, varname)
+          call cfg2%get(2, filename)
+          PRINT *,' loading 2D "mask"  from "', varname, '" of "',filename,'"'          
+          CALL read_nc_d2(varname, filename,tmp_r_2d)
+          WHERE (tmp_r_2d <= 0) hzgrids(i)%mask = .TRUE.          
+       end if
+
+       print *, ""
     end do
-    
-    
-    
-    
+
+
     ! read vertical grid
     !------------------------------------------------------------
     ! TODO, interpret depth/height vs thickness
     PRINT *, ""
-    PRINT *, "Loading vertical grids specs..."
-
-    ! determine the number of vertical grids, and their unique names
-    grd_cnt = 0
-    do i =1,self%griddef_cfg_num
-       if (self%griddef_cfg(1,i) /= "V") cycle
-       if (grd_cnt /= 0) then
-          do s=1, grd_cnt
-             if (strs(s) == self%griddef_cfg(2,i)) exit
-          end do
-          if (s <= grd_cnt) cycle          
-       end if
-       grd_cnt = grd_cnt + 1
-       strs(grd_cnt) = self%griddef_cfg(2,i)       
-    end do
+    PRINT *, "Loading vertical grid specs..."
+    grd_cnt = self%vtgriddef%count()
     allocate(vtgrids(grd_cnt))
     print *, "Found ",grd_cnt," vertical grids definitions."
-
+    print *, ""
+    
     do i=1,grd_cnt
        ! grid name
-       vtgrids(i)%name = strs(i)
-
+       call self%vtgriddef%get(i, config, name=str)
+       print *, "loading vertical grid: ", str
+       vtgrids(i)%name = str
+       
        ! levels
-       IF (ALLOCATED(tmp_r_1d)) DEALLOCATE(tmp_r_1d)
-       call self%read_nc_d1("V", vtgrids(i)%name, "vert_1d", tmp_r_1d)
-       if( .not. allocated(tmp_r_1d)) &
-          call letkf_mpi_abort("vert_1d is missing for "//trim(vtgrids(i)%name))
-       vtgrids(i)%dims=1
-       ALLOCATE(vtgrids(i)%vert(SIZE(tmp_r_1d),1,1))
-       ALLOCATE(vtgrids(i)%vert_nom(size(tmp_r_1d)))
-       vtgrids(i)%vert(:,1,1) = tmp_r_1d
-       vtgrids(i)%vert_nom = tmp_r_1d             
+       IF (ALLOCATED(tmp_r_1d)) DEALLOCATE(tmp_r_1d)       
+       if(config%found("vert1d")) then
+          call config%get("vert1d", cfg2)
+          call cfg2%get(1, varname)
+          call cfg2%get(2, filename)
+          PRINT *,' loading 1D "vert1d" from "', varname, '" of "',filename,'"'          
+          call read_nc_d1(varname, filename, tmp_r_1d)
+          vtgrids(i)%dims=1
+          ALLOCATE(vtgrids(i)%vert(SIZE(tmp_r_1d),1,1))
+          ALLOCATE(vtgrids(i)%vert_nom(size(tmp_r_1d)))
+          vtgrids(i)%vert(:,1,1) = tmp_r_1d
+          vtgrids(i)%vert_nom = tmp_r_1d          
+       else
+          call letkf_mpi_abort("vert1d is missing for "//trim(vtgrids(i)%name))          
+       end if
+       
+       print *, ""
     END DO
 
 
     ! Read state variable config
     ! ------------------------------------------------------------
-    ! ! determine the state variables that will be loaded
     PRINT *, ""
     PRINT *, "Loading model state specs..."
-    ALLOCATE(statevars(self%statedef_cfg_num))
-    DO i=1, self%statedef_cfg_num
-       statevars(i)%name   = self%statedef_cfg(1,i)
-       statevars(i)%hzgrid = self%statedef_cfg(2,i)
-       statevars(i)%vtgrid = self%statedef_cfg(3,i)
-    end DO
+    grd_cnt = self%statedef%count()
+    allocate(statevars(grd_cnt))
+    print *, "Found ",grd_cnt," state definitions."
+    print *, ""
+    do i=1, grd_cnt
+       ! grid name
+       call self%statedef%get(i, config, name=str)
+       statevars(i)%name = str
+       call config%get("hzgrid", str)
+       statevars(i)%hzgrid = str
+       call config%get("vtgrid", str)
+       statevars(i)%vtgrid = str
+    end do
+
   END SUBROUTINE stateio_nc_read_specs
 
 
@@ -317,8 +275,9 @@ CONTAINS
     CLASS(stateio_nc) :: self
     CHARACTER(len=*), INTENT(in) :: ftype
     INTEGER, INTENT(in) :: ensmem
-
-    CHARACTER(:), ALLOCATABLE :: filename, arg1, arg2
+    type(configuration) :: config, config2
+    
+    CHARACTER(:), ALLOCATABLE :: filename, arg1, arg2, name, str
     INTEGER :: ncid, d_t, d_x, d_y, d_z(100), varid ! TODO, remove hardcoded dz size
     INTEGER :: i, j
 
@@ -326,11 +285,7 @@ CONTAINS
     ! determine the filename to write out to
 
     ! Determine the filename to save to
-    filename="#TYPE#.#ENS4#.nc"
-    arg1="#TYPE#"
-    arg2=TRIM(ftype)
-    filename=str_pattern(filename, arg1, arg2)
-    filename=trim(str_ens_pattern(filename, ensmem))
+    filename = str_ens_pattern(str_pattern("#TYPE#.#ENS4#.nc", "#TYPE#", TRIM(ftype)),ensmem)
     if (self%verbose) &
          PRINT '(X,A,I0.3,2A)', " PE ", pe_rank,' initializing output for "'//filename//'"'
 
@@ -339,7 +294,7 @@ CONTAINS
     CALL check(nf90_def_dim(ncid, "time", 0, d_t))
     call check(nf90_def_var(ncid, "time", nf90_real, (/d_t/), varid))
     call check(nf90_put_att(ncid, varid, "axis", "T"))
-    ! TODO: fill in time data    
+    ! TODO: fill in time data
     !call chekc(nf90_put_var(
 
     ! TODO: add support for multiple horizontal grids
@@ -348,10 +303,10 @@ CONTAINS
     call check(nf90_put_att(ncid, varid, "long_name", "longitude"))
     call check(nf90_put_att(ncid, varid, "units", "degrees_east"))
     call check(nf90_put_att(ncid, varid, "axis", "X"))
-    
+
     CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
     call check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), varid))
-    call check(nf90_put_att(ncid, varid, "long_name", "latitude"))    
+    call check(nf90_put_att(ncid, varid, "long_name", "latitude"))
     call check(nf90_put_att(ncid, varid, "units", "degrees_north"))
     call check(nf90_put_att(ncid, varid, "axis", "Y"))
 
@@ -366,28 +321,33 @@ CONTAINS
 
     ! for each "state_out" defined in the config file, create the output variable
     !TODO, handle file name output templating where variables are split out to multiple files
-    !TODO, remove the "state_out" section, and just add another set of variable name, file, fields?
-    DO i = 1, self%statedef_cfg_num
+    !TODO, remove the "state_out" section, and just add another set of variable name, file, fields?    
+    DO i = 1, self%statedef%count()
+       call self%statedef%get(i, config, name)
+       
        ! determine which vertical coordinate is the matching one
+       call config%get("vtgrid", str)
        do j=1, size(vtgrids)
-          if (vtgrids(j)%name == self%statedef_cfg(3,i)) exit
+          if (vtgrids(j)%name == str) exit
        end do
        if(j > size(vtgrids))&
             call letkf_mpi_abort("cannot find vertical grid in stateio_nc_write_init")
-       
-       CALL check(nf90_def_var(ncid, self%statedef_cfg(4,i),&
+
+       call config%get("output", config2)
+       call config2%get(1, str)
+       CALL check(nf90_def_var(ncid, str,&
             nf90_real, (/d_x,d_y,d_z(j),d_t/),varid))
        CALL check(nf90_def_var_deflate(ncid, varid, 1, 1, self%compression))
     END DO
 
     ! write out nominal lat/lon/vert
     CALL check(nf90_enddef(ncid))
-    call check(nf90_inq_varid(ncid, "lon", varid))    
+    call check(nf90_inq_varid(ncid, "lon", varid))
     call check(nf90_put_var(ncid, varid, hzgrids(1)%lon_nom))
-    call check(nf90_inq_varid(ncid, "lat", varid))    
+    call check(nf90_inq_varid(ncid, "lat", varid))
     call check(nf90_put_var(ncid, varid, hzgrids(1)%lat_nom))
     do i =1, size(vtgrids)
-       call check(nf90_inq_varid(ncid, vtgrids(i)%name, varid))    
+       call check(nf90_inq_varid(ncid, vtgrids(i)%name, varid))
        call check(nf90_put_var(ncid, varid, vtgrids(i)%vert_nom))
     end do
 
@@ -406,29 +366,29 @@ CONTAINS
     CHARACTER(*),   INTENT(in) :: state_var
     REAL,           INTENT(in) :: state_val(:,:,:)
 
-    CHARACTER(:), ALLOCATABLE :: filename, varname, arg, arg2
+    type(configuration) :: config, config2
+    CHARACTER(:), ALLOCATABLE :: filename, varname, arg, arg2, name
 
     INTEGER :: i
     INTEGER :: ncid, varid
 
     ! TODO, use a template from the namelist to determine the filename to write out to
-    ! TODO, i'm getting weird trailing whitespace
     filename="#TYPE#.#ENS4#.nc"
-    arg="#TYPE#"
-    arg2=TRIM(ftype)
-    filename=str_pattern(filename,arg,arg2)
+    filename=str_pattern(filename,"#TYPE#",trim(ftype))
     filename=trim(str_ens_pattern(filename, ensmem))
 
     if (self%verbose) &
          PRINT '(X,A,I0.3,A)', " PE ", pe_rank,' writing "'//state_var//'" out to file "'//filename//'"'
-    
+
     CALL check(nf90_open(filename, nf90_write, ncid))
 
     ! find which variable this data should be written to
     varname = ""
-    DO i=1,self%statedef_cfg_num
-       IF (self%statedef_cfg(1,i) == state_var) THEN
-          varname = self%statedef_cfg(4,i)
+    DO i=1, self%statedef%count()
+       call self%statedef%get(i, config, name)
+       IF (name == state_var) THEN
+          call config%get("output", config2)
+          call config2%get(1, varname)
           EXIT
        END IF
     END DO
@@ -459,27 +419,25 @@ CONTAINS
     CHARACTER(*), INTENT(in)  :: state_var
     REAL, ALLOCATABLE, INTENT(out) :: state_val(:,:,:)
 
+    type(configuration) :: config, config2
     INTEGER :: i, j
-    CHARACTER(:), ALLOCATABLE :: filename, invar
+    CHARACTER(:), ALLOCATABLE :: filename, invar, str
 
     INTEGER :: nx, ny, nz
     INTEGER :: ncid, dimids(4), varid
     type(letkf_hzgrid_spec) :: hgrid
     type(letkf_vtgrid_spec) :: vgrid
-    
-    ! find matching data entry from config file;
+
     ! TODO, use the toupper function
-    DO i = 1, self%statedef_Cfg_num
-       IF ( self%statedef_cfg(1,i) == state_var) exit
-    END DO
-    if (i > self%statedef_cfg_num ) &
-         CALL letkf_mpi_abort("state variable "// &
-         state_var//" not found in configuration file.")
+    
+    ! find matching data entry from config file
+    call self%statedef%get(state_var, config)
 
     ! determine the filename to load in. Subsituting #ENSx# with the ensemble num
-    filename=self%statedef_cfg(5,i)
+    call config%get("input", config2)
+    call config2%get(1, invar)
+    call config2%get(2, filename)
     filename=str_ens_pattern(filename, ensmem)
-    invar=self%statedef_cfg(4,i)
 
     ! make sure this file exists
     ! TODO
@@ -488,8 +446,10 @@ CONTAINS
          TRIM(state_var),'" from "',TRIM(invar),'" of "', TRIM(filename)
 
     ! get the x,y,z dimensions based on the specified grid
-    hgrid = letkf_state_hzgrid_getdef(self%statedef_cfg(2,i))
-    vgrid = letkf_state_vtgrid_getdef(self%statedef_cfg(3,i))
+    call config%get("hzgrid", str)
+    hgrid = letkf_state_hzgrid_getdef(str)
+    call config%get("vtgrid", str)
+    vgrid = letkf_state_vtgrid_getdef(str)
 
     ! load field
     ! TODO, handle 2D vars
@@ -505,7 +465,6 @@ CONTAINS
     CALL check(nf90_get_var(ncid, varid, state_val))
     CALL check(nf90_close(ncid))
 
-    ! TODO make sure the variable and grid dimensions match up
   END SUBROUTINE stateio_nc_read_state
 
 
@@ -513,47 +472,48 @@ CONTAINS
   !-----------------------------------------------------------------------------
   !>TODO why am I tracking 'bkg' and 'ana' separately??
   FUNCTION str_ens_pattern(str_in, ensmem) RESULT(str_out)
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: str_in
+    CHARACTER(*), INTENT(in) :: str_in
     INTEGER, INTENT(in) :: ensmem
     CHARACTER(:), ALLOCATABLE :: str_out
 
+    character(:), allocatable :: str
     INTEGER :: i, n
     CHARACTER(len=6)  :: pattern
     CHARACTER(len=10) :: fmt
 
     !TODO handle mean and spread
-    str_out = str_in
+    str = str_in
     DO n=1,9
        WRITE (pattern, "(A,I0,A)") "#ENS",n,"#"
-       i = INDEX(str_out, pattern)
+       i = INDEX(str, pattern)
        IF(i > 0) THEN
           IF (ensmem >= 0) THEN
              WRITE (fmt, '(A,I0,A)') '(A,I0.',n,',A)'
-             WRITE (str_out, fmt) str_out(1:i-1), ensmem, &
-                  str_out(i+LEN(pattern):LEN(str_out))
+             WRITE (str, fmt) str(1:i-1), ensmem, &
+                  str(i+LEN(pattern):LEN(str))
           ELSE IF ( ensmem == ENS_BKG_MEAN .OR. ensmem == ENS_ANA_MEAN) THEN
-             WRITE (str_out, '(3A)') str_out(1:i-1), "mean", &
-                  str_out(i+LEN(pattern):LEN(str_out))
+             WRITE (str, '(3A)') str(1:i-1), "mean", &
+                  str(i+LEN(pattern):LEN(str))
           ELSE IF ( ensmem == ENS_BKG_SPRD .OR. ensmem == ENS_ANA_SPRD) THEN
-             WRITE (str_out, '(3A)') str_out(1:i-1), "sprd", &
-                  str_out(i+LEN(pattern):LEN(str_out))
+             WRITE (str, '(3A)') str(1:i-1), "sprd", &
+                  str(i+LEN(pattern):LEN(str))
           ELSE
              CALL letkf_mpi_abort("Illegal 'ensmem' given to str_ens_pattern")
           END IF
           EXIT
        END IF
     END DO
+    str_out=trim(str)
   END FUNCTION str_ens_pattern
 
 
 
   !-----------------------------------------------------------------------------
   FUNCTION str_pattern(str_in, key, val) RESULT(str_out)
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: str_in
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: key
-    CHARACTER(:), ALLOCATABLE, INTENT(in) :: val
+    CHARACTER(*), INTENT(in) :: str_in
+    CHARACTER(*), INTENT(in) :: key
+    CHARACTER(*), INTENT(in) :: val
     CHARACTER(:), ALLOCATABLE :: str_out
-
     INTEGER :: i
 
     ALLOCATE(CHARACTER(len=LEN(str_in)+LEN(val)) :: str_out)
@@ -572,37 +532,19 @@ CONTAINS
 
   !--------------------------------------------------------------------------------
   !>
-  SUBROUTINE read_nc_d2(self, domain, grid, name, array)
-    CLASS(stateio_nc) :: self
-    CHARACTER(*), INTENT(in)  :: domain, grid, name
+  SUBROUTINE read_nc_d2(varname, filename, array)
+    CHARACTER(*), INTENT(in)  :: varname, filename
     REAL, ALLOCATABLE, INTENT(out) :: array(:,:)
 
     INTEGER :: i, dimids(2), nx, ny
-    integer :: def 
+    integer :: def
     INTEGER :: ncid, varid
 
-    ! find matching data entry from config file;
-    ! TODO, use the toupper function
-    def = -1
-    DO i = 1, self%griddef_cfg_num 
-       IF ( (self%griddef_cfg(1,i) == domain) .AND. &
-            (self%griddef_cfg(2,i) == grid) .AND. &
-            (self%griddef_cfg(3,i) == name)) THEN
-          def = i
-          EXIT
-       END IF
-    END DO
-
-    ! if we didn't find a definition:
-    if ( def < 0) return
-
-    PRINT *,' loading 2D "', TRIM(name),'" from "', TRIM(self%griddef_cfg(4, def)),&
-          '" of "',TRIM(self%griddef_Cfg(5,def))
 
     ! open file, find dimensions
     ! TODO, handle a time dimension if stored that way
-    CALL check(nf90_open(self%griddef_cfg(5,def), nf90_nowrite, ncid))
-    CALL check(nf90_inq_varid(ncid, self%griddef_cfg(4,def), varid))
+    CALL check(nf90_open(filename, nf90_nowrite, ncid))
+    CALL check(nf90_inq_varid(ncid, varname, varid))
     CALL check(nf90_inquire_variable(ncid, varid, ndims=i))
     IF ( i /= 2) CALL letkf_mpi_abort("variable dimensions /= 2")
     CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))
@@ -622,36 +564,17 @@ CONTAINS
 
   !--------------------------------------------------------------------------------
   !>
-  SUBROUTINE read_nc_d1(self, domain, grid, name, array)
-    CLASS(stateio_nc) :: self
-    CHARACTER(*), INTENT(in)  :: domain, grid, name
+  SUBROUTINE read_nc_d1(varname, filename,  array)
+    CHARACTER(*), INTENT(in)  :: varname, filename
     REAL, ALLOCATABLE, INTENT(out) :: array(:)
 
     INTEGER :: i, dimids(1), ni, def
     INTEGER :: ncid, varid
 
-    ! find matching data entry from config file;
-    ! TODO, use the toupper function
-    def = -1
-    DO i = 1, self%griddef_cfg_num 
-       IF ( (self%griddef_cfg(1,i) == domain) .AND. &
-            (self%griddef_cfg(2,i) == grid) .AND. &
-            (self%griddef_cfg(3,i) == name)) THEN
-          def = i
-          EXIT
-       END IF
-    END DO
-    
-    ! if we didn't find a definition:
-    if ( def < 0) return
-
-    PRINT *,' loading 1D "', TRIM(name),'" from "', TRIM(self%griddef_cfg(4, def)),&
-          '" of "',TRIM(self%griddef_Cfg(5,def))
-
     ! open file, find dimensions
     ! TODO, handle a time dimension if stored that way
-    CALL check(nf90_open(self%griddef_cfg(5,def), nf90_nowrite, ncid))
-    CALL check(nf90_inq_varid(ncid, self%griddef_cfg(4,def), varid))
+    CALL check(nf90_open(filename, nf90_nowrite, ncid))
+    call check(nf90_inq_varid(ncid, varname, varid))
     CALL check(nf90_inquire_variable(ncid, varid, ndims=i))
     IF ( i /= 1) CALL letkf_mpi_abort("variable dimensions /= 1")
     CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))

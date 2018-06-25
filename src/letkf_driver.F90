@@ -3,18 +3,20 @@ program letkf_driver
   implicit none
 
   integer :: i
-  character(len=1024) ::nml_filename
+  character(len=:),allocatable :: config_filename
 
   ! Get the command line argument pointing to the namelist to use
   i=command_argument_count()
   if (i == 1) then
-     call get_command_argument(1, nml_filename)
+    allocate(character(1024) :: config_filename)
+    call get_command_argument(1, config_filename)
+    config_filename=trim(config_filename)
   else
-     nml_filename="namelist.letkf"
+     config_filename="letkf.json"
   end if
 
   ! initialize and run
-  call letkf_init(nml_filename)
+  call letkf_init(config_filename)
   call letkf_run()
-  
+
 end program

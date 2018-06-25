@@ -1,5 +1,6 @@
 MODULE letkf_mpi
   USE mpi
+  use letkf_config
 
   IMPLICIT NONE
   PRIVATE
@@ -99,21 +100,13 @@ CONTAINS
 
   !< initialize the MPI module.
   !! Read in a namelist, determine grid distribution.
-  SUBROUTINE letkf_mpi_init(nml_filename)
-    CHARACTER(len=*), INTENT(in) :: nml_filename
+  SUBROUTINE letkf_mpi_init(config)
+    type(configuration), intent(in) :: config
 
-    INTEGER :: unit
-
-    NAMELIST /letkf_mpi/ ens_size, ppn
-
-    ! read in our section of the namelist
-    OPEN(newunit=unit, file=nml_filename, status='OLD')
-    READ(unit, nml=letkf_mpi)
-    CLOSE(unit)
-    IF (pe_isroot) THEN
-       PRINT letkf_mpi
-    END IF
-
+    
+    ! read in our section of the configuration
+    call config%get("ens_size", ens_size)
+    call config%get("ppn", ppn)
 
     ! output basic MPI info
     IF(pe_isroot) THEN
@@ -124,6 +117,9 @@ CONTAINS
        ELSE
           PRINT *, "MPI communicaotr: ", letkf_mpi_comm
        END IF
+       print *, ""
+       print '(A,I0)', " mpi.ens_size=", ens_size
+       print '(A,I0)', " mpi.ppn=", ppn
     ENDIF
 
   END SUBROUTINE letkf_mpi_init
@@ -273,7 +269,7 @@ CONTAINS
 
     if (pe_isroot .and. .not. allocated(grd)) &
          call letkf_mpi_abort("2D grid not allocated on root node")
-       
+
     ! TODO, change this so that we're using mpi_scatter call instead?
 
     ! initialize asynchronous receives

@@ -1,4 +1,5 @@
 MODULE letkf
+  use letkf_config
   USE letkf_loc
   USE letkf_loc_novrt
   USE letkf_mpi
@@ -33,6 +34,7 @@ MODULE letkf
 #endif
 
 
+  type(configuration) :: config
 
 CONTAINS
 
@@ -41,19 +43,16 @@ CONTAINS
   !-----------------------------------------------------------------------------------------
   !> Initialize the LETKF library.
   !! This needs to be done before any other user-called functions are performed
-  SUBROUTINE letkf_init(nml)
-    character(len=*) :: nml
+  SUBROUTINE letkf_init(config_filename)
+    character(len=*) :: config_filename
 
     ! temprary pointers for initializing and registering the default classes
     CLASS(letkf_obsio),     POINTER :: obsio_ptr
     CLASS(letkf_stateio),   POINTER :: stateio_ptr
     CLASS(letkf_localizer), POINTER :: localizer_ptr
 
-    nml_filename=nml
-
     ! initialize the mpi backend
     CALL letkf_mpi_preinit()
-
     CALL getmem_init(pe_root, letkf_mpi_comm)
 
     ! initialize global timers
@@ -72,11 +71,13 @@ CONTAINS
        PRINT *, "=========================================================================================="
     END IF
 
-
+    ! load in the configuration file
     if (pe_isroot) then
-       print *, "Using namelist: "//trim(nml_filename)
+       print *, "Using configuration file: " // trim(config_filename)
        print *, ""
-       end if
+    end if
+    call letkf_config_loadfile(config_filename, config)
+
 
     ! initialize the rest of MPI
     ! (determines the processor distribution for I/O)
@@ -113,11 +114,11 @@ CONTAINS
     ! reader, the "obs" module might create hooks to get information from the state
     ! before "obs_read" is called.
     CALL timing_start("init", TIMER_SYNC)
-    CALL letkf_mpi_init(nml_filename)
-    CALL letkf_state_init(nml_filename)
-    CALL letkf_obs_init(nml_filename)
+    CALL letkf_mpi_init(config%get_child("mpi"))
+    CALL letkf_state_init(config%get_child("state"))
+    CALL letkf_obs_init(config%get_child("observation"))
     CALL letkf_obs_read()
-    CALL letkf_loc_init(nml_filename)
+    CALL letkf_loc_init(config%get_child("localization"))
     call letkf_solver_init(nml_filename)
     CALL timing_stop("init")
 
