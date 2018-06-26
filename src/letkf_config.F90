@@ -5,8 +5,7 @@ module letkf_config
   implicit none
   private
 
-  
-  public :: letkf_config_loadfile
+  public :: letkf_config_loadfile 
 
 
   
@@ -48,6 +47,7 @@ module letkf_config
      type(json_value), pointer :: p
   end type json_value_ptr
   
+  logical, public :: letkf_config_log = .true.
 
   logical :: initialized = .false.
   type(json_core) :: jcore, jcore2
@@ -70,7 +70,7 @@ contains
     type(json_file) :: jfile
     type(json_core) :: core
     type(json_value), pointer :: ptr, ptr2, ptr3, parent
-    integer :: i,j
+    integer :: i
     logical :: found
     character(:), allocatable :: str
     
@@ -109,19 +109,19 @@ contains
 
           ! get filename to load, and load it into "ptr2"
           call jcore%get(ptr, str)
-          print *, 'importing file "', str,'"'          
+          if(letkf_config_log)  print *, 'importing file "', str,'"'          
           call jfile%load_file(str)
           call jfile%get(ptr2)
 
           !for each child (ptr3) in the file we just loaded (ptr2),
           !add to the parent node (parent), and place on the stack
           ! for furthre processing
-          do j=1,jcore%count(ptr2)
+          do i=1,jcore%count(ptr2)
              call jcore%get_child(ptr2, i, ptr3)
              call jcore%add(parent, ptr3)
 
              call jcore%get_path(ptr3, str)             
-             print *, '   imported, "',str,'"'             
+             if(letkf_config_log)  print *, '   imported, "',str,'"'             
              stack_len = stack_len + 1
              stack(stack_len)%p => ptr3
           end do
@@ -133,6 +133,12 @@ contains
           stack_len = stack_len+1
           stack(stack_len)%p => ptr2
        end do
+
+       ! if this was an #import directive, remove the node (ptr) from
+       ! the original parent (parent)
+       call jcore%info(ptr, name=str)
+       if ( str == "#import") call jcore%remove(ptr)
+
     end do
     
   end subroutine letkf_config_loadfile

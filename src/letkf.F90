@@ -62,13 +62,13 @@ CONTAINS
 
     ! print out the welcome screen
     IF (pe_isroot) THEN
-       PRINT *, "=========================================================================================="
-       PRINT *, "=========================================================================================="
+       PRINT *, "======================================================================"
+       PRINT *, "======================================================================"
        PRINT *, "Universal Multi-Domain Local Ensemble Transform Kalman Filter"
        PRINT *, " (UMD-LETKF)"
        print *, " version:  ", CVERSION
-       PRINT *, "=========================================================================================="
-       PRINT *, "=========================================================================================="
+       PRINT *, "======================================================================"
+       PRINT *, "======================================================================"
     END IF
 
     ! load in the configuration file
@@ -76,6 +76,7 @@ CONTAINS
        print *, "Using configuration file: " // trim(config_filename)
        print *, ""
     end if
+    letkf_config_log = pe_isroot
     call letkf_config_loadfile(config_filename, config)
 
 
