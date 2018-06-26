@@ -131,7 +131,7 @@ CONTAINS
     CALL letkf_loc_init(config%get_child("localization"))
     call letkf_mpi_barrier()
 
-    call letkf_solver_init(nml_filename)
+    call letkf_solver_init(config%get_child("solver"))
     call letkf_mpi_barrier()
 
     CALL timing_stop("init")

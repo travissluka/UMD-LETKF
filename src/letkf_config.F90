@@ -213,12 +213,17 @@ contains
 
   
 
-  subroutine get_real4_name(self, key, val)
+  subroutine get_real4_name(self, key, val, default)
     class(configuration),intent(in) :: self
     character(len=*), intent(in) :: key
     real(4), intent(out) :: val
+    real(4), optional, intent(in) :: default
     real(8) :: r
-    call jcore%get(self%json, key, r)
+    if (present(default) .and. .not. jcore2%valid_path(self%json, key)) then
+       r = default
+    else
+       call jcore%get(self%json, key, r)
+    end if
     val=r
   end subroutine get_real4_name
 
@@ -233,11 +238,16 @@ contains
     val =r 
   end subroutine get_real4_idx
   
-  subroutine get_real8_name(self, key, val)
+  subroutine get_real8_name(self, key, val, default)
     class(configuration),intent(in) :: self
     character(len=*), intent(in) :: key
     real(8), intent(out) :: val
-    call jcore%get(self%json, key, val)
+    real(8), optional, intent(in) :: default
+    if (present(default) .and. .not. jcore2%valid_path(self%json, key)) then
+       val = default
+    else
+       call jcore%get(self%json, key, val)
+    end if
   end subroutine get_real8_name
 
   subroutine get_real8_idx(self, idx, val)

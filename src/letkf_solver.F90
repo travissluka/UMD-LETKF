@@ -1,5 +1,6 @@
 MODULE letkf_solver
   USE timing
+  use letkf_config
   USE letkf_mpi
   USE letkf_loc
   USE letkf_state
@@ -20,18 +21,58 @@ MODULE letkf_solver
 
   REAL, PARAMETER :: stdev2max = SQRT(40.0/3.0)
 
+  ! inflation values
+  real :: infl_rtps
+  real :: infl_rtpp
+  real :: infl_mul
+
 
 CONTAINS
 
 
   
-  SUBROUTINE letkf_solver_init(nml_filename)
-    character(:), allocatable, intent(in) :: nml_filename
-    !TODO read in our section of the namelist
-    
-    !TODO double check some of the parameters
+  SUBROUTINE letkf_solver_init(config)
+    type(configuration), intent(in) :: config
+
+    type(configuration) :: infl_config
+
+    if (pe_isroot) then
+       print *, ""
+       PRINT *, "======================================================================"
+       print *, " letkf_solver_init() : "
+       print *, "======================================================================"
+    end if
+
+
+    ! get the inflation parameters
+    call config%get("inflation", infl_config)
+    call infl_config%get("mul", infl_mul, default=1.0)
+    call infl_config%get("rtps", infl_rtps, default=0.0)
+    call infl_config%get("rtpp", infl_rtpp, default=0.0)
+
+    if(pe_isroot) then
+       print *, "Inflation: "
+       print *, "solver.inflation.rtps=",infl_rtps
+       print *, "solver.inflation.rtpp=",infl_rtpp
+       print *, "solver.inflation.mul=",infl_mul
+    end if   
+
+    ! make sure the inflation parameters are correct
+    if(pe_isroot) then
+       if(infl_rtps > 1.0 .or. infl_rtps < 0.0) &
+          call letkf_mpi_abort("illegal value for infl_rtps "//&
+               "(should be <1.0 and >0.0).")
+       if(infl_rtpp > 1.0 .or. infl_rtpp < 0.0) &
+          call letkf_mpi_abort("illegal value for infl_rtpp "//&
+               "(should be <1.0 and >0.0).")
+       if(infl_rtpp /= 0.0 .and. infl_rtps /= 0.0) &
+          call letkf_mpi_abort("cannot have both RTPS and RTPP enabled at the same time. ")
+       if(infl_mul < 1.0) &
+          call letkf_mpi_abort("infl_mul must be >=1.0.")
+    end if                 
 
     call letkf_core_init(ens_size)
+
   END SUBROUTINE letkf_solver_init
 
 
@@ -73,9 +114,9 @@ CONTAINS
     CALL timing_start('solver', TIMER_SYNC)
     IF (pe_isroot) THEN
        print '(//,A)', ""
-       PRINT *, "=========================================================================================="
+       PRINT *, "======================================================================"
        PRINT *, "letkf_solver_run() : Core LETKF routine"
-       PRINT *, "=========================================================================================="
+       PRINT *, "======================================================================"
     END IF
 
     ! TODO make diag_obs_cnt_loc multidimensional, depending on the max
@@ -180,11 +221,36 @@ CONTAINS
        end do
 
        
-       ! TODO apply RTPP inflation, if enabled
+       ! apply RTPS inflation, if enabled
+       if(infl_rtps > 0 ) then
+          do i=1,grid_ns
+             ! calculate spread 
+             state_sprd_ij(i,ij) = sqrt(&
+                  dot_product(state_ij(:,i,ij), state_ij(:,i,ij))/(ens_size-1))
 
-       ! TODO apply RTPS inflation, if enabled
+             ! no spread, so skip
+             if (state_sprd_ij(i,ij) <= 0) cycle
 
-       ! TODO constant multiplicative inflation, if enabled
+             ! increase the spread
+             state_ij(:,i,ij) = state_ij(:,i,ij) * &
+                  (infl_rtps * (bkg_sprd_ij(i) - state_sprd_ij(i,ij))/state_sprd_ij(i,ij)+1)
+          end do
+       end if
+
+
+       ! apply RTPP inflation, if enabled
+       if(infl_rtpp > 0.0 ) then
+          do i=1,grid_ns
+             state_ij(:,i,ij) = infl_rtpp*bkg_ij(:,i) + (1.0-infl_rtpp)*state_ij(:,i,ij)
+          end do
+       end if
+
+
+       ! constant multiplicative inflation, if enabled
+       if(infl_mul /= 1.0) then
+          state_ij(:,:,ij) = state_ij(:,:,ij) * infl_mul
+       end if
+
 
        ! TODO apply additive inflation
 
