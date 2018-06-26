@@ -185,27 +185,39 @@ CONTAINS
        CALL check(nf90_def_dim(ncid, "lat", grid_ny ,d_y))
        CALL check(nf90_def_var(ncid, "maxhz_loc", nf90_real, &
             (/d_x, d_y/), vid))
+       call check(nf90_put_att(ncid, vid, "description", &
+            "maximum observation search radius used at each gridpoint"))
        CALL check(nf90_def_var(ncid, "obs_count", nf90_real, &
             (/d_x, d_y/), vid))
+       call check(nf90_put_att(ncid, vid, "description", &
+            "number of observations returned from the kdtree at each gridpoint, "//&
+            "BEFORE further localization is applied"))
        CALL check(nf90_def_var(ncid, "obs_count_loc", nf90_real, &
             (/d_x, d_y/), vid))
+       call check(nf90_put_att(ncid, vid, "description", &
+            "the sum of the localization values for all observations used by a gridpoint. "//&
+            "E.g. with a single observation, the gridbox it is directly over will have 1.0, and "//&
+            "will fade to 0.0 as you move further away."))        
        CALL check(nf90_enddef(ncid))
     END IF
 
     CALL letkf_mpi_ij2grd(p,diag_maxhz, tmp_2d_real)
     IF(pe_rank == p) then
+       print *, "maxhz_loc",minval(tmp_2d_real), maxval(tmp_2d_real)
        call check(nf90_inq_varid(ncid, "maxhz_loc", vid))
        CALL check(nf90_put_var(ncid, vid, tmp_2d_real))
     end if
 
     CALL letkf_mpi_ij2grd(p,diag_obs_cnt, tmp_2d_real)
     IF(pe_rank == p) then
+       print *, "obs_count",minval(tmp_2d_real), maxval(tmp_2d_real)
        call check(nf90_inq_varid(ncid, "obs_count", vid))
        CALL check(nf90_put_var(ncid, vid, tmp_2d_real))
     end if
 
     CALL letkf_mpi_ij2grd(p,diag_obs_cnt_loc, tmp_2d_real)
     IF(pe_rank == p) then
+       print *, "obs_count_loc",minval(tmp_2d_real), maxval(tmp_2d_real)
        call check(nf90_inq_varid(ncid, "obs_count_loc", vid))
        CALL check(nf90_put_var(ncid, vid, tmp_2d_real))
     end if
