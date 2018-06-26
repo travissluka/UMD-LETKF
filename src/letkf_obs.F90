@@ -169,7 +169,8 @@ MODULE letkf_obs
   ! mpi derived types
   !------------------------------------------------------------
   !> MPI derived type for letkf_obs::observation
-  INTEGER :: observation_mpi_type
+  INTEGER :: mpitype_observation
+  INTEGER :: mpitype_real_nk
 
 
   ! registration of built-in and user-defined obsio classes
@@ -321,13 +322,9 @@ CONTAINS
   SUBROUTINE init_mpi_observation()
     INTEGER, PARAMETER :: n = 9
     INTEGER :: TYPE(n), blocklen(n)
-    INTEGER(kind=mpi_address_kind) :: disp(n), base
+    INTEGER(kind=mpi_address_kind) :: disp(n), base, lb, ex, ex_real
     INTEGER :: ierr, i
     TYPE(letkf_observation) :: ob
-
-    IF (pe_isroot) THEN
-       PRINT *, "Initializing MPI derived type (letkf_observation)."
-    END IF
 
     ! get the addresses of each variable of the observation type
     i = 0
@@ -344,9 +341,16 @@ CONTAINS
     disp(:) = disp(:) - base
     blocklen(:) = 1
 
-    ! construct the mpi derived type
-    CALL mpi_type_create_struct(n, blocklen, disp, TYPE, observation_mpi_type, ierr)
-    CALL mpi_type_commit(observation_mpi_type, ierr)
+    ! construct the observation mpi derived type
+    CALL mpi_type_create_struct(n, blocklen, disp, TYPE, mpitype_observation, ierr)
+    CALL mpi_type_commit(mpitype_observation, ierr)
+
+    ! derived type for scattering obs_hx
+    call mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
+    lb = 0
+    ex = ex_real*ens_size
+    call mpi_type_create_resized(mpi_real, lb, ex, mpitype_real_nk, ierr)
+    call mpi_type_commit(mpitype_real_nk, ierr)
 
   END SUBROUTINE init_mpi_observation
   !> \endcond
@@ -361,6 +365,7 @@ CONTAINS
   SUBROUTINE letkf_obs_read()
     INTEGER :: i, nobs, ierr
     REAL, ALLOCATABLE :: obs_lats(:), obs_lons(:), tmp_r(:)
+    integer :: obshx_pe(ens_size), obs_pe
 
     CALL timing_start('read_obs')
 
@@ -378,23 +383,32 @@ CONTAINS
     ! give all PEs a copy of the obs
     CALL mpi_bcast(nobs, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
     IF (.NOT. pe_isroot)  ALLOCATE(obs_def(nobs))
-    CALL mpi_bcast(obs_def, nobs, observation_mpi_type, pe_root, letkf_mpi_comm, ierr)
+    CALL mpi_bcast(obs_def, nobs, mpitype_observation, pe_root, letkf_mpi_comm, ierr)
+
+    ! determine who is reading in which obs_hx
+    do i = 1, ens_size
+       obshx_pe(i) = letkf_mpi_nextio()
+    end do
 
     ! read in the observation operator
-    !> \todo, parallelize this
-    ALLOCATE(obs_hx(ens_size, nobs))
-    IF (pe_isroot) THEN
-       ALLOCATE(tmp_r(nobs))
-       DO i=1,ens_size
+    !> \todo do this in parallel with the above obs read
+    ALLOCATE(obs_hx(ens_size, nobs))    
+    ALLOCATE(tmp_r(nobs))
+    obs_hx = 0.0
+    DO i=1,ens_size
+       if(pe_rank == obshx_pe(i)) then
           CALL obsio_class%read_hx(i, tmp_r)
           obs_hx(i,:) = tmp_r
-       END DO
-       DEALLOCATE(tmp_r)
+       end if
+    END DO
+    ! broadcast the obs_hx values
+    do i=1,ens_size       
+       call mpi_bcast(obs_hx(i,1), nobs, mpitype_real_nk, obshx_pe(i), letkf_mpi_comm, ierr)
+    end do
+    DEALLOCATE(tmp_r)
 
-       !> \todo make sure nobs agrees for all files
 
-    END IF
-    CALL mpi_bcast(obs_hx, nobs*ens_size, mpi_real, pe_root, letkf_mpi_comm, ierr)
+    !> \todo make sure nobs agrees for all files
 
     !> \todo make sure bad obs are removed, do extra QC checks
 

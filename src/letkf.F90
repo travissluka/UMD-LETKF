@@ -115,12 +115,25 @@ CONTAINS
     ! reader, the "obs" module might create hooks to get information from the state
     ! before "obs_read" is called.
     CALL timing_start("init", TIMER_SYNC)
+
     CALL letkf_mpi_init(config%get_child("mpi"))
+    call letkf_mpi_barrier()
+
     CALL letkf_state_init(config%get_child("state"))
+    call letkf_mpi_barrier()
+
     CALL letkf_obs_init(config%get_child("observation"))
+    call letkf_mpi_barrier()
+
     CALL letkf_obs_read()
+    call letkf_mpi_barrier()
+
     CALL letkf_loc_init(config%get_child("localization"))
+    call letkf_mpi_barrier()
+
     call letkf_solver_init(nml_filename)
+    call letkf_mpi_barrier()
+
     CALL timing_stop("init")
 
     ! run the LETKF solver
@@ -225,6 +238,7 @@ CONTAINS
     IF(pe_rank == p) CALL check(nf90_close(ncid))
 
     CALL timing_stop("diag_write")
+    call letkf_mpi_barrier()
 
   CONTAINS
 

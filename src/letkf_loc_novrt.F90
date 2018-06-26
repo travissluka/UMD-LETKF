@@ -18,6 +18,7 @@ MODULE letkf_loc_novrt
      PROCEDURE         :: maxhz => loc_novrt_maxhz
   END TYPE loc_novrt
 
+  ! TODO get rid of this
   REAL :: hzloc(2)  !< horizontal localization distance(meters)
   !! at the equator, and pole
 
@@ -50,7 +51,7 @@ CONTAINS
        PRINT *, "LOC_NOVRT initialization"
        PRINT *, "------------------------------------------------------------"
     END IF
-
+    hzloc = (/500.0d3, 50.0d3/)
   END SUBROUTINE loc_novrt_init
 
 
