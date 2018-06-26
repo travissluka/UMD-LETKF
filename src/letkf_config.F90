@@ -44,7 +44,12 @@ module letkf_config
   end type configuration
 
   
+  type json_value_ptr
+     type(json_value), pointer :: p
+  end type json_value_ptr
+  
 
+  logical :: initialized = .false.
   type(json_core) :: jcore, jcore2
 
 
@@ -52,23 +57,83 @@ module letkf_config
 contains
 
 
-
+  !> Load a json based configuration file.
+  !!
+  !! Additionally, any instances of "#import" found in the loaded file
+  !! will trigger loading of a subfile. This way multiple files can be used to
+  !! define a single configuration
   subroutine letkf_config_loadfile(filename, res)
     character(len=*), intent(in) :: filename
     class(configuration), intent(out) :: res
 
+    type(configuration) :: res2
     type(json_file) :: jfile
     type(json_core) :: core
-    type(json_value), pointer :: ptr
-    integer :: i
+    type(json_value), pointer :: ptr, ptr2, ptr3, parent
+    integer :: i,j
     logical :: found
+    character(:), allocatable :: str
+    
+    type(json_value_ptr) :: stack(1024)
+    integer :: stack_len
 
+    stack_len=0
+    
+    ! load the file, and get the root node
     call jfile%initialize(stop_on_error=.true.)
     call jfile%load_file(filename)
-    call jfile%get( res%json)
+    call jfile%get(res%json)
 
-    call jcore%initialize(stop_on_error=.true.)
-    call jcore2%initialize(stop_on_error=.false.)
+    ! initialize the json processors
+    if (.not. initialized) then
+       initialized = .true.
+       call jcore%initialize(stop_on_error=.true.)
+       call jcore2%initialize(stop_on_error=.false.)
+    end if
+
+    ! search for any "#import" keys and load in the associated file
+    stack_len = stack_len + 1
+    stack(stack_len)%p => res%json
+    do while(stack_len > 0)
+
+       ! pop off top of stack
+       ptr => stack(stack_len)%p       
+       nullify(stack(stack_len)%p)
+       stack_len = stack_len -1
+
+       ! is this node a "#import" directive?
+       call jcore%info(ptr, name=str)
+       if (str == "#import") then
+          ! get parent node
+          call jcore%get_parent(ptr, parent)
+
+          ! get filename to load, and load it into "ptr2"
+          call jcore%get(ptr, str)
+          print *, 'importing file "', str,'"'          
+          call jfile%load_file(str)
+          call jfile%get(ptr2)
+
+          !for each child (ptr3) in the file we just loaded (ptr2),
+          !add to the parent node (parent), and place on the stack
+          ! for furthre processing
+          do j=1,jcore%count(ptr2)
+             call jcore%get_child(ptr2, i, ptr3)
+             call jcore%add(parent, ptr3)
+
+             call jcore%get_path(ptr3, str)             
+             print *, '   imported, "',str,'"'             
+             stack_len = stack_len + 1
+             stack(stack_len)%p => ptr3
+          end do
+       end if
+
+       ! add children of this node onto the stack for further processing
+       do i=1,jcore%count(ptr)
+          call jcore%get_child(ptr, i, ptr2)
+          stack_len = stack_len+1
+          stack(stack_len)%p => ptr2
+       end do
+    end do
     
   end subroutine letkf_config_loadfile
 

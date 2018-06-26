@@ -1,9 +1,8 @@
 {
     "mpi": {
-	"ens_size": 20,
-	"ppn" : 12,
-    },
-
+	"ens_size":20,
+	"ppn":12},
+    
     "solver": {
 	"inflation": {
 	    "rtps": 0.8,
@@ -29,6 +28,11 @@
 	    "filename_obshx": "obs/obs.#ENS4#.nc",
 	    "read_inc" : true,
 	},
+	"ioclass.obsio_test": [
+	    !Format is obs_type, plat_type, state_type, lat, lon, z, time, inc, err
+	    ["ocn_t", "ocn_prf", "ocn_t", 40.0, -140.0, 5.0, 0.0, -1.0, 0.1],
+	    ["ocn_t", "ocn_prf", "ocn_t",  0.0, -140.0, 5.0, 0.0, -1.0, 0.1],
+	]
     },
 
     
