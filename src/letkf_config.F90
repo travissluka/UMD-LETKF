@@ -66,7 +66,7 @@ CONTAINS
 
     TYPE(configuration) :: res2
     TYPE(fson_value), POINTER :: ptr, ptr2, ptr3, parent
-    INTEGER :: i
+    INTEGER :: i, l
     LOGICAL :: found
     CHARACTER(:), ALLOCATABLE :: str, parent_name
 
@@ -92,7 +92,8 @@ CONTAINS
        found = .FALSE.
 
        IF(ASSOCIATED(ptr%name)) THEN
-          ALLOCATE(CHARACTER(fson_string_length(ptr%name)) :: str)
+          l = fson_string_length(ptr%name)
+          ALLOCATE(CHARACTER(l) :: str)
           CALL fson_string_copy(ptr%name,str)
           IF (str == "#import") found = .TRUE.
           DEALLOCATE(str)
@@ -101,13 +102,15 @@ CONTAINS
        IF (found) THEN
           ! get parent node
           parent => ptr%parent
-          ALLOCATE(CHARACTER(fson_string_length(parent%name))::str)
+          l=fson_string_length(parent%name)
+          ALLOCATE(CHARACTER(l)::str)
           CALL fson_string_copy(parent%name, str)
           parent_name = str
           DEALLOCATE(str)
 
           ! get filename to load, and load it into "ptr2"
-          ALLOCATE(CHARACTER(fson_string_length(ptr%value_string))::str)
+          l=fson_string_length(ptr%value_string)
+          ALLOCATE(CHARACTER(l)::str)
           CALL fson_string_copy(ptr%value_string, str)
           IF(letkf_config_log)  PRINT *, 'importing file "', str,'"'
           ptr2 => fson_parse(str)
@@ -120,7 +123,8 @@ CONTAINS
              ptr3 => fson_value_get(ptr2, i)
              CALL fson_value_add(parent,ptr3)
              IF(letkf_config_log) THEN
-                ALLOCATE(CHARACTER(fson_string_length(ptr3%name))::str)
+                l=fson_string_length(ptr3%name)
+                ALLOCATE(CHARACTER(l)::str)
                 CALL fson_string_copy(ptr3%name,str)
                 IF(letkf_config_log) PRINT *, "   adding ",parent_name,".",str
                 DEALLOCATE(str)
@@ -192,9 +196,11 @@ CONTAINS
     TYPE(configuration), INTENT(out) :: p
     CHARACTER(:), ALLOCATABLE, INTENT(out), OPTIONAL :: name
     CHARACTER(:), ALLOCATABLE :: str
+    integer :: l
     p%node => fson_value_get(self%node, idx)
     IF(PRESENT(name)) THEN
-       ALLOCATE(CHARACTER(fson_string_length(p%node%name)) :: str)
+       l=fson_string_length(p%node%name)
+       ALLOCATE(CHARACTER(l) :: str)
        CALL fson_string_copy(p%node%name,str)
        name=TRIM(str)
     END IF
@@ -220,13 +226,14 @@ CONTAINS
     CHARACTER(len=*), INTENT(in) :: key
     LOGICAL :: res
     TYPE(fson_value), POINTER :: child
-    INTEGER :: i
+    INTEGER :: i, l
     CHARACTER(:), ALLOCATABLE :: str
 
     res = .FALSE.
     DO i =1, fson_value_count(self%node)
        child => fson_value_get(self%node, i)
-       ALLOCATE(CHARACTER(fson_string_length(child%name)) :: str)
+       l=fson_string_length(child%name)
+       ALLOCATE(CHARACTER(l) :: str)
        CALL fson_string_copy(child%name,str)
        IF (str == key) res = .TRUE.
        DEALLOCATE(str)
