@@ -306,7 +306,7 @@ CONTAINS
        print *, ""
        PRINT *, "Intializing I/O ioclass: ",obsio_class%name()
     end IF
-    call config%get("ioclass."//ioclass, ioconfig)
+    call config%get(ioclass, ioconfig)
     CALL obsio_class%init(ioconfig)
 
   END SUBROUTINE letkf_obs_init

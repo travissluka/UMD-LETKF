@@ -1,6 +1,6 @@
-[submodule "pkg/json-fortran"]
-	path = pkg/json-fortran
-	url = https://github.com/jacobwilliams/json-fortran.git
 [submodule "pkg/geoKdTree"]
 	path = pkg/geoKdTree
 	url = https://github.com/travissluka/geoKdTree.git
+[submodule "pkg/fson"]
+	path = pkg/fson
+	url = https://github.com/josephalevin/fson.git
