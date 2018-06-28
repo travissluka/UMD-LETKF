@@ -12,7 +12,6 @@
     },
 
 
-    !Observation types and io definitions
     "observation": {
 	"obsdef": [
 	    ["ocn_t", 2210, "ocean insitu temperature (C)"],
@@ -22,14 +21,13 @@
 	    ["ocn_prf", 1, "all insitu obs"],
 	    ["ocn_sat", 1000, "all satellite based obs"],
 	],
-	"ioclass": "obsio_nc",
-	"ioclass.obsio_nc": {
+	"ioclass": "obsio_test",
+	"obsio_nc": {
 	    "filename_obs": "obs/obs.nc",
 	    "filename_obshx": "obs/obs.#ENS4#.nc",
 	    "read_inc" : true,
 	},
-	"ioclass.obsio_test": [
-	    !Format is obs_type, plat_type, state_type, lat, lon, z, time, inc, err
+	"obsio_test": [
 	    ["ocn_t", "ocn_prf", "ocn_t", 40.0, -140.0, 5.0, 0.0, -1.0, 0.1],
 	    ["ocn_t", "ocn_prf", "ocn_t",  0.0, -140.0, 5.0, 0.0, -1.0, 0.1],
 	]
@@ -37,7 +35,6 @@
 
     
 
-    ! state and grid definitions
     "state": {
 	"verbose" : true,	
 	"ioclass": "stateio_nc",
@@ -84,7 +81,6 @@
 	},
     },
 
-    !Localization
     "localization": {
 	"class" : "loc_novrt",
     }

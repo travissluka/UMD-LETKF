@@ -10,7 +10,8 @@ addons:
     - gfortran libopenmpi-dev libblas-dev liblapack-dev libnetcdf-dev netcdf-bin 
 
 script:
-  # build UMD-LETKF
-  - mkdir build; cd build; FC=mpif90 cmake ../; make
+  - mkdir build; cd build; FC=mpif90 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=ON; make
+  - ctest
 
-  # TODO: add the testing scripts
+after_success:
+  bash <(curl -s https://codecov.io/bash)

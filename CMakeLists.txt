@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
 project(letkf Fortran)
 
+
+# code coverage
+option( ENABLE_CODECOVERAGE "enable code coverage testing support")
+if(ENABLE_CODECOVERAGE)
+  add_definitions( -fprofile-arcs -ftest-coverage )
+  set( CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} --coverage )
+endif(ENABLE_CODECOVERAGE)
+
+
 #------------------------------------------------------------
 # external dependencies
 #------------------------------------------------------------
