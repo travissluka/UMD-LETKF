@@ -1,3 +1,6 @@
+!================================================================================
+!> does the majority of the real "LETKF" work.
+!--------------------------------------------------------------------------------
 MODULE letkf_solver
   USE timing
   use letkf_config
@@ -10,27 +13,47 @@ MODULE letkf_solver
   IMPLICIT NONE
   PRIVATE
 
+
+  !================================================================================
+  !================================================================================
+  ! public module components
+  !================================================================================
+  !================================================================================
+
   PUBLIC :: letkf_solver_init
   PUBLIC :: letkf_solver_run
 
   ! diagnostics, in ij space
+  !--------------------------------------------------------------------------------
   REAL, PUBLIC, PROTECTED, ALLOCATABLE :: diag_maxhz(:)
   REAL, PUBLIC, PROTECTED, ALLOCATABLE :: diag_obs_cnt(:)
   REAL, PUBLIC, PROTECTED, ALLOCATABLE :: diag_obs_cnt_loc(:)
 
 
+  
+  !================================================================================
+  !================================================================================
+  ! private module components
+  !================================================================================
+  !================================================================================
+  
   REAL, PARAMETER :: stdev2max = SQRT(40.0/3.0)
 
   ! inflation values
+  !--------------------------------------------------------------------------------
   real :: infl_rtps
   real :: infl_rtpp
   real :: infl_mul
 
+  
 
 CONTAINS
 
 
-  
+
+  !================================================================================
+  !> initialze the module by loading in configuration settings
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_solver_init(config)
     type(configuration), intent(in) :: config
 
@@ -74,11 +97,13 @@ CONTAINS
     call letkf_core_init(ens_size)
 
   END SUBROUTINE letkf_solver_init
+  !================================================================================
 
 
 
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_solver_run()
     ! TODO, a bit messy, get rid of the duplicate "obs_lg" variables
     INTEGER :: i, idx, ij, lg, slab
@@ -271,5 +296,7 @@ CONTAINS
     CALL timing_stop('solver')
 
   END SUBROUTINE letkf_solver_run
+  !================================================================================
+  
 
 END MODULE letkf_solver

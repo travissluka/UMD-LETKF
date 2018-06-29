@@ -1,3 +1,6 @@
+!================================================================================
+!> maintains configuration tree by loading in a JSON configuration file.
+!================================================================================
 MODULE letkf_config
   USE fson
   USE fson_value_m
@@ -6,10 +9,20 @@ MODULE letkf_config
   IMPLICIT NONE
   PRIVATE
 
+
+  !================================================================================
+  !================================================================================
+  ! Public components
+  !================================================================================
+  !================================================================================
+  
   PUBLIC :: letkf_config_loadfile
 
 
-
+  
+  !================================================================================
+  !> A node of the configuration tree.
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: configuration
 
      TYPE(fson_value), POINTER :: node
@@ -42,11 +55,18 @@ MODULE letkf_config
      PROCEDURE :: get_child_idx_f
 
   END TYPE configuration
+  !================================================================================
+  
 
-
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
   TYPE fson_value_ptr
      TYPE(fson_value), POINTER :: p
   END TYPE fson_value_ptr
+  !================================================================================
+
+  
 
   LOGICAL, PUBLIC :: letkf_config_log = .TRUE.
 
@@ -55,14 +75,17 @@ MODULE letkf_config
 CONTAINS
 
 
+  
+  !================================================================================
   !> Load a json based configuration file.
   !!
   !! Additionally, any instances of "#import" found in the loaded file
   !! will trigger loading of a subfile. This way multiple files can be used to
   !! define a single configuration
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_config_loadfile(filename, res)
     CHARACTER(len=*), INTENT(in) :: filename
-    CLASS(configuration), INTENT(out) :: res
+    type(configuration), INTENT(out) :: res
 
     TYPE(configuration) :: res2
     TYPE(fson_value), POINTER :: ptr, ptr2, ptr3, parent
@@ -102,11 +125,15 @@ CONTAINS
        IF (found) THEN
           ! get parent node
           parent => ptr%parent
-          l=fson_string_length(parent%name)
-          ALLOCATE(CHARACTER(l)::str)
-          CALL fson_string_copy(parent%name, str)
-          parent_name = str
-          DEALLOCATE(str)
+          if(associated(parent%name)) then
+             l=fson_string_length(parent%name)
+             ALLOCATE(CHARACTER(l)::str)
+             CALL fson_string_copy(parent%name, str)
+             parent_name = str
+             DEALLOCATE(str)
+          else
+             parent_name="."
+          end if
 
           ! get filename to load, and load it into "ptr2"
           l=fson_string_length(ptr%value_string)
@@ -170,7 +197,7 @@ CONTAINS
 
 
   FUNCTION get_array_count(self) RESULT(val)
-    CLASS(configuration) :: self
+    CLASS(configuration),intent(in) :: self
     INTEGER :: val
     TYPE(fson_value), POINTER :: ptr
     val =0
@@ -194,16 +221,8 @@ CONTAINS
     CLASS(configuration),INTENT(in) :: self
     INTEGER, INTENT(in) :: idx
     TYPE(configuration), INTENT(out) :: p
-    !    CHARACTER(:), ALLOCATABLE, INTENT(out), OPTIONAL :: name
     CHARACTER(:), ALLOCATABLE :: str
-    INTEGER :: l
     p%node => fson_value_get(self%node, idx)
-    !    IF(PRESENT(name)) THEN
-    !       l=fson_string_length(p%node%name)
-    !       ALLOCATE(CHARACTER(l) :: str)
-    !       CALL fson_string_copy(p%node%name,str)
-    !       name=TRIM(str)
-    !    END IF
   END SUBROUTINE get_child_idx
 
 

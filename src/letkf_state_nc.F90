@@ -1,3 +1,6 @@
+!================================================================================
+!> NetCDF based state I/O
+!================================================================================
 MODULE letkf_state_nc
   USE netcdf
   USE letkf_config
@@ -7,19 +10,20 @@ MODULE letkf_state_nc
   IMPLICIT NONE
   PRIVATE
 
-  !TODO the configuration files are a bit of a mess
-  ! TODO, replace the fixed sized arrayes with linked lists
 
 
-  ! Public types
-  !------------------------------------------------------------
+  !================================================================================
+  !================================================================================
+  ! public module components
+  !================================================================================
+  !================================================================================  
 
-  INTEGER, PARAMETER :: fields_max = 100
 
-
+  
+  !================================================================================
   !> state file I/O class for handling NetCDF files
-  PUBLIC :: stateio_nc
-  TYPE, EXTENDS(letkf_stateio) :: stateio_nc
+  !--------------------------------------------------------------------------------
+  TYPE, PUBLIC, EXTENDS(letkf_stateio) :: stateio_nc
      INTEGER :: compression !< nc4 compression (0-9)
      TYPE(configuration) :: hzgriddef
      TYPE(configuration) :: vtgriddef
@@ -35,44 +39,44 @@ MODULE letkf_state_nc
      PROCEDURE         :: write_init  => stateio_nc_write_init
      PROCEDURE         :: write_state => stateio_nc_write_state
   END TYPE stateio_nc
+  !================================================================================
 
 
+  
 
 CONTAINS
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Get the unique name of the state I/O class
+  !--------------------------------------------------------------------------------
   FUNCTION stateio_nc_get_name() RESULT(name)
     CHARACTER(:), ALLOCATABLE :: name
     name = "STATEIO_NC"
   END FUNCTION stateio_nc_get_name
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
 
+  !================================================================================
   !> Get the description of the state I/O class
+  !--------------------------------------------------------------------------------  
   FUNCTION stateio_nc_get_desc() RESULT(desc)
     CHARACTER(:), ALLOCATABLE :: desc
     desc = "NetCDF formatted model state I/O"
   END FUNCTION stateio_nc_get_desc
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_init(self, config)
     CLASS(stateio_nc) :: self
     TYPE(configuration), INTENT(in) :: config
-
-    CHARACTER(len=1024) :: line, strs(6)
-    INTEGER :: unit, iostat, i
-    LOGICAL :: ex
-    INTEGER :: compression = 0
-
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -88,11 +92,13 @@ CONTAINS
     CALL config%get("statedef", self%statedef)
 
   END SUBROUTINE stateio_nc_init
+  !================================================================================
 
 
-
-  !--------------------------------------------------------------------------------
+  
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_read_specs(self, hzgrids, vtgrids, statevars)
     CLASS(stateio_nc) :: self
     TYPE(letkf_hzgrid_spec),   ALLOCATABLE, INTENT(out) :: hzgrids(:)
@@ -105,8 +111,7 @@ CONTAINS
     REAL, ALLOCATABLE :: tmp_r_1d(:)
     REAL, ALLOCATABLE :: tmp_r_2d(:,:)
 
-    INTEGER :: nx, ny, i, s, c, grd_cnt, j
-    CHARACTER(len=100) :: strs(100) ! TODO, make a linked list
+    INTEGER :: nx, ny, i, grd_cnt, j
     nx = -1
     ny = -1
 
@@ -270,18 +275,20 @@ CONTAINS
     END DO
 
   END SUBROUTINE stateio_nc_read_specs
+  !================================================================================
 
 
-
-  !-----------------------------------------------------------------------------
+  
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_write_init(self, ftype, ensmem)
     CLASS(stateio_nc) :: self
     CHARACTER(len=*), INTENT(in) :: ftype
     INTEGER, INTENT(in) :: ensmem
     TYPE(configuration) :: config, config2
 
-    CHARACTER(:), ALLOCATABLE :: filename, arg1, arg2, name, str
+    CHARACTER(:), ALLOCATABLE :: filename,  name, str
     INTEGER :: ncid, d_t, d_x, d_y, d_z(100), varid ! TODO, remove hardcoded dz size
     INTEGER :: i, j
 
@@ -359,11 +366,13 @@ CONTAINS
     ! all done
     CALL check(nf90_close(ncid))
   END SUBROUTINE stateio_nc_write_init
+  !================================================================================
 
+  
 
-
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_write_state(self, ftype, ensmem, state_var, state_val)
     CLASS(stateio_nc) :: self
     CHARACTER(len=*), INTENT(in) :: ftype
@@ -372,7 +381,7 @@ CONTAINS
     REAL,           INTENT(in) :: state_val(:,:,:)
 
     TYPE(configuration) :: config, config2
-    CHARACTER(:), ALLOCATABLE :: filename, varname, arg, arg2, name
+    CHARACTER(:), ALLOCATABLE :: filename, varname, name
 
     INTEGER :: i
     INTEGER :: ncid, varid
@@ -412,13 +421,15 @@ CONTAINS
     CALL check(nf90_close(ncid))
 
   END SUBROUTINE stateio_nc_write_state
+  !================================================================================
 
 
-
-  !--------------------------------------------------------------------------------
+  
+  !================================================================================
   !>
   !! TODO, modify so that we can read/scatter the state 1 variable and/or 1 level
   !! at a time in order to reduce the peak memory per compute node
+  !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_read_state(self, ensmem, state_var, state_val)
     CLASS(stateio_nc)    :: self
     INTEGER,      INTENT(in)  :: ensmem
@@ -426,10 +437,9 @@ CONTAINS
     REAL, ALLOCATABLE, INTENT(out) :: state_val(:,:,:)
 
     TYPE(configuration) :: config, config2
-    INTEGER :: i, j
     CHARACTER(:), ALLOCATABLE :: filename, invar, str
 
-    INTEGER :: nx, ny, nz
+    INTEGER :: nx, ny, nz, i
     INTEGER :: ncid, dimids(4), varid
     TYPE(letkf_hzgrid_spec) :: hgrid
     TYPE(letkf_vtgrid_spec) :: vgrid
@@ -472,11 +482,13 @@ CONTAINS
     CALL check(nf90_close(ncid))
 
   END SUBROUTINE stateio_nc_read_state
+  !================================================================================
 
 
-
-  !-----------------------------------------------------------------------------
-  !>TODO why am I tracking 'bkg' and 'ana' separately??
+  
+  !================================================================================
+  !>\TODO why am I tracking 'bkg' and 'ana' separately??
+  !--------------------------------------------------------------------------------
   FUNCTION str_ens_pattern(str_in, ensmem) RESULT(str_out)
     CHARACTER(*), INTENT(in) :: str_in
     INTEGER, INTENT(in) :: ensmem
@@ -511,9 +523,12 @@ CONTAINS
     END DO
     str_out=TRIM(str)
   END FUNCTION str_ens_pattern
+  !================================================================================
 
 
 
+  !================================================================================
+  !>
   !-----------------------------------------------------------------------------
   FUNCTION str_pattern(str_in, key, val) RESULT(str_out)
     CHARACTER(*), INTENT(in) :: str_in
@@ -532,20 +547,19 @@ CONTAINS
     END IF
 
   END FUNCTION str_pattern
+  !================================================================================
 
+  
 
-
-
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !>
+  !-------------------------------------------------------------------------------- 
   SUBROUTINE read_nc_d2(varname, filename, array)
     CHARACTER(*), INTENT(in)  :: varname, filename
     REAL, ALLOCATABLE, INTENT(out) :: array(:,:)
 
     INTEGER :: i, dimids(2), nx, ny
-    INTEGER :: def
     INTEGER :: ncid, varid
-
 
     ! open file, find dimensions
     ! TODO, handle a time dimension if stored that way
@@ -565,16 +579,18 @@ CONTAINS
     CALL check(nf90_close(ncid))
 
   END SUBROUTINE read_nc_d2
+  !================================================================================
+  
 
 
-
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------  
   SUBROUTINE read_nc_d1(varname, filename,  array)
     CHARACTER(*), INTENT(in)  :: varname, filename
     REAL, ALLOCATABLE, INTENT(out) :: array(:)
 
-    INTEGER :: i, dimids(1), ni, def
+    INTEGER :: i, dimids(1), ni
     INTEGER :: ncid, varid
 
     ! open file, find dimensions
@@ -593,11 +609,13 @@ CONTAINS
     ! cleanup
     CALL check(nf90_close(ncid))
   END SUBROUTINE read_nc_d1
+  !================================================================================
 
 
 
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !> Helper function to check status of netcdf calls
+  !--------------------------------------------------------------------------------
   SUBROUTINE check(status, str)
     INTEGER, INTENT(in) :: status
     CHARACTER(*), OPTIONAL, INTENT(in) :: str
@@ -611,5 +629,7 @@ CONTAINS
        CALL letkf_mpi_abort("NetCDF error")
     END IF
   END SUBROUTINE check
+  !================================================================================
+  
 
 END MODULE letkf_state_nc

@@ -1,3 +1,6 @@
+!================================================================================
+!>
+!================================================================================
 MODULE timing
   USE mpi
 
@@ -8,7 +11,6 @@ MODULE timing
   PUBLIC :: timing_print
   PUBLIC :: timing_start
   PUBLIC :: timing_stop
-  !public :: timing_create
 
   integer, public, parameter :: TIMER_SYNC = 1
 
@@ -24,11 +26,20 @@ MODULE timing
   END TYPE timer
 
 
+  !================================================================================
+  !================================================================================
+  ! private module components
+  !================================================================================
+  !================================================================================
 
-  TYPE timer_ptr
+  
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  TYPE timer_ptr     
      TYPE(timer), POINTER :: p
   END TYPE timer_ptr
-
+  !================================================================================
 
 
   INTEGER :: pe_comm, pe_root, pe_rank, pe_size
@@ -41,8 +52,10 @@ CONTAINS
 
 
 
+  !================================================================================
   !> initialize the timing module.
   !! Must be called before any other functions
+  !--------------------------------------------------------------------------------
   SUBROUTINE timing_init(comm, root)
     INTEGER, INTENT(in) :: comm
     INTEGER, INTENT(in) :: root
@@ -65,10 +78,13 @@ CONTAINS
 
     cur_timer => root_timer
   END SUBROUTINE timing_init
+  !================================================================================
 
 
-
+  
+  !================================================================================
   !> Start a timer
+  !--------------------------------------------------------------------------------
   SUBROUTINE timing_start(timer_name, flags)
     CHARACTER(*), INTENT(in) :: timer_name
     TYPE(timer), POINTER :: new_timer
@@ -122,10 +138,13 @@ CONTAINS
     cur_timer => new_timer
 
   END SUBROUTINE timing_start
+  !================================================================================
 
 
-
+  
+  !================================================================================
   !> Stop a timer
+  !--------------------------------------------------------------------------------
   SUBROUTINE timing_stop(timer_name)
     CHARACTER(*), INTENT(in) :: timer_name
     INTEGER(kind=8) :: ticks
@@ -152,11 +171,14 @@ CONTAINS
     cur_timer => cur_timer%parent
 
   END SUBROUTINE timing_stop
+  !================================================================================
 
 
-
+  
+  !================================================================================
   !> Print out the across-PE timing statistics
   !! TODO: check for common multiple timers in the tree to sum up
+  !--------------------------------------------------------------------------------
   SUBROUTINE timing_print()
     TYPE(timer_ptr) :: stack(100)
     INTEGER :: pos
@@ -217,7 +239,7 @@ CONTAINS
     END DO
 
   END SUBROUTINE timing_print
-
+  !================================================================================
 
 
 END MODULE timing

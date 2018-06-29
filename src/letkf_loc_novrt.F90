@@ -1,3 +1,6 @@
+!================================================================================
+!> default, simple, horizontal only  localization
+!================================================================================
 MODULE letkf_loc_novrt
   use letkf_config
   USE letkf_mpi
@@ -8,7 +11,21 @@ MODULE letkf_loc_novrt
   IMPLICIT NONE
   PRIVATE
 
+
+  
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
+
+  !================================================================================
+  !> localizer class for simple horizontal only localization
+  !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_localizer), PUBLIC :: loc_novrt
+     real :: hzloc(2) !< horizontal localization distance(meters)
+                      !! at the equator, and pole
    CONTAINS
      PROCEDURE, NOPASS :: name => loc_novrt_name
      PROCEDURE, NOPASS :: desc => loc_novrt_desc
@@ -17,31 +34,38 @@ MODULE letkf_loc_novrt
      PROCEDURE         :: localize => loc_novrt_localize
      PROCEDURE         :: maxhz => loc_novrt_maxhz
   END TYPE loc_novrt
+  !================================================================================
 
-  ! TODO get rid of this
-  REAL :: hzloc(2)  !< horizontal localization distance(meters)
-  !! at the equator, and pole
 
 
 CONTAINS
 
 
+  !================================================================================
   !> Get the name of the class
+  !--------------------------------------------------------------------------------
   FUNCTION loc_novrt_name() RESULT(str)
     CHARACTER(:), ALLOCATABLE :: str
     str="LOC_NOVRT"
   END FUNCTION loc_novrt_name
+  !================================================================================
 
 
+  
+  !================================================================================
   !> Get the description of the class
+  !--------------------------------------------------------------------------------
   FUNCTION loc_novrt_desc() RESULT(str)
     CHARACTER(:), ALLOCATABLE :: str
     str="Generic horizontal only localization"
   END FUNCTION loc_novrt_desc
+  !================================================================================
 
 
 
+  !================================================================================
   !> Initialize this class, reading in settings from the namelist mostly
+  !--------------------------------------------------------------------------------
   SUBROUTINE loc_novrt_init(self, config)
     CLASS(loc_novrt), INTENT(inout) :: self
     type(configuration), intent(in) :: config
@@ -51,15 +75,16 @@ CONTAINS
        PRINT *, "LOC_NOVRT initialization"
        PRINT *, "------------------------------------------------------------"
     END IF
-    hzloc = (/500.0d3, 50.0d3/)
+    self%hzloc = (/500.0d3, 50.0d3/)
   END SUBROUTINE loc_novrt_init
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> For a given gridpoint, get the desired localization parameters
   !! (horizontal search radius and level/variable localization groups)
+  !--------------------------------------------------------------------------------
   SUBROUTINE loc_novrt_groups(self, ij, groups)
     CLASS(loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
@@ -75,25 +100,30 @@ CONTAINS
     end do
 
   END SUBROUTINE loc_novrt_groups
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================  
   !>
+  !--------------------------------------------------------------------------------
   FUNCTION loc_novrt_maxhz(self, ij) RESULT(dist)
     CLASS(loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     REAL :: dist
 
     dist=ABS(lat_ij(ij))/90.0
-    dist=dist*hzloc(2) + (1.0-dist)*hzloc(1)
+    dist=dist*self%hzloc(2) + (1.0-dist)*self%hzloc(1)
 
   END FUNCTION loc_novrt_maxhz
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   FUNCTION loc_novrt_localize(self, ij, group, obs, dist) RESULT(loc)
     CLASS(loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in) :: ij
@@ -106,10 +136,11 @@ CONTAINS
 
     ! horizontal localization
     r = abs(lat_ij(ij))/90.0
-    r = r*hzloc(2)+(1.0-r)*hzloc(1)
+    r = r*self%hzloc(2)+(1.0-r)*self%hzloc(1)
     loc = letkf_loc_gc(dist, r)
 
   END FUNCTION loc_novrt_localize
+  !================================================================================
 
 
 END MODULE letkf_loc_novrt

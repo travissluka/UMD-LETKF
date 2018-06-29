@@ -1,3 +1,7 @@
+!================================================================================
+!> Basic driver program that calls the LETKF initialize and run routines
+!! with the default classes.
+!================================================================================
 program letkf_driver
   use letkf
   implicit none

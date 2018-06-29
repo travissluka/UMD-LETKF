@@ -1,49 +1,60 @@
-!< LETKF core equations
+!================================================================================
+!>\cond internal
+!> LETKF core equations
 !! @note Original code taken from Takemasa Miyoshi's LETKF code
 !! @todo correctly determine evwork_size based on ILAENV and max
 !! number of observations, \( evwork\_size = (NB+2)*n\)
+!================================================================================
 module letkf_core
 
   implicit none
   private
 
 
-  !--------------------------------------------------------------------------------
-  ! Public methods
-  !--------------------------------------------------------------------------------
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
   public :: letkf_core_init
   public :: letkf_core_solve
 
 
 
-  !--------------------------------------------------------------------------------
-  ! Private variables
-  !--------------------------------------------------------------------------------
+  !=================================================================================
+  !=================================================================================
+  ! Private module components
+  !=================================================================================
+  !=================================================================================
+
   integer :: evwork_size  !< size of the temporary array needed by the matrix routines
   integer :: nbv          !< ensemble size
 
 
 
-  !--------------------------------------------------------------------------------
-  !--------------------------------------------------------------------------------
-
 contains
 
 
 
-  !< Initializes the LETKF core for future calls to letkf_core_solve
+  !================================================================================
+  !> Initializes the LETKF core for future calls to letkf_core_solve
   !! (mainly just sets the size of a temporary working matix used
   !! by calls to BLAS/LAPACK)
+  !--------------------------------------------------------------------------------
   subroutine letkf_core_init(nbvi)
     integer, intent(in) :: nbvi  !< number of ensemble members
 
     nbv = nbvi
     evwork_size = (64+2) * nbv
   end subroutine letkf_core_init
+  !================================================================================
 
 
 
-  !< The core LETKF equations
+  !================================================================================
+  !> The core LETKF equation
+  !--------------------------------------------------------------------------------
   subroutine letkf_core_solve(nobs, hdxb, rdiag, rloc, dep, infl, trans)
     integer, parameter :: rsize = 4
     integer, intent(in) :: nobs                 !< number of observations
@@ -122,6 +133,7 @@ contains
     ! TODO
 
   end subroutine letkf_core_solve
+  !================================================================================
 
-!
 end module letkf_core
+!> \endcond

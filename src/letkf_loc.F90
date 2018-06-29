@@ -1,3 +1,7 @@
+!================================================================================
+!> Module for the obesrvation localization methods
+!!
+!================================================================================
 MODULE letkf_loc
   use letkf_config
   USE letkf_mpi
@@ -7,9 +11,14 @@ MODULE letkf_loc
   PRIVATE
 
 
-  !------------------------------------------------------------
-  ! Public methods
-  !------------------------------------------------------------
+  
+
+  !================================================================================
+  !================================================================================
+  ! Public components
+  !================================================================================
+  !================================================================================
+
   PUBLIC :: letkf_loc_init
   PUBLIC :: letkf_loc_register
   PUBLIC :: letkf_loc_gc
@@ -17,28 +26,23 @@ MODULE letkf_loc
 
 
 
-  !------------------------------------------------------------
-  ! Public types
-  !------------------------------------------------------------
-
-  !> contains the definitiona for a single localization group,
+  !================================================================================
+  !> contains the definition for a single localization group,
   !! consisting of the list of model state slabs and localization
   !! parameters
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_localizer_group
      INTEGER, ALLOCATABLE :: slab(:)
   END TYPE letkf_localizer_group
+  !================================================================================
 
 
-  !> simple wrapper for localizer_group so that we can have arrays
-  !! of pointers.
-!  TYPE, PUBLIC :: letkf_localizer_group_ptr
-!     CLASS(letkf_localizer_group), POINTER :: p
-!  END TYPE letkf_localizer_group_ptr
-
-
+  
+  !================================================================================
   !> The abstract base class that all localization specification
   !! classes are to be derived from. Responsible for determining
   !! horizontal / temporal / vertical / variable localization
+  !--------------------------------------------------------------------------------
   TYPE, PUBLIC, ABSTRACT :: letkf_localizer
    CONTAINS
      PROCEDURE(I_letkf_loc_str),  NOPASS,   DEFERRED :: name
@@ -89,19 +93,31 @@ MODULE letkf_loc
        REAL :: loc
      END FUNCTION I_letkf_loc_group_localize
   END INTERFACE
+  !================================================================================
 
-  !> simple wrapper for localizer so that we can have arrays
-  !! of pointers.
+
+  
+  !================================================================================
+  !> simple wrapper for localizer so that we can have arrays of pointers.
+  !--------------------------------------------------------------------------------
   TYPE :: localizer_ptr
      CLASS(letkf_localizer), POINTER :: p
   END TYPE localizer_ptr
+  !================================================================================  
 
 
+  
+  ! public variables
+  !--------------------------------------------------------------------------------
   CLASS(letkf_localizer), PUBLIC, PROTECTED, POINTER :: localizer_class
 
-  !--------------------------------------------------------------------------------
-  ! Private variables
-  !--------------------------------------------------------------------------------
+
+  
+  !================================================================================
+  !================================================================================
+  ! Private module components
+  !================================================================================
+  !================================================================================
   INTEGER, PARAMETER   :: localizer_reg_max = 100
   INTEGER              :: localizer_reg_num = 0
   TYPE(localizer_ptr)  :: localizer_reg(localizer_reg_max)
@@ -112,8 +128,9 @@ CONTAINS
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !> initialize
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_loc_init(config)
     type(configuration), intent(in) :: config
 
@@ -154,11 +171,13 @@ CONTAINS
     !initialize the localizer class
     CALL localizer_class%init(config)
   END SUBROUTINE letkf_loc_init
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_loc_register(locclass)
     CLASS(letkf_localizer), POINTER :: locclass
     INTEGER :: i
@@ -185,12 +204,15 @@ CONTAINS
     localizer_reg_num = localizer_reg_num + 1
     localizer_reg(localizer_reg_num)%p => locclass
   END SUBROUTINE letkf_loc_register
+  !=================================================================================
 
-  !--------------------------------------------------------------------------------
-
+  
+    
+  !================================================================================
   !> Gaspari-Cohn localization function.
   !! Possibly faster than the Gaussian function, depending on computer architecture.
   !! Similar shape to Gaussian, except it is compact, goes to 0 at 2L*sqrt(0.3)
+  !--------------------------------------------------------------------------------
   PURE FUNCTION letkf_loc_gc(z, L) RESULT(res)
     REAL, INTENT(in) :: z  !< value to localize
     REAL, INTENT(in) :: L  !< the equivalent to the Gaussian standard deviation
@@ -215,13 +237,13 @@ CONTAINS
             (5.0/8.0)*z_c**3 - (5.0/3.0)*z_c**2 + 1
     END IF
   END FUNCTION letkf_loc_gc
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Gaussian localization function
-  ! TODO umm, why is this not working
+  !--------------------------------------------------------------------------------
   PURE FUNCTION letkf_loc_gaus(z, L) RESULT(res)
     REAL, INTENT(in) :: z   !< value to localize
     REAL, INTENT(in) :: L   !< the gaussian standard deviation
@@ -229,9 +251,11 @@ CONTAINS
 
     res = EXP( -0.5 *  z*z / (L*L))
   END FUNCTION letkf_loc_gaus
+  !================================================================================
 
+  
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
   FUNCTION toupper(in_str) RESULT(out_str)
     CHARACTER(*), INTENT(in) :: in_str
     CHARACTER(LEN(in_str)  ) :: out_str
@@ -245,4 +269,7 @@ CONTAINS
        END IF
     END DO
   END FUNCTION toupper
+  !================================================================================
+
+  
 END MODULE letkf_loc

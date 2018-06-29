@@ -1,3 +1,6 @@
+!================================================================================
+!>
+!================================================================================
 MODULE letkf_obs_test
   USE kdtree
   USE mpi
@@ -9,8 +12,15 @@ MODULE letkf_obs_test
   IMPLICIT NONE
   PRIVATE
 
+  !================================================================================
+  !================================================================================
+  ! public module components
+  !================================================================================
+  !================================================================================
 
-  ! observation file I/O class for handling NetCDF files
+  !================================================================================  
+  !> observation file I/O class for handling NetCDF files
+  !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_test
      TYPE(letkf_observation), ALLOCATABLE :: obs(:)
      REAL, ALLOCATABLE :: hx(:,:)
@@ -21,33 +31,39 @@ MODULE letkf_obs_test
      PROCEDURE         :: read_obs => obsio_test_read_obs
      PROCEDURE         :: read_hx  => obsio_test_read_hx
   END TYPE obsio_test
+  !================================================================================
 
 
-
+  
 CONTAINS
 
 
 
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !> Get the unique name of the observation I/O class
+  !--------------------------------------------------------------------------------
   FUNCTION obsio_test_get_name() RESULT(name)
     CHARACTER(:), ALLOCATABLE :: name
     name = "OBSIO_TEST"
   END FUNCTION obsio_test_get_name
+  !===============================================================================
 
 
 
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !> Get a description of this observation I/O class
+  !--------------------------------------------------------------------------------
   FUNCTION obsio_test_get_desc() RESULT(desc)
     CHARACTER(:), ALLOCATABLE :: desc
     desc = "Test observations generated from interpolated input ensemble state"
   END FUNCTION obsio_test_get_desc
+  !================================================================================
 
 
 
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !> initialize the test observation generation class
+  !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_init(self, config)
     CLASS(obsio_test) :: self
     type(configuration), intent(in) :: config
@@ -60,12 +76,6 @@ CONTAINS
     REAL,    ALLOCATABLE :: grd_dist(:), min_dist(:), hx2(:,:)
     INTEGER, ALLOCATABLE :: ob_pe1(:), ob_pe2(:)
     character(len=60), allocatable :: ob_state_type(:)
-
-    integer :: iostat
-    character (len=1024) :: line, strs(9)
-    character (:), allocatable :: testobs_file
-    integer :: unit
-    logical :: ex
 
     integer :: lvl, s, j, k, m
     character(:), allocatable :: str
@@ -185,11 +195,13 @@ CONTAINS
     CALL kd_free(grd_tree)
 
   END SUBROUTINE obsio_test_init
+  !================================================================================
 
 
 
-  !-----------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_read_obs(self, obs)
     CLASS(obsio_test) :: self
     TYPE(letkf_observation), ALLOCATABLE, INTENT(out) :: obs(:)
@@ -198,11 +210,13 @@ CONTAINS
     obs = self%obs
 
   END SUBROUTINE obsio_test_read_obs
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_read_hx(self, ensmem, hx)
     CLASS(obsio_test) :: self
     INTEGER, INTENT(in) :: ensmem
@@ -212,5 +226,7 @@ CONTAINS
     hx = self%hx(ensmem, :)
 
   END SUBROUTINE obsio_test_read_hx
+  !================================================================================
+  
 
 END MODULE letkf_obs_test

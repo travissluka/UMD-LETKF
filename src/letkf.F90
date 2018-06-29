@@ -1,4 +1,8 @@
+!================================================================================
+!> The main LETKF library module
+!================================================================================
 MODULE letkf
+  
   use letkf_config
   USE letkf_loc
   USE letkf_loc_novrt
@@ -16,35 +20,47 @@ MODULE letkf
   IMPLICIT NONE
   PRIVATE
 
-
-
-  ! Public methods
-  !--------------------------------------------------------------------------------
-  PUBLIC :: letkf_init
-  PUBLIC :: letkf_run
-  PUBLIC :: letkf_register_hook
-
-
-  ! private variables
-  CHARACTER(:), ALLOCATABLE :: nml_filename
-
+  
   ! use this to get the repository version at compile time
 #ifndef CVERSION
 #define CVERSION "Unknown"
 #endif
 
+  
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
+  PUBLIC :: letkf_init
+  PUBLIC :: letkf_run
+  PUBLIC :: letkf_register_hook
+
+
+
+  !================================================================================
+  !================================================================================
+  ! Private module components
+  !================================================================================
+  !================================================================================
 
   type(configuration) :: config
 
+
+  
 CONTAINS
 
 
 
-  !-----------------------------------------------------------------------------------------
+  !================================================================================
   !> Initialize the LETKF library.
-  !! This needs to be done before any other user-called functions are performed
+  !! This needs to be done before any other user-called functions are performed.
+  !! This initializes the MPI backend, and loads the default stateio, obsio, and
+  !! localizer classes
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_init(config_filename)
-    character(len=*) :: config_filename
+    character(len=*) :: config_filename !< json configuration file to load
 
     ! temprary pointers for initializing and registering the default classes
     CLASS(letkf_obsio),     POINTER :: obsio_ptr
@@ -101,12 +117,13 @@ CONTAINS
     CALL timing_stop("pre-init")
 
   END SUBROUTINE letkf_init
+  !================================================================================
 
 
 
-  !-----------------------------------------------------------------------------------------
-
+  !================================================================================
   !> Does all the fun stuff of actually running the LETKF
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_run()
 
     ! LETKF initialization
@@ -169,19 +186,25 @@ CONTAINS
     CALL letkf_mpi_final()
 
   END SUBROUTINE letkf_run
+  !================================================================================
 
 
-
-  !< Register a callback function for one of the hooks where
+  !================================================================================
+  !> Register a callback function for one of the hooks where
   !! users can implement custom functionality
   !! @TODO implement this
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_register_hook
     PRINT *, "NOT yet implemented (letkf_register_hook)"
     STOP 1
   END SUBROUTINE letkf_register_hook
+  !================================================================================
 
 
 
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_write_diag()
     INTEGER :: p
     REAL, ALLOCATABLE :: tmp_2d_real(:,:)
@@ -256,5 +279,7 @@ CONTAINS
       END IF
     END SUBROUTINE check
   END SUBROUTINE letkf_write_diag
+  !================================================================================
 
+  
 END MODULE letkf

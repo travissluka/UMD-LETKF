@@ -369,7 +369,8 @@ CONTAINS
 
     CALL timing_start('read_obs')
 
-    IF(pe_isroot) THEN
+    obs_pe = 0
+    IF(pe_rank == obs_pe) THEN
        ! have the I/O class read the main observations file
        CALL obsio_class%read_obs(obs_def)
 

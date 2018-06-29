@@ -257,7 +257,7 @@ CONTAINS
     type(configuration), intent(in) :: config
 
     type(configuration) :: config_ioclass
-    INTEGER :: unit, i,  s, n
+    INTEGER ::  i,  s, n
     CHARACTER(:), ALLOCATABLE :: ioclass
     LOGICAL :: write_bkg_meansprd = .TRUE.
     logical :: verbose = .false.

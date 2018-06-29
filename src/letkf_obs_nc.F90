@@ -1,3 +1,6 @@
+!================================================================================
+!>
+!================================================================================
 MODULE letkf_obs_nc
   USE netcdf
   use letkf_config
@@ -7,7 +10,15 @@ MODULE letkf_obs_nc
   IMPLICIT NONE
   PRIVATE
 
-  ! observation file I/O class for handling NetCDF files
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
+  !================================================================================
+  !> observation file I/O class for handling NetCDF files
+  !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_nc
      logical :: read_inc
    CONTAINS
@@ -17,8 +28,16 @@ MODULE letkf_obs_nc
      PROCEDURE         :: read_obs => obsio_nc_read_obs
      PROCEDURE         :: read_hx  => obsio_nc_read_hx
   END TYPE obsio_nc
+  !================================================================================
 
 
+
+  !================================================================================
+  !================================================================================
+  ! Private module components
+  !================================================================================
+  !================================================================================
+  
   !> filename from which the observation files are read
   CHARACTER(:), ALLOCATABLE :: filename_obs
 
@@ -31,39 +50,39 @@ CONTAINS
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================ 
   !> Get the unique name of the observation I/O class
   !! @param name short (less than ~10 character) class name
+  !--------------------------------------------------------------------------------
   FUNCTION obsio_nc_get_name() RESULT(name)
     CHARACTER(:), ALLOCATABLE :: name
     name = "OBSIO_NC"
   END FUNCTION obsio_nc_get_name
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Get a human readable description of this observation I/O class
   !! @param desc description of the class
+  !--------------------------------------------------------------------------------
   FUNCTION obsio_nc_get_desc() RESULT(desc)
     CHARACTER(:), ALLOCATABLE :: desc
     desc = "NetCDF formatted observation I/O"
   END FUNCTION obsio_nc_get_desc
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Initialize the netcdf obsio reader/writer.
   !! This loads in a section of the namelist (&letkf_obs_nc) to determine what the
   !! input filenames should be.
   !! @param nml_filename path to the namelist we are to open
+  !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_init(self, config)
     CLASS(obsio_nc) :: self
     type(configuration), intent(in) :: config
-
-    logical :: read_inc
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -81,15 +100,16 @@ CONTAINS
        print *, "read_inc=",self%read_inc
     end if
   END SUBROUTINE obsio_nc_init
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Read the observations from a netcdf file.
   !! Note: this is the observation only (location, value, etc.) and NOT the
   !! per-ensemble observation departure
   !! @param obs the list of observations as they are loaded in.
+  !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_read_obs(self, obs)
     CLASS(obsio_nc) :: self
     TYPE(letkf_observation), ALLOCATABLE, INTENT(out) :: obs(:)
@@ -186,14 +206,15 @@ CONTAINS
     DEALLOCATE(tmp_i, tmp_r)
 
   END SUBROUTINE obsio_nc_read_obs
+  !================================================================================
 
 
-
-  !--------------------------------------------------------------------------------
-
+  
+  !================================================================================
   !> Read the observation operator output for a single ensemble member.
   !! @param ensmem ensemble member number to load in
   !! @param hx the ensemble member state mapped to observation space
+  !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_read_hx(self, ensmem, hx)
     CLASS(obsio_nc) :: self
     INTEGER, INTENT(in) :: ensmem
@@ -258,12 +279,13 @@ CONTAINS
 
     CALL check( nf90_close(ncid))
   END SUBROUTINE obsio_nc_read_hx
+  !================================================================================
+  
 
 
-
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Helper function to check status of netcdf calls
+  !--------------------------------------------------------------------------------
   SUBROUTINE check(status, str)
     INTEGER, INTENT(in) :: status
     character(*), optional, intent(in) :: str
@@ -277,5 +299,7 @@ CONTAINS
        CALL letkf_mpi_abort("NetCDF error")
     END IF
   END SUBROUTINE check
+  !================================================================================
+  
 
 END MODULE letkf_obs_nc

@@ -1,3 +1,6 @@
+!================================================================================
+!> mpi methods for grid decomposition and io scattering
+!================================================================================
 MODULE letkf_mpi
   USE mpi
   use letkf_config
@@ -5,8 +8,14 @@ MODULE letkf_mpi
   IMPLICIT NONE
   PRIVATE
 
-  ! Public methods
-  !--------------------------------------------------------------------------------
+  
+  
+  !================================================================================
+  !================================================================================
+  ! Public module components
+  !================================================================================
+  !================================================================================
+
   PUBLIC :: letkf_mpi_preinit
   PUBLIC :: letkf_mpi_init
   PUBLIC :: letkf_mpi_final
@@ -27,54 +36,58 @@ MODULE letkf_mpi
      MODULE PROCEDURE letkf_mpi_ij2grd_real
   END INTERFACE letkf_mpi_ij2grd
 
-  !--------------------------------------------------------------------------------
-  ! Public variables
-  !--------------------------------------------------------------------------------
 
   ! MPI parameters
+  !--------------------------------------------------------------------------------
   INTEGER, PUBLIC, PROTECTED :: pe_rank   !< PE of this MPI rank
   INTEGER, PUBLIC, PROTECTED :: pe_size   !< number of MPI PEs
   INTEGER, PUBLIC, PROTECTED :: pe_root   !< the root MPI PE
   LOGICAL, PUBLIC, PROTECTED :: pe_isroot !< true of this PE is root
   INTEGER, PUBLIC, PROTECTED :: letkf_mpi_comm !< the MPI communicator LETKF should use
-
   INTEGER, PUBLIC, PROTECTED :: ij_count  !< number of grid points this PE is responsible for
-
+  INTEGER, PUBLIC, PROTECTED, ALLOCATABLE :: ij_count_pe(:)  !< number of gridpoints, for each PE
+  INTEGER, PUBLIC :: mpitype_grid_nxy_real
+  INTEGER, PUBLIC :: mpitype_grid_nk_ns
+  INTEGER, PUBLIC :: mpitype_grid_ns
+  
   ! ensemble parameters
+  !--------------------------------------------------------------------------------
   INTEGER, PUBLIC, PROTECTED :: ens_size  !< ensemble size
 
+ 
 
-  !--------------------------------------------------------------------------------
-  ! Private variables
-  !--------------------------------------------------------------------------------
+  
+  !================================================================================
+  !================================================================================
+  ! Private module components
+  !================================================================================
+  !================================================================================
+  
   ! grid definition
+  !--------------------------------------------------------------------------------
   INTEGER :: grid_nx  !< size of the global x dimension
   INTEGER :: grid_ny  !< size of the global y dimension
   INTEGER :: grid_ns  !< size of the vertical/variable dimension (slabs)
 
-  ! MPI scatter/gether parameters
-  INTEGER, PUBLIC, ALLOCATABLE :: ij_count_pe(:)  !< number of gridpoints, for each PE
-
+  ! MPI scatter/gather parameters
+  !--------------------------------------------------------------------------------
   INTEGER :: mpitype_grid_nxy_logical
-  INTEGER, PUBLIC :: mpitype_grid_nxy_real
-  INTEGER, PUBLIC :: mpitype_grid_nk_ns
-  INTEGER, PUBLIC :: mpitype_grid_ns
-  !integer :: mpitype_grid_nxy_ns_real
-
   INTEGER :: nextio
   INTEGER :: ppn
 
 
+  
 CONTAINS
 
 
 
-  !--------------------------------------------------------------------------------
 
-  !< Initialize MPI (so that all console output is done through the root PE).
+  !================================================================================
+  !> Initialize MPI (so that all console output is done through the root PE).
   !! Should be done before pretty much every other module
   !! initialization routine. Including before letkf_mpi_init().
   !! TODO - modify this to allow specification of an MPI communicator
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_preinit()
     INTEGER :: ierr
 
@@ -93,13 +106,14 @@ CONTAINS
     pe_isroot = pe_root == pe_rank
 
   END SUBROUTINE letkf_mpi_preinit
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
-  !< initialize the MPI module.
+  !================================================================================
+  !> initialize the MPI module.
   !! Read in a namelist, determine grid distribution.
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_init(config)
     type(configuration), intent(in) :: config
 
@@ -123,12 +137,13 @@ CONTAINS
     ENDIF
 
   END SUBROUTINE letkf_mpi_init
+  !================================================================================
 
 
 
+  !================================================================================
+  !> Abort the program in a clean way
   !--------------------------------------------------------------------------------
-
-  !< Abort the program in a clean way
   SUBROUTINE letkf_mpi_abort(str)
     CHARACTER(*), INTENT(in) :: str
     INTEGER :: ierr
@@ -136,25 +151,28 @@ CONTAINS
     PRINT *, "FATAL ERROR: ", str
     CALL mpi_abort(letkf_mpi_comm, 1, ierr)
   END SUBROUTINE letkf_mpi_abort
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
-  !< Shutdown MPI.
+  !================================================================================
+  !> Shutdown MPI.
   !! This should be the last thing called by the LETKF library
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_final
     INTEGER :: ierr
 
     CALL mpi_finalize(ierr)
   END SUBROUTINE letkf_mpi_final
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
+  !================================================================================
   !> Given the grid dimension, determine how to split it up amongst the PEs
   !! for any future scatter/gather calls. This should only be called once, at
   !! initialization time, by the letkf_state module.
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_setgrid(nx, ny, ns)
     INTEGER, INTENT(in) :: nx, ny, ns
     INTEGER :: prev, cnt, i
@@ -228,10 +246,13 @@ CONTAINS
 
     END SUBROUTINE mpitypes
   END SUBROUTINE letkf_mpi_setgrid
+  !================================================================================
 
 
-  !-----------------------------------------------------------------------------
+  
+  !================================================================================
   !>
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_ij2grd_real(root, ij, grd)
     INTEGER, INTENT(in) :: root
     REAL, INTENT(in) :: ij(ij_count)
@@ -256,10 +277,13 @@ CONTAINS
     IF (pe_rank == root) &
          CALL mpi_waitall(pe_size, recvs, MPI_STATUSES_IGNORE, ierr)
   END SUBROUTINE letkf_mpi_ij2grd_real
+  !================================================================================
+  
 
-
-  !-----------------------------------------------------------------------------
+  
+  !================================================================================
   !> Decompose a 2D grid from a single PE and scatter it across the PEs
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_grd2ij_real(root, grd, ij)
     INTEGER, INTENT(in) :: root
     REAL, allocatable, INTENT(in) :: grd(:,:)
@@ -290,12 +314,13 @@ CONTAINS
          CALL mpi_waitall(pe_size, send_req, MPI_STATUSES_IGNORE, ierr)
 
   END SUBROUTINE letkf_mpi_grd2ij_real
+  !================================================================================
 
 
 
-  !--------------------------------------------------------------------------------
-
+  !================================================================================
   !> Decompose a 2D grid from a single PE and scatter it across the PEs
+  !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_grd2ij_logical(root, grd, ij)
     INTEGER, INTENT(in) :: root
     LOGICAL, INTENT(in) :: grd(grid_nx, grid_ny)
@@ -323,18 +348,26 @@ CONTAINS
          CALL mpi_waitall(pe_size, send_req, MPI_STATUSES_IGNORE, ierr)
 
   END SUBROUTINE letkf_mpi_grd2ij_logical
+  !================================================================================
 
 
 
+  !================================================================================
+  !> 
   !--------------------------------------------------------------------------------
-
   SUBROUTINE letkf_mpi_barrier
     INTEGER :: ierr
     CALL mpi_barrier(letkf_mpi_comm, ierr)
 
   END SUBROUTINE letkf_mpi_barrier
+  !================================================================================
 
-
+  
+  
+  !================================================================================
+  !> Return the next PE that should handle IO. This function distributes the
+  !! PEs so that work should be spread out evenly across nodes
+  !--------------------------------------------------------------------------------
   FUNCTION letkf_mpi_nextio(forced_pe) RESULT(pe)
     INTEGER, OPTIONAL, INTENT(in) :: forced_pe
     ! TODO IO proc choice should be strided across nodes
@@ -346,6 +379,6 @@ CONTAINS
     nextio = pe+ppn
     if (nextio >= pe_size) nextio = MOD(nextio+1, pe_size)
   END FUNCTION letkf_mpi_nextio
-
+  !================================================================================
 
 END MODULE letkf_mpi
