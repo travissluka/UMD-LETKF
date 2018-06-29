@@ -7,5 +7,10 @@ endforeach(F)
 
 add_test(
   NAME ocean_mom6.obsio_test
-  COMMAND letkfdriver letkf.json
+  COMMAND letkfdriver obsio_test.json
+)
+
+add_test(
+  NAME ocean_mom6.obsio_nc
+  COMMAND letkfdriver obsio_nc.json
 )
