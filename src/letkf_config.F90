@@ -25,7 +25,7 @@ MODULE letkf_config
      GENERIC, PUBLIC :: get_child => get_child_name_f, get_child_idx_f
      PROCEDURE, PUBLIC :: count => get_array_count
      PROCEDURE, PUBLIC :: found => get_found
-
+     PROCEDURE, PUBLIC :: name => get_name
 
      PROCEDURE :: get_child_name
      PROCEDURE :: get_child_idx
@@ -190,21 +190,33 @@ CONTAINS
     CALL fson_get(self%node, key, p%node)
   END SUBROUTINE get_child_name
 
-  SUBROUTINE get_child_idx(self, idx, p, name)
+  SUBROUTINE get_child_idx(self, idx, p)
     CLASS(configuration),INTENT(in) :: self
     INTEGER, INTENT(in) :: idx
     TYPE(configuration), INTENT(out) :: p
-    CHARACTER(:), ALLOCATABLE, INTENT(out), OPTIONAL :: name
+    !    CHARACTER(:), ALLOCATABLE, INTENT(out), OPTIONAL :: name
     CHARACTER(:), ALLOCATABLE :: str
-    integer :: l
+    INTEGER :: l
     p%node => fson_value_get(self%node, idx)
-    IF(PRESENT(name)) THEN
-       l=fson_string_length(p%node%name)
-       ALLOCATE(CHARACTER(l) :: str)
-       CALL fson_string_copy(p%node%name,str)
-       name=TRIM(str)
-    END IF
+    !    IF(PRESENT(name)) THEN
+    !       l=fson_string_length(p%node%name)
+    !       ALLOCATE(CHARACTER(l) :: str)
+    !       CALL fson_string_copy(p%node%name,str)
+    !       name=TRIM(str)
+    !    END IF
   END SUBROUTINE get_child_idx
+
+
+  SUBROUTINE get_name(self, name)
+    CLASS(configuration), INTENT(in) :: self
+    CHARACTER(:), INTENT(out), ALLOCATABLE :: name
+    INTEGER :: l
+    l=fson_string_length(self%node%name)
+    ALLOCATE(CHARACTER(l) :: name)
+    CALL fson_string_copy(self%node%name, name)
+
+  END SUBROUTINE get_name
+
 
   FUNCTION get_child_name_f(self, key) RESULT(res)
     CLASS(configuration), INTENT(in) :: self

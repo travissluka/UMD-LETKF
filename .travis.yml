@@ -7,7 +7,10 @@ addons:
     sources:
     - ubuntu-toolchain-r-test
     packages:
-    - gfortran libopenmpi-dev libblas-dev liblapack-dev libnetcdf-dev netcdf-bin 
+    - gfortran
+    - openmpi-bin libopenmpi-dev
+    - libblas-dev liblapack-dev
+    - netcdf-bin libnetcdf-dev 
 
 
 before_script:
@@ -15,7 +18,8 @@ before_script:
 
 
 script:
-  - mkdir build; cd build; FC=mpif90 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=ON; make
+  - mkdir build; cd build; FC=mpif90 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=ON;
+  - make
   - ctest -VV
 
 
