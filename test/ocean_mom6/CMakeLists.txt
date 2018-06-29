@@ -6,17 +6,6 @@ foreach(F ${input})
 endforeach(F)
 
 add_test(
-  NAME ocean_mom6_1deg_obstest
+  NAME ocean_mom6.obsio_test
   COMMAND letkfdriver letkf.json
 )
-
-#add_test(
-#  NAME ocean_mom6_1deg_obsnc
-#  COMMAND letkfdriver letkf.json
-#)
-
-#add_test(
-#  NAME ocean_mom6_1deg
-#  COMMAND letkfdriver full.namelist
-#)
-

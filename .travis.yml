@@ -9,9 +9,16 @@ addons:
     packages:
     - gfortran libopenmpi-dev libblas-dev liblapack-dev libnetcdf-dev netcdf-bin 
 
+
+before_script:
+  - cd test; ./getTestData.sh; cd ../
+
+
 script:
   - mkdir build; cd build; FC=mpif90 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=ON; make
-  - ctest
+  - ctest -VV
+
+
 
 after_success:
   bash <(curl -s https://codecov.io/bash)
