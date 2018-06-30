@@ -186,7 +186,7 @@ CONTAINS
              hzgrids(i)%lon(j,:) = hzgrids(i)%lon_nom(j)
           END DO
           DO j=1,ny
-             hzgrids(i)%lat(j,:) = hzgrids(i)%lat_nom(j)
+             hzgrids(i)%lat(:,j) = hzgrids(i)%lat_nom(j)
           END DO
        END IF
 
