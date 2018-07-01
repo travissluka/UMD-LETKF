@@ -18,9 +18,9 @@ before_script:
 
 
 script:
-  - mkdir build; cd build; FC=mpif90 cmake ../ -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=ON;
+  - mkdir build; cd build; FC=mpif90 cmake ../ -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=ON;
   - make
-  - ctest -VV
+  - make test
 
 
 

@@ -1,26 +1,14 @@
-file(GLOB input FOLLOW_SYMLINKS *)
-foreach(F ${input})
-  get_filename_component(F2 ${F} NAME)
-  execute_process( COMMAND ${CMAKE_COMMAND} -E create_symlink
-    ${F} ${CMAKE_CURRENT_BINARY_DIR}/${F2})
-endforeach(F)
+# make sure test data is downloaded
+letkf_data(
+  simple3d.testdata 
+  https://www.dropbox.com/s/8t9thu4om0iichv/simple3d.testdata.tgz)
+letkf_data(
+  simple3d.ref_solutions
+  https://www.dropbox.com/s/v6uier1xzjbnsav/simple3d.ref_solutions.tgz)
+  
 
-add_test(
-  NAME simple3d
-  COMMAND letkfdriver default.json
-  )
-
-add_test(
-  NAME simple3d.inflation.rtps
-  COMMAND letkfdriver inflation_rtps.json
-)
-
-add_test(
-  NAME simple3d.inflation.rtpp
-  COMMAND letkfdriver inflation_rtpp.json
-)
-
-add_test(
-  NAME simple3d.inflation.mul
-  COMMAND letkfdriver inflation_mul.json
-)
+# run a test for each of these .json configuration files
+letkf_test(simple3d default)
+letkf_test(simple3d inflation_rtps)
+letkf_test(simple3d inflation_rtpp)
+letkf_test(simple3d inflation_mul)

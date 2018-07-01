@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 project(letkf Fortran)
 
 
-# code coverage
+# Testing and code coverage
+#------------------------------------------------------------
+option( ENABLE_TESTS "enable testing suite, including downloading of test data")
 option( ENABLE_CODECOVERAGE "enable code coverage testing support")
 if(ENABLE_CODECOVERAGE)
   add_definitions( -fprofile-arcs -ftest-coverage )
@@ -11,7 +13,6 @@ if(ENABLE_CODECOVERAGE)
 endif(ENABLE_CODECOVERAGE)
 
 
-#------------------------------------------------------------
 # external dependencies
 #------------------------------------------------------------
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
@@ -31,8 +32,7 @@ include_directories(${NETCDF_INCLUDE_DIRS})
 find_package(LAPACK)
 
 
-#------------------------------------------------------------
-# determine the repository version and time
+# determine the repository version 
 #------------------------------------------------------------
 execute_process(COMMAND git describe --dirty --tags --always
   OUTPUT_VARIABLE GIT_VERSION
@@ -44,14 +44,20 @@ if(NOT ${RES} EQUAL "0")
   set(GIT_VERSION "Unknown")
 endif()
 add_definitions(-DCVERSION=\"${GIT_VERSION}\")
-#string(TIMESTAMP TS %Y-%m-%d )
-#add_definitions(-DCTIME=\"${TS}\")
+
 
 
 # subdirectories
 #------------------------------------------------------------
-enable_testing()
 add_subdirectory(pkg)
 add_subdirectory(src)
-add_subdirectory(test)
-add_subdirectory(doc)
+option ( ENABLE_DOCS "Generate documentation")
+if(${ENABLE_DOCS})
+  add_subdirectory(doc)
+endif(${ENABLE_DOCS})
+
+
+if( ${ENABLE_TESTS} )
+  enable_testing()
+  add_subdirectory(test)
+endif(${ENABLE_TESTS})
