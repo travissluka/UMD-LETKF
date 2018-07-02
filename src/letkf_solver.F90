@@ -4,6 +4,7 @@
 MODULE letkf_solver
   USE timing
   use letkf_config
+  USE letkf_diag
   USE letkf_mpi
   USE letkf_loc
   USE letkf_state
@@ -22,13 +23,6 @@ MODULE letkf_solver
 
   PUBLIC :: letkf_solver_init
   PUBLIC :: letkf_solver_run
-
-  ! diagnostics, in ij space
-  !--------------------------------------------------------------------------------
-  REAL, PUBLIC, PROTECTED, ALLOCATABLE :: diag_maxhz(:)
-  REAL, PUBLIC, PROTECTED, ALLOCATABLE :: diag_obs_cnt(:)
-  REAL, PUBLIC, PROTECTED, ALLOCATABLE :: diag_obs_cnt_loc(:)
-
 
   
   !================================================================================
@@ -96,6 +90,14 @@ CONTAINS
 
     call letkf_core_init(ens_size)
 
+    ! initialize the diagnostic fields
+    call letkf_diag_reg("maxhz",&
+         desc="max observation search radius")
+    call letkf_diag_reg("obs_count",&
+         desc="number of observations returned from KD tree")
+    call letkf_diag_reg("obs_count_loc", &
+         desc="sum of localization values for obs within maxhz of gridpoint")
+
   END SUBROUTINE letkf_solver_init
   !================================================================================
 
@@ -106,7 +108,9 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_solver_run()
     ! TODO, a bit messy, get rid of the duplicate "obs_lg" variables
+    real :: maxhz
     INTEGER :: i, idx, ij, lg, slab
+    real :: obs_cnt_loc
     real :: r
     REAL :: max_search_dist
 
@@ -146,12 +150,7 @@ CONTAINS
 
     ! TODO make diag_obs_cnt_loc multidimensional, depending on the max
     ! number of localization groups expected
-    allocate(diag_maxhz(ij_count))
-    ALLOCATE(diag_obs_cnt(ij_count))    
-    ALLOCATE(diag_obs_cnt_loc(ij_count))
-    diag_maxhz = 0.0
-    diag_obs_cnt = 0
-    diag_obs_cnt_loc = 0.0
+!    ALLOCATE(diag_obs_cnt_loc(ij_count))
 
     ! perform analysis at each grid point
     ij_loop: DO ij=1,ij_count
@@ -161,8 +160,9 @@ CONTAINS
        IF(mask_ij(ij)) CYCLE
 
        ! get the max horizontal search distance
-       diag_maxhz(ij) = localizer_class%maxhz(ij)
-       max_search_dist = diag_maxhz(ij) * stdev2max
+       maxhz = localizer_class%maxhz(ij)
+       call letkf_diag_set("maxhz", ij, maxhz)
+       max_search_dist = maxhz * stdev2max
 
        ! search for all observations within a given radius of this point
        ! using a fast O(n log n) kd-tree
@@ -170,7 +170,8 @@ CONTAINS
        CALL letkf_obs_get(lat_ij(ij), lon_ij(ij), max_search_dist, &
             obs_ij_idx, obs_ij_dist, obs_ij_cnt)
        CALL timing_stop("obs_search")
-       diag_obs_cnt(ij) = obs_ij_cnt
+       call letkf_diag_set("obs_count", ij, real(obs_ij_cnt))
+
 
        ! If there are observations found, prepare them
        do i=1,obs_ij_cnt
@@ -195,11 +196,12 @@ CONTAINS
           
           ! localize the obsservations, keeping only the obs with localization > 0.0
           obs_lg_cnt = 0
+          obs_cnt_loc = 0.0          
           obs_loop: do i=1,obs_ij_cnt
              idx=obs_ij_idx(i)
              r = localizer_class%localize(ij, loc_groups(lg), &
                   obs_def(idx), obs_ij_dist(i))
-             diag_obs_cnt_loc(ij) = diag_obs_cnt_loc(ij) + r
+             obs_cnt_loc = obs_cnt_loc + r
 
              if (r > 0.0) then
                 ! this observation will be kept
@@ -213,6 +215,7 @@ CONTAINS
                 obs_lg_rdiag(obs_lg_cnt) = obs_ij_rdiag(i)
              end if
           end do obs_loop
+          call letkf_diag_set("obs_count_loc", ij, obs_cnt_loc)
 
           ! if there are still good quality obs to assimilate, do so
           IF (obs_lg_cnt > 0) THEN

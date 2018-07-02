@@ -4,6 +4,7 @@
 MODULE letkf
   
   use letkf_config
+  USE letkf_diag
   USE letkf_loc
   USE letkf_loc_novrt
   USE letkf_mpi
@@ -15,7 +16,6 @@ MODULE letkf
   USE letkf_state_nc
   USE timing
   USE getmem
-  USE netcdf
 
   IMPLICIT NONE
   PRIVATE
@@ -167,7 +167,7 @@ CONTAINS
     END IF
 
     ! miscellaneous diagnostics from the LETKF solver
-    CALL letkf_write_diag()
+    call letkf_diag_write()
 
     ! ensemble mean, spread
     call letkf_state_write_meansprd("ana")
@@ -200,86 +200,6 @@ CONTAINS
   END SUBROUTINE letkf_register_hook
   !================================================================================
 
-
-
-  !================================================================================
-  !>
-  !--------------------------------------------------------------------------------
-  SUBROUTINE letkf_write_diag()
-    INTEGER :: p
-    REAL, ALLOCATABLE :: tmp_2d_real(:,:)
-    INTEGER :: ncid, d_t, d_x, d_y, vid
-    CALL timing_start("diag_write")
-
-    p=letkf_mpi_nextio()
-    ALLOCATE(tmp_2d_real(grid_nx, grid_ny))
-
-    IF(pe_rank == p) THEN
-       CALL check(nf90_create("letkf.diag.nc", nf90_hdf5, ncid))
-       CALL check(nf90_def_dim(ncid, "time", 1, d_t))
-       CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))
-       CALL check(nf90_def_dim(ncid, "lat", grid_ny ,d_y))
-       CALL check(nf90_def_var(ncid, "maxhz_loc", nf90_real, &
-            (/d_x, d_y/), vid))
-       call check(nf90_put_att(ncid, vid, "description", &
-            "maximum observation search radius used at each gridpoint"))
-       CALL check(nf90_def_var(ncid, "obs_count", nf90_real, &
-            (/d_x, d_y/), vid))
-       call check(nf90_put_att(ncid, vid, "description", &
-            "number of observations returned from the kdtree at each gridpoint, "//&
-            "BEFORE further localization is applied"))
-       CALL check(nf90_def_var(ncid, "obs_count_loc", nf90_real, &
-            (/d_x, d_y/), vid))
-       call check(nf90_put_att(ncid, vid, "description", &
-            "the sum of the localization values for all observations used by a gridpoint. "//&
-            "E.g. with a single observation, the gridbox it is directly over will have 1.0, and "//&
-            "will fade to 0.0 as you move further away."))        
-       CALL check(nf90_enddef(ncid))
-    END IF
-
-    CALL letkf_mpi_ij2grd(p,diag_maxhz, tmp_2d_real)
-    IF(pe_rank == p) then
-       print *, "maxhz_loc",minval(tmp_2d_real), maxval(tmp_2d_real)
-       call check(nf90_inq_varid(ncid, "maxhz_loc", vid))
-       CALL check(nf90_put_var(ncid, vid, tmp_2d_real))
-    end if
-
-    CALL letkf_mpi_ij2grd(p,diag_obs_cnt, tmp_2d_real)
-    IF(pe_rank == p) then
-       print *, "obs_count",minval(tmp_2d_real), maxval(tmp_2d_real)
-       call check(nf90_inq_varid(ncid, "obs_count", vid))
-       CALL check(nf90_put_var(ncid, vid, tmp_2d_real))
-    end if
-
-    CALL letkf_mpi_ij2grd(p,diag_obs_cnt_loc, tmp_2d_real)
-    IF(pe_rank == p) then
-       print *, "obs_count_loc",minval(tmp_2d_real), maxval(tmp_2d_real)
-       call check(nf90_inq_varid(ncid, "obs_count_loc", vid))
-       CALL check(nf90_put_var(ncid, vid, tmp_2d_real))
-    end if
-
-    IF(pe_rank == p) CALL check(nf90_close(ncid))
-
-    CALL timing_stop("diag_write")
-    call letkf_mpi_barrier()
-
-  CONTAINS
-
-    SUBROUTINE check(status, str)
-      INTEGER, INTENT(in) :: status
-      CHARACTER(*), OPTIONAL, INTENT(in) :: str
-
-      IF(status /= nf90_noerr) THEN
-         IF(PRESENT(str)) THEN
-            WRITE (*,*) TRIM(nf90_strerror(status)), ": ", str
-         ELSE
-            WRITE (*,*) TRIM(nf90_strerror(status))
-         END IF
-         CALL letkf_mpi_abort("NetCDF error")
-      END IF
-    END SUBROUTINE check
-  END SUBROUTINE letkf_write_diag
-  !================================================================================
 
   
 END MODULE letkf

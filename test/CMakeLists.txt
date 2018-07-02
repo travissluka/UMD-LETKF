@@ -1,7 +1,7 @@
 # function to check and download test datasets
 function(letkf_data localdir remotefile)
   if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${localdir}")
-    message("Downloading test data file for '${localdir}'...")
+    message(STATUS "Downloading test data file for '${localdir}'...")
     file(
       DOWNLOAD ${remotefile}
       ${CMAKE_CURRENT_BINARY_DIR}/${localdir}.tgz )
