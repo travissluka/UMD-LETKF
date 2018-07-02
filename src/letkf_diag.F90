@@ -20,9 +20,9 @@ MODULE letkf_diag
   !> Linked list node for diagnostic field definition
   !--------------------------------------------------------------------------------
   type :: diag_field
-     character(:), allocatable :: field
-     character(:), allocatable :: units
-     character(:), allocatable :: desc
+     character(len=20) :: field
+     character(len=20) :: units
+     character(len=100):: desc
      real, allocatable ::  val_ij(:)
      type(diag_field), pointer :: next
   end type diag_field
@@ -53,6 +53,8 @@ contains
     allocate(newField)
     newField%field = field
     newField%next => null()
+    newField%units = ""
+    newField%desc = ""
     if(present(units))  newField%units = units
     if(present(desc))   newField%desc  = desc
     allocate(newField%val_ij(ij_count))
@@ -133,8 +135,8 @@ contains
        p=>diag_fields
        do while(associated(p))
           call check(nf90_def_var(ncid, p%field, nf90_real, (/d_x, d_y, d_t/), vid))
-          if(allocated(p%units)) call check(nf90_put_att(ncid, vid, "units", p%units))
-          if(allocated(p%desc))  call check(nf90_put_att(ncid, vid, "long_name", p%desc)) 
+          if(p%units /= "") call check(nf90_put_att(ncid, vid, "units", p%units))
+          if(p%desc /= "")  call check(nf90_put_att(ncid, vid, "long_name", p%desc)) 
           p=>p%next
        end do
 
