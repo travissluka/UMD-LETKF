@@ -10,6 +10,7 @@ set( letkf_lib_srcs
   letkf_diag.F90
   letkf_loc.F90
   letkf_loc_novrt.F90
+  letkf_loc_ocean.F90
   letkf_mpi.F90
   letkf_obs.F90
   letkf_obs_nc.F90

@@ -7,6 +7,7 @@ MODULE letkf
   USE letkf_diag
   USE letkf_loc
   USE letkf_loc_novrt
+  USE letkf_loc_ocean
   USE letkf_mpi
   USE letkf_obs
   USE letkf_obs_nc
@@ -112,6 +113,9 @@ CONTAINS
 
     ! setup the default localizer classes
     ALLOCATE(loc_novrt :: localizer_ptr)
+    CALL letkf_loc_register(localizer_ptr)
+
+    ALLOCATE(loc_ocean :: localizer_ptr)
     CALL letkf_loc_register(localizer_ptr)
 
     CALL timing_stop("pre-init")

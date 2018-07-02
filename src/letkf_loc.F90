@@ -3,7 +3,7 @@
 !!
 !================================================================================
 MODULE letkf_loc
-  use letkf_config
+  USE letkf_config
   USE letkf_mpi
   USE letkf_obs
 
@@ -11,7 +11,6 @@ MODULE letkf_loc
   PRIVATE
 
 
-  
 
   !================================================================================
   !================================================================================
@@ -22,7 +21,7 @@ MODULE letkf_loc
   PUBLIC :: letkf_loc_init
   PUBLIC :: letkf_loc_register
   PUBLIC :: letkf_loc_gc
-  PUBLIC :: letkf_loc_gaus
+  !  PUBLIC :: letkf_loc_gaus
 
 
 
@@ -37,7 +36,7 @@ MODULE letkf_loc
   !================================================================================
 
 
-  
+
   !================================================================================
   !> The abstract base class that all localization specification
   !! classes are to be derived from. Responsible for determining
@@ -61,9 +60,9 @@ MODULE letkf_loc
 
      SUBROUTINE I_letkf_loc_init(self, config)
        IMPORT letkf_localizer
-       import configuration
+       IMPORT configuration
        CLASS(letkf_localizer), INTENT(inout) :: self
-       type(configuration), intent(in) :: config
+       TYPE(configuration), INTENT(in) :: config
      END SUBROUTINE I_letkf_loc_init
 
      SUBROUTINE I_letkf_loc_groups(self, ij, groups)
@@ -71,7 +70,7 @@ MODULE letkf_loc
        IMPORT letkf_localizer_group
        CLASS(letkf_localizer), INTENT(inout)  :: self
        INTEGER, INTENT(in)    :: ij      !< gridpoint index to localize around
-       type(letkf_localizer_group), ALLOCATABLE, INTENT(inout) :: groups(:)
+       TYPE(letkf_localizer_group), ALLOCATABLE, INTENT(inout) :: groups(:)
      END SUBROUTINE I_letkf_loc_groups
 
      FUNCTION I_letkf_loc_maxhz(self, ij) RESULT(dist)
@@ -87,32 +86,49 @@ MODULE letkf_loc
        IMPORT letkf_observation
        CLASS(letkf_localizer),      INTENT(inout) :: self
        INTEGER,                     INTENT(in) :: ij
-       type(letkf_localizer_group), INTENT(in) :: group
+       TYPE(letkf_localizer_group), INTENT(in) :: group
        TYPE(letkf_observation),     INTENT(in) :: obs
-       real,                        INTENT(in) :: dist
+       REAL,                        INTENT(in) :: dist
        REAL :: loc
      END FUNCTION I_letkf_loc_group_localize
   END INTERFACE
   !================================================================================
 
 
-  
+
   !================================================================================
   !> simple wrapper for localizer so that we can have arrays of pointers.
   !--------------------------------------------------------------------------------
   TYPE :: localizer_ptr
      CLASS(letkf_localizer), POINTER :: p
   END TYPE localizer_ptr
-  !================================================================================  
+  !================================================================================
 
 
-  
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  TYPE, PUBLIC :: linearinterp_lat
+     INTEGER :: npoints
+     REAL, ALLOCATABLE :: lat(:)
+     REAL, ALLOCATABLE :: dist(:)
+   CONTAINS
+     PROCEDURE :: get_dist => linearinterp_lat_get_dist
+  END TYPE linearinterp_lat
+  INTERFACE linearinterp_lat
+     MODULE PROCEDURE linearinterp_lat_init
+  END INTERFACE linearinterp_lat
+  !================================================================================
+
+
+
   ! public variables
   !--------------------------------------------------------------------------------
   CLASS(letkf_localizer), PUBLIC, PROTECTED, POINTER :: localizer_class
 
 
-  
+
   !================================================================================
   !================================================================================
   ! Private module components
@@ -132,7 +148,7 @@ CONTAINS
   !> initialize
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_loc_init(config)
-    type(configuration), intent(in) :: config
+    TYPE(configuration), INTENT(in) :: config
 
     INTEGER :: i
     CHARACTER(:), ALLOCATABLE :: loc_class
@@ -155,7 +171,7 @@ CONTAINS
     END IF
 
     ! determine the loc class to use
-    call config%get("class", loc_class)
+    CALL config%get("class", loc_class)
     loc_class=toupper(loc_class)
     NULLIFY(localizer_class)
     DO i=1, localizer_reg_num
@@ -206,8 +222,92 @@ CONTAINS
   END SUBROUTINE letkf_loc_register
   !=================================================================================
 
-  
-    
+
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  FUNCTION linearinterp_lat_init(config_str) RESULT(l)
+    CHARACTER(*), INTENT(IN) :: config_str
+    TYPE(linearinterp_lat) :: l
+
+    INTEGER :: npoints
+    INTEGER :: i, j
+
+    REAL :: lat, dist
+
+    ! determine the number of interp points
+    npoints = 0
+    i=1
+    DO WHILE(i < LEN(config_str))
+       j=i
+       i=SCAN(config_str(j:), "/")+j-2
+       IF(i <j) i = LEN(config_str)
+       i=i+2
+       npoints = npoints+1
+    END DO
+
+    ! allocate space (2 extra in case 0 and 90 not explicitly defined)
+    ALLOCATE(l%lat(npoints+2))
+    ALLOCATE(l%dist(npoints+2))
+    l%npoints=0
+    i=1
+    DO WHILE(i < LEN(config_str))
+       j=i
+       i=SCAN(config_str(j:), "/")+j-2
+       IF(i <j)i = LEN(config_str)
+       READ (config_str(j:i),*) lat, dist
+
+       IF(lat > 0.0 .AND. l%npoints == 0) THEN
+          l%npoints = l%npoints + 1
+          l%lat(1)=0.0
+          l%dist(1)=dist
+       END IF
+       l%npoints = l%npoints+1
+       l%lat(l%npoints) = lat
+       l%dist(l%npoints) = dist
+       i=i+2
+    END DO
+    IF (lat < 90) THEN
+       l%npoints = l%npoints +1
+       l%lat(l%npoints) = 90
+       l%dist(l%npoints) = dist
+    END IF
+  END FUNCTION linearinterp_lat_init
+  !================================================================================
+
+
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  FUNCTION linearinterp_lat_get_dist(self, lat) RESULT(dist)
+    CLASS(linearinterp_lat), INTENT(in) :: self
+    REAL, INTENT(in) :: lat
+    REAL :: dist
+
+    INTEGER :: i
+    REAL :: r
+
+    i=1
+    DO WHILE(ABS(lat) > self%lat(i))
+       i = i+1
+    END DO
+    !dist = self%dist(i-1)
+    !RETURN
+
+    IF(i == 1) THEN
+       dist = self%dist(i)
+    ELSE
+       dist=self%dist(i-1) + (ABS(lat)-self%lat(i-1)) * &
+            (self%dist(i)-self%dist(i-1))/(self%lat(i)-self%lat(i-1))
+    END IF
+
+  END FUNCTION linearinterp_lat_get_dist
+  !================================================================================
+
+
+
   !================================================================================
   !> Gaspari-Cohn localization function.
   !! Possibly faster than the Gaussian function, depending on computer architecture.
@@ -241,19 +341,19 @@ CONTAINS
 
 
 
-  !================================================================================
-  !> Gaussian localization function
-  !--------------------------------------------------------------------------------
-  PURE FUNCTION letkf_loc_gaus(z, L) RESULT(res)
-    REAL, INTENT(in) :: z   !< value to localize
-    REAL, INTENT(in) :: L   !< the gaussian standard deviation
-    REAL :: res
+  ! !================================================================================
+  ! !> Gaussian localization function
+  ! !--------------------------------------------------------------------------------
+  ! PURE FUNCTION letkf_loc_gaus(z, L) RESULT(res)
+  !   REAL, INTENT(in) :: z   !< value to localize
+  !   REAL, INTENT(in) :: L   !< the gaussian standard deviation
+  !   REAL :: res
+  !
+  !   res = EXP( -0.5 *  z*z / (L*L))
+  ! END FUNCTION letkf_loc_gaus
+  ! !================================================================================
+  !
 
-    res = EXP( -0.5 *  z*z / (L*L))
-  END FUNCTION letkf_loc_gaus
-  !================================================================================
-
-  
 
   !================================================================================
   FUNCTION toupper(in_str) RESULT(out_str)
@@ -271,5 +371,5 @@ CONTAINS
   END FUNCTION toupper
   !================================================================================
 
-  
+
 END MODULE letkf_loc
