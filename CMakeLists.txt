@@ -1,16 +1,16 @@
-cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
 project(letkf Fortran)
 
 
 # Testing and code coverage
 #------------------------------------------------------------
-option( ENABLE_TESTS "enable testing suite, including downloading of test data")
-option( ENABLE_CODECOVERAGE "enable code coverage testing support")
-if(ENABLE_CODECOVERAGE)
+option( LETKF_ENABLE_TESTS "enable testing suite, including downloading of test data")
+option( LETKF_ENABLE_CODECOVERAGE "enable code coverage testing support")
+if(LETKF_ENABLE_CODECOVERAGE)
   add_definitions( -fprofile-arcs -ftest-coverage )
   set( CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} --coverage )
-endif(ENABLE_CODECOVERAGE)
+endif()
 
 
 # external dependencies
@@ -51,13 +51,13 @@ add_definitions(-DCVERSION=\"${GIT_VERSION}\")
 #------------------------------------------------------------
 add_subdirectory(pkg)
 add_subdirectory(src)
-option ( ENABLE_DOCS "Generate documentation")
-if(${ENABLE_DOCS})
+option ( LETKF_ENABLE_DOCS "Generate documentation")
+if(${LETKF_ENABLE_DOCS})
   add_subdirectory(doc)
-endif(${ENABLE_DOCS})
+endif()
 
 
-if( ${ENABLE_TESTS} )
+if( ${LETKF_ENABLE_TESTS} )
   enable_testing()
   add_subdirectory(test)
-endif(${ENABLE_TESTS})
+endif()
