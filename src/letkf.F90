@@ -2,8 +2,8 @@
 !> The main LETKF library module
 !================================================================================
 MODULE letkf
-  
-  use letkf_config
+
+  USE letkf_config
   USE letkf_diag
   USE letkf_loc
   USE letkf_loc_novrt
@@ -46,10 +46,10 @@ MODULE letkf
   !================================================================================
   !================================================================================
 
-  type(configuration) :: config
+  TYPE(configuration) :: config
 
 
-  
+
 CONTAINS
 
 
@@ -61,7 +61,7 @@ CONTAINS
   !! localizer classes
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_init(config_filename)
-    character(len=*) :: config_filename !< json configuration file to load
+    CHARACTER(len=*) :: config_filename !< json configuration file to load
 
     ! temprary pointers for initializing and registering the default classes
     CLASS(letkf_obsio),     POINTER :: obsio_ptr
@@ -83,18 +83,18 @@ CONTAINS
        PRINT *, "======================================================================"
        PRINT *, "Universal Multi-Domain Local Ensemble Transform Kalman Filter"
        PRINT *, " (UMD-LETKF)"
-       print *, " version:  ", CVERSION
+       PRINT *, " version:  ", CVERSION
        PRINT *, "======================================================================"
        PRINT *, "======================================================================"
     END IF
 
     ! load in the configuration file
-    if (pe_isroot) then
-       print *, "Using configuration file: " // trim(config_filename)
-       print *, ""
-    end if
+    IF (pe_isroot) THEN
+       PRINT *, "Using configuration file: " // TRIM(config_filename)
+       PRINT *, ""
+    END IF
     letkf_config_log = pe_isroot
-    call letkf_config_loadfile(config_filename, config)
+    CALL letkf_config_loadfile(config_filename, config)
 
 
     ! initialize the rest of MPI
@@ -138,22 +138,22 @@ CONTAINS
     CALL timing_start("init", TIMER_SYNC)
 
     CALL letkf_mpi_init(config%get_child("mpi"))
-    call letkf_mpi_barrier()
+    CALL letkf_mpi_barrier()
 
     CALL letkf_state_init(config%get_child("state"))
-    call letkf_mpi_barrier()
+    CALL letkf_mpi_barrier()
 
     CALL letkf_obs_init(config%get_child("observation"))
-    call letkf_mpi_barrier()
+    CALL letkf_mpi_barrier()
 
     CALL letkf_obs_read()
-    call letkf_mpi_barrier()
+    CALL letkf_mpi_barrier()
 
     CALL letkf_loc_init(config%get_child("localization"))
-    call letkf_mpi_barrier()
+    CALL letkf_mpi_barrier()
 
-    call letkf_solver_init(config%get_child("solver"))
-    call letkf_mpi_barrier()
+    CALL letkf_solver_init(config%get_child("solver"))
+    CALL letkf_mpi_barrier()
 
     CALL timing_stop("init")
 
@@ -171,20 +171,20 @@ CONTAINS
     END IF
 
     ! miscellaneous diagnostics from the LETKF solver
-    call letkf_diag_write()
+    CALL letkf_diag_write()
 
     ! ensemble mean, spread
-    call letkf_state_write_meansprd("ana")
+    CALL letkf_state_write_meansprd("ana")
 
     ! save ensemble members
-    call letkf_state_write_ens()
+    CALL letkf_state_write_ens()
 
     CALL timing_stop("output")
 
 
 
     ! all done
-    call letkf_mpi_barrier()
+    CALL letkf_mpi_barrier()
     CALL timing_print()
     CALL getmem_print()
     CALL letkf_mpi_final()
@@ -205,5 +205,5 @@ CONTAINS
   !================================================================================
 
 
-  
+
 END MODULE letkf

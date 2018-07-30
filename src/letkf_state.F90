@@ -5,7 +5,7 @@
 MODULE letkf_state
   USE timing
   USE mpi
-  use letkf_config
+  USE letkf_config
   USE letkf_mpi
 
   IMPLICIT NONE
@@ -25,9 +25,9 @@ MODULE letkf_state
   PUBLIC :: letkf_state_init
   PUBLIC :: letkf_state_write_ens
   PUBLIC :: letkf_state_write_meansprd
-  public :: letkf_state_var_getdef
-  public :: letkf_state_hzgrid_getdef
-  public :: letkf_state_vtgrid_getdef
+  PUBLIC :: letkf_state_var_getdef
+  PUBLIC :: letkf_state_hzgrid_getdef
+  PUBLIC :: letkf_state_vtgrid_getdef
 
 
 
@@ -40,8 +40,8 @@ MODULE letkf_state
      CHARACTER(len=20)         :: name      !< unique name of the horizontal grid
      REAL,         ALLOCATABLE :: lat(:,:)  !< 2D lattidue grid (in degrees)
      REAL,         ALLOCATABLE :: lon(:,:)  !< 2D longitude grid (in degrees)
-     real,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees)
-     real,         ALLOCATABLE :: lon_nom(:)!< nominal 1D longitude grid (in degrees)
+     REAL,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees)
+     REAL,         ALLOCATABLE :: lon_nom(:)!< nominal 1D longitude grid (in degrees)
      LOGICAL,      ALLOCATABLE :: mask(:,:) !< 2D mask
   END TYPE letkf_hzgrid_spec
   !================================================================================
@@ -58,7 +58,7 @@ MODULE letkf_state
      CHARACTER(len=20)         :: name !< unique name of the vertical grid
      INTEGER                   :: dims !< dimensions of the grid (0, 1, 2, or 3)
      REAL,         ALLOCATABLE :: vert(:,:,:) !< vertical grid
-     real,         ALLOCATABLE :: vert_nom(:) !< nominal 1D vertival grid
+     REAL,         ALLOCATABLE :: vert_nom(:) !< nominal 1D vertival grid
   END TYPE letkf_vtgrid_spec
   !--------------------------------------------------------------------------------
 
@@ -89,7 +89,7 @@ MODULE letkf_state
   !! specific file types should inherit this class
   !--------------------------------------------------------------------------------
   TYPE, ABSTRACT, PUBLIC :: letkf_stateio
-     logical :: verbose = .false.
+     LOGICAL :: verbose = .FALSE.
    CONTAINS
      PROCEDURE(I_letkf_stateio_getstr), NOPASS, DEFERRED :: name
      PROCEDURE(I_letkf_stateio_getstr), NOPASS, DEFERRED :: desc
@@ -107,9 +107,9 @@ MODULE letkf_state
 
      SUBROUTINE I_letkf_stateio_init(self, config)
        IMPORT letkf_stateio
-       import configuration
+       IMPORT configuration
        CLASS(letkf_stateio)             :: self
-       type(configuration), intent(in)  :: config
+       TYPE(configuration), INTENT(in)  :: config
      END SUBROUTINE I_letkf_stateio_init
 
      SUBROUTINE I_letkf_stateio_read_specs(self, hzgrids, vtgrids, statevars)
@@ -254,15 +254,15 @@ CONTAINS
   !! and saved to a file.
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_init(config)
-    type(configuration), intent(in) :: config
+    TYPE(configuration), INTENT(in) :: config
 
-    type(configuration) :: config_ioclass
+    TYPE(configuration) :: config_ioclass
     INTEGER ::  i,  s, n
     CHARACTER(:), ALLOCATABLE :: ioclass
     LOGICAL :: write_bkg_meansprd = .TRUE.
-    logical :: verbose = .false.
+    LOGICAL :: verbose = .FALSE.
 
-    
+
     ! print header
     IF (pe_isroot) THEN
        PRINT '(//A)', ""
@@ -273,9 +273,9 @@ CONTAINS
     END IF
 
     ! read some global configuration settings
-    call config%get("verbose", verbose, default=.false.)
-    if (pe_isroot) print *, "state.verbose=",verbose
-    
+    CALL config%get("verbose", verbose, default=.FALSE.)
+    IF (pe_isroot) PRINT *, "state.verbose=",verbose
+
     ! print a list of all stateio classes that have been registered
     IF (pe_isroot) THEN
        PRINT *, ""
@@ -288,9 +288,9 @@ CONTAINS
     END IF
 
     ! determine the stateio class to use
-    call config%get("ioclass", ioclass)
+    CALL config%get("ioclass", ioclass)
     ioclass = tolower(ioclass)
-    if (pe_isroot) print '(A,A)',  " state.ioclass=",ioclass
+    IF (pe_isroot) PRINT '(A,A)',  " state.ioclass=",ioclass
     NULLIFY(stateio_class)
     DO i=1, stateio_reg_num
        IF (tolower(stateio_reg(i)%p%name()) == ioclass) THEN
@@ -452,7 +452,7 @@ CONTAINS
              CALL timing_start("io_write")
              CALL stateio_class%write_state(mode, &
                   MERGE(ENS_BKG_MEAN, ENS_BKG_SPRD,j==1),&
-                  trim(statevars(i)%name), tmp_r_3d(:,:,:))
+                  TRIM(statevars(i)%name), tmp_r_3d(:,:,:))
              CALL timing_stop("io_write")
 
           END IF
@@ -479,7 +479,10 @@ CONTAINS
 
     CALL timing_start("read_state_specs")
 
+
+    !------------------------------------------------------------------------
     ! Load the grid/state specification
+    !------------------------------------------------------------------------
     IF (pe_isroot) THEN
 
        ! TODO currently only handling the first hzgrid, and first vtgrid,
@@ -487,20 +490,85 @@ CONTAINS
        !TODO, no point keeping the separate lat,lon,mask variables around
        CALL stateio_class%read_specs(hzgrids, vtgrids, statevars)
 
-       ! sanity checks to make sure the data are okay
-       IF (.NOT. ALLOCATED(hzgrids(1)%lat) ) &
-            CALL letkf_mpi_abort("LAT uninitiallized from stateio_class%read_specs()")
-       IF (.NOT. ALLOCATED(hzgrids(1)%lon) ) &
-            CALL letkf_mpi_abort("LON uninitiallized from stateio_class%read_specs()")
-       IF (.NOT. ALLOCATED(hzgrids(1)%mask) ) &
-            CALL letkf_mpi_abort("MASK uninitiallized from stateio_class%read_specs()")
-       DO i=1,2
-          IF ((SIZE(hzgrids(1)%lat, dim=i)/=SIZE(hzgrids(1)%lon,dim=i)) .OR. &
-               (SIZE(hzgrids(1)%lat,dim=i)/=SIZE(hzgrids(1)%mask, dim=i)))  THEN
-             CALL letkf_mpi_abort("LAT,LON,MASK must have same shapes "//&
-                  "from stateio_class%read_specs()")
-          END IF
+
+       ! Check the horizontal grid, print summary of grid stats
+       !------------------------------------------------------------------------
+       IF (.NOT. ALLOCATED(hzgrids) )&
+            CALL letkf_mpi_abort('"HZGRIDS" was not allocated by state_io class.')
+
+       DO i=1,SIZE(hzgrids)
+          IF (.NOT. ALLOCATED(hzgrids(i)%lat) ) &
+               CALL letkf_mpi_abort("LAT uninitiallized from stateio_class%read_specs()")
+          IF (.NOT. ALLOCATED(hzgrids(i)%lon) ) &
+               CALL letkf_mpi_abort("LON uninitiallized from stateio_class%read_specs()")
+          IF (.NOT. ALLOCATED(hzgrids(i)%mask) ) &
+               CALL letkf_mpi_abort("MASK uninitiallized from stateio_class%read_specs()")
+          DO j=1,2
+             IF ((SIZE(hzgrids(i)%lat, dim=j)/=SIZE(hzgrids(i)%lon,dim=j)) .OR. &
+                  (SIZE(hzgrids(i)%lat,dim=j)/=SIZE(hzgrids(i)%mask,dim=j)))  THEN
+                CALL letkf_mpi_abort("LAT,LON,MASK must have same shapes "//&
+                     "from stateio_class%read_specs()")
+             END IF
+          END DO
+          IF (.NOT. ALLOCATED(hzgrids(i)%lat_nom)) &
+               CALL letkf_mpi_abort("LAT_NOM uninitialized from stateio_class%read_specs()")
+          IF (.NOT. ALLOCATED(hzgrids(i)%lon_nom)) &
+               CALL letkf_mpi_abort("LON_NOM uninitialized from stateio_class%read_specs()")
+          !TODO, create nominal lat/lon if not already given
        END DO
+
+       PRINT *, ""
+       PRINT *, "Horizontal grids summary"
+       PRINT *, "----------------------------------------"
+       DO i=1,SIZE(hzgrids)
+          PRINT *, "Name: ", hzgrids(i)%name
+          PRINT "(X,A,I12)", " grid_nx:    ", SIZE(hzgrids(i)%lat, dim=1)
+          PRINT "(X,A,I12)", " grid_ny:    ", SIZE(hzgrids(i)%lat, dim=2)
+          PRINT "(X,A,I12)", " grid total: ", SIZE(hzgrids(i)%lat)
+          PRINT "(X,A,I12,A,F4.1,A)", " grid masked:", COUNT(hzgrids(i)%mask), &
+               " (",REAL(COUNT(hzgrids(i)%mask)*100) / REAL(SIZE(hzgrids(i)%lat)),"%)"
+          PRINT *, " lat range: ", MINVAL(hzgrids(i)%lat), MAXVAL(hzgrids(i)%lat)
+          PRINT *, " lon range: ", MINVAL(hzgrids(i)%lon), MAXVAL(hzgrids(i)%lon)
+          PRINT *, ""
+       END DO
+
+
+       ! check vertical grids, print summary of grid stats
+       !------------------------------------------------------------------------
+       IF (.NOT. ALLOCATED(vtgrids)) &
+            CALL letkf_mpi_abort('"vtgrids" not allocated by stateio_class')
+
+       DO i=1,SIZE(vtgrids)
+          ! TODO check name
+          IF(.NOT. ALLOCATED(vtgrids(i)%vert)) &
+               CALL letkf_mpi_abort('VERT not defined for vtgrid "'//&
+               TRIM(vtgrids(i)%name)//'"')
+          IF(.NOT. ALLOCATED(vtgrids(i)%vert_nom)) &
+               CALL letkf_mpi_abort('VERT_NOM not defined for vtgrid "'//&
+               TRIM(vtgrids(i)%name)//'"')
+       END DO
+
+       PRINT *, ""
+       PRINT *, "Vertical grids summary"
+       PRINT *, "----------------------------------------"
+       DO i=1,SIZE(vtgrids)
+          PRINT *, "Name: ", vtgrids(i)%name
+          PRINT *, " dims:", vtgrids(i)%dims
+          IF (vtgrids(i)%dims == 1) THEN
+             PRINT *, " size:", SIZE(vtgrids(i)%vert, dim=1)
+          ELSE
+             CALL letkf_mpi_abort("Not yet implemented")
+          END IF
+          PRINT *, " range: ", MINVAL(vtgrids(i)%vert), MAXVAL(vtgrids(i)%vert)
+          PRINT *, ""
+       END DO
+
+
+       ! check state vars
+       !------------------------------------------------------------------------
+       IF (.NOT. ALLOCATED(statevars)) &
+            CALL letkf_mpi_abort('"statevars" not allocated by stateio_class')
+
 
        ! TODO make sure all the names are uppercase
 
@@ -517,12 +585,26 @@ CONTAINS
              END IF
           END DO
           IF (j > SIZE(vtgrids)) THEN
-             call letkf_mpi_abort('vertical grid "'//trim(statevars(i)%vtgrid)//&
-                  '" not found. Needed for "'//trim(statevars(i)%name)//'".')
+             CALL letkf_mpi_abort('vertical grid "'//TRIM(statevars(i)%vtgrid)//&
+                  '" not found. Needed for state variable "'//&
+                  TRIM(statevars(i)%name)//'".')
              STOP 1
           END IF
           grid_ns = grid_ns + statevars(i)%levels
        END DO
+
+       PRINT *, ""
+       PRINT *, "State variables summary"
+       PRINT *, "----------------------------------------"
+       DO i=1,SIZE(statevars)
+          PRINT *, 'Name: "', TRIM(statevars(i)%name),'"'
+          PRINT *, ' hz grid: "', TRIM(statevars(i)%hzgrid),'"'
+          PRINT *, ' vt grid: "', TRIM(statevars(i)%vtgrid),'"'
+          PRINT '(X,A,I0,A,I0)', ' slabs:    ',statevars(i)%grid_s_idx,' to ',&
+               statevars(i)%grid_s_idx+statevars(i)%levels-1
+          PRINT *, ""
+       END DO
+
 
        ! get the overall horizontal grid dimensions
        ! TODO use the actually specified hz and vt grids
@@ -530,6 +612,11 @@ CONTAINS
        grid_ny = SIZE(hzgrids(1)%lat,dim=2)
     END IF
 
+
+
+    !---------------------------------------------------------------------------
+    ! Scatter the grid data and variable definitions
+    !---------------------------------------------------------------------------
 
     ! broadcast general grid information to all PEs
     CALL mpi_bcast(grid_nx, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
@@ -549,16 +636,16 @@ CONTAINS
             letkf_mpi_comm, ierr)
 
        ! send nominal latitude
-       if(pe_isroot) j=size(hzgrids(i)%lat_nom)
-       call mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
-       if(.not. pe_isroot) allocate(hzgrids(i)%lat_nom(j))
-       call mpi_bcast(hzgrids(i)%lat_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
+       IF(pe_isroot) j=SIZE(hzgrids(i)%lat_nom)
+       CALL mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
+       IF(.NOT. pe_isroot) ALLOCATE(hzgrids(i)%lat_nom(j))
+       CALL mpi_bcast(hzgrids(i)%lat_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
 
        ! send nominal longitude
-       if(pe_isroot) j=size(hzgrids(i)%lon_nom)
-       call mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
-       if(.not. pe_isroot) allocate(hzgrids(i)%lon_nom(j))
-       call mpi_bcast(hzgrids(i)%lon_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
+       IF(pe_isroot) j=SIZE(hzgrids(i)%lon_nom)
+       CALL mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
+       IF(.NOT. pe_isroot) ALLOCATE(hzgrids(i)%lon_nom(j))
+       CALL mpi_bcast(hzgrids(i)%lon_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
 
        ! TODO, initializing with 0 size on non root nodes to silence gfortran
        ! runtime debug errors. Do I ever need the full 2d grid on other PEs?
@@ -578,26 +665,6 @@ CONTAINS
     CALL letkf_mpi_grd2ij(pe_root, hzgrids(1)%lon, lon_ij)
     CALL letkf_mpi_grd2ij(pe_root, hzgrids(1)%mask, mask_ij)
 
-
-    ! print summary of horizontal grids
-    IF (pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "Horizontal grids summary"
-       PRINT *, "----------------------------------------"
-       DO i=1,SIZE(hzgrids)
-          PRINT *, "Name: ", hzgrids(i)%name
-          PRINT "(X,A,I12)", " grid_nx:    ", grid_nx
-          PRINT "(X,A,I12)", " grid_ny:    ", grid_ny
-          PRINT "(X,A,I12)", " grid total: ", grid_nx*grid_ny
-          PRINT "(X,A,I12,A,F4.1,A)", " grid masked:", COUNT(hzgrids(i)%mask), &
-               " (",REAL(COUNT(hzgrids(i)%mask)*100) / REAL(grid_nx*grid_ny),"%)"
-          PRINT *, " lat range: ", MINVAL(hzgrids(i)%lat), MAXVAL(hzgrids(i)%lat)
-          PRINT *, " lon range: ", MINVAL(hzgrids(i)%lon), MAXVAL(hzgrids(i)%lon)
-          PRINT *, ""
-       END DO
-    END IF
-
-
     ! broadcast vertical grid specs to all mpi PEs
     IF (pe_isroot) i=SIZE(vtgrids)
     CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
@@ -615,36 +682,14 @@ CONTAINS
 
        ! send nominal vertical grid
        ! send nominal longitude
-       if(pe_isroot) j=size(vtgrids(i)%vert_nom)
-       call mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
-       if(.not. pe_isroot) allocate(vtgrids(i)%vert_nom(j))
-       call mpi_bcast(vtgrids(i)%vert_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
+       IF(pe_isroot) j=SIZE(vtgrids(i)%vert_nom)
+       CALL mpi_bcast(j, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
+       IF(.NOT. pe_isroot) ALLOCATE(vtgrids(i)%vert_nom(j))
+       CALL mpi_bcast(vtgrids(i)%vert_nom, j, mpi_real, pe_root, letkf_mpi_comm, ierr)
 
     END DO
 
 
-    ! print summary of grids
-    IF (pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "Vertical grids summary"
-       PRINT *, "----------------------------------------"
-       DO i=1,SIZE(vtgrids)
-          PRINT *, "Name: ", vtgrids(i)%name
-          PRINT *, " dims:", vtgrids(i)%dims
-          IF (vtgrids(i)%dims == 1) THEN
-             PRINT *, " size:", SIZE(vtgrids(i)%vert, dim=1)
-          ELSE
-             CALL letkf_mpi_abort("Not yet implemented")
-          END IF
-          PRINT *, " range: ", MINVAL(vtgrids(i)%vert), MAXVAL(vtgrids(i)%vert)
-          PRINT *, ""
-       END DO
-    END IF
-
-
-
-    ! Load the state variable specifications
-    !---------------------------------------------------------------------------
     ! broadcast the state variable definitions
     IF (pe_isroot) i=SIZE(statevars)
     CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
@@ -662,20 +707,6 @@ CONTAINS
             pe_root, letkf_mpi_comm, ierr)
     END DO
 
-    ! print out stats
-    IF (pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "State variables summary"
-       PRINT *, "----------------------------------------"
-       DO i=1,SIZE(statevars)
-          PRINT *, 'Name: "', TRIM(statevars(i)%name),'"'
-          PRINT *, ' hz grid: "', TRIM(statevars(i)%hzgrid),'"'
-          PRINT *, ' vt grid: "', TRIM(statevars(i)%vtgrid),'"'
-          PRINT '(X,A,I0,A,I0)', ' slab:    ',statevars(i)%grid_s_idx,' to ',&
-               statevars(i)%grid_s_idx+statevars(i)%levels-1
-          PRINT *, ""
-       END DO
-    END IF
 
     CALL timing_stop("read_state_specs")
 
@@ -690,88 +721,88 @@ CONTAINS
   !> Writes the state ensemble in parallel
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_write_ens()
-    integer :: i, j, k, p, s, tag, sends_num, recvs_num, ierr
-    integer, allocatable :: recvs(:), sends(:)
-    real, allocatable :: tmp_r_3d(:,:,:)
-    integer :: pe_ens_io(ens_size)
+    INTEGER :: i, j, k, p, s, tag, sends_num, recvs_num, ierr
+    INTEGER, ALLOCATABLE :: recvs(:), sends(:)
+    REAL, ALLOCATABLE :: tmp_r_3d(:,:,:)
+    INTEGER :: pe_ens_io(ens_size)
 
-    if(pe_isroot) print '(/,X,A)', "Writing analysis ensemble members..."
-    call timing_start("write_ens", TIMER_SYNC)
+    IF(pe_isroot) PRINT '(/,X,A)', "Writing analysis ensemble members..."
+    CALL timing_start("write_ens", TIMER_SYNC)
 
 
     ! determine who does the IO
-    do i=1,ens_size
+    DO i=1,ens_size
        pe_ens_io(i) = letkf_mpi_nextio()
-    end do
+    END DO
 
     !initialize output files
-    do i=1,ens_size
-       if (pe_ens_io(i) == pe_rank) &
-            call stateio_class%write_init('ana', i)
-    end do
+    DO i=1,ens_size
+       IF (pe_ens_io(i) == pe_rank) &
+            CALL stateio_class%write_init('ana', i)
+    END DO
 
 
     ! initialize all the sends
-    allocate(sends(grid_ns*ens_size))
+    ALLOCATE(sends(grid_ns*ens_size))
     sends_num=0
-    do j=1,ens_size
+    DO j=1,ens_size
        s=0
-       do i=1,size(statevars)
-          do k=1,statevars(i)%levels
+       DO i=1,SIZE(statevars)
+          DO k=1,statevars(i)%levels
              s = s + 1
              tag = k-1+statevars(i)%grid_s_idx + (j-1)*grid_ns
              sends_num = sends_num + 1
-             call mpi_isend(state_ij(j,s,1), ij_count, mpitype_grid_nk_ns, &
+             CALL mpi_isend(state_ij(j,s,1), ij_count, mpitype_grid_nk_ns, &
                   pe_ens_io(j), tag, letkf_mpi_comm, sends(sends_num), ierr)
-          end do
-       end do
-    end do
+          END DO
+       END DO
+    END DO
 
     ! initialize all the receives
-    allocate(recvs(grid_ns*pe_size))
-    do j=1,ens_size
-       do i=1,size(statevars)
-          call timing_start("io_write")
-          call timing_stop("io_write")
-          call timing_start("mpi_gather")
-          call timing_stop("mpi_gather")
+    ALLOCATE(recvs(grid_ns*pe_size))
+    DO j=1,ens_size
+       DO i=1,SIZE(statevars)
+          CALL timing_start("io_write")
+          CALL timing_stop("io_write")
+          CALL timing_start("mpi_gather")
+          CALL timing_stop("mpi_gather")
 
-          if (pe_ens_io(j) == pe_rank) then
-             call timing_start("mpi_gather")
-             if (allocated(tmp_r_3d)) deallocate(tmp_r_3d)
-             allocate(tmp_r_3d(grid_nx, grid_ny, statevars(i)%levels))
+          IF (pe_ens_io(j) == pe_rank) THEN
+             CALL timing_start("mpi_gather")
+             IF (ALLOCATED(tmp_r_3d)) DEALLOCATE(tmp_r_3d)
+             ALLOCATE(tmp_r_3d(grid_nx, grid_ny, statevars(i)%levels))
              recvs_num =0
 
              ! initialize the receives for this variable
-             do p=0, pe_size-1
-                do k=1, statevars(i)%levels
+             DO p=0, pe_size-1
+                DO k=1, statevars(i)%levels
                    recvs_num = recvs_num +1
                    tag=k-1+statevars(i)%grid_s_idx + (j-1)*grid_ns
-                   call mpi_irecv(tmp_r_3d(p+1,1,k), ij_count_pe(p), &
+                   CALL mpi_irecv(tmp_r_3d(p+1,1,k), ij_count_pe(p), &
                         mpitype_grid_nxy_real, p, tag, letkf_mpi_comm, &
                         recvs(recvs_num), ierr)
-                end do
-             end do
+                END DO
+             END DO
 
              ! wait for the receives to finish
-             call mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
-             call timing_stop("mpi_gather")
+             CALL mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
+             CALL timing_stop("mpi_gather")
 
 
              ! write out to file
-             call timing_start("io_write")
+             CALL timing_start("io_write")
              ! TODO add verbose output
-             call stateio_class%write_state(&
-                  'ana', j, trim(statevars(i)%name), tmp_r_3d)
-             call timing_stop("io_write")
+             CALL stateio_class%write_state(&
+                  'ana', j, TRIM(statevars(i)%name), tmp_r_3d)
+             CALL timing_stop("io_write")
 
-          end if
-       end do
-    end do
+          END IF
+       END DO
+    END DO
 
     ! wait for the sends to finish
-    call mpi_waitall(sends_num, sends, MPI_STATUSES_IGNORE, ierr)
-    call timing_stop("write_ens")
+    CALL mpi_waitall(sends_num, sends, MPI_STATUSES_IGNORE, ierr)
+    CALL timing_stop("write_ens")
 
   END SUBROUTINE letkf_state_write_ens
   !> \endcond
@@ -831,7 +862,11 @@ CONTAINS
 
           ! read the file
           CALL timing_start("io_read")
-          IF(do_send) CALL stateio_class%read_state(j, statevars(i)%name, tmp_r_3d)
+          IF(do_send) THEN
+             CALL stateio_class%read_state(j, statevars(i)%name, tmp_r_3d)
+             IF(.NOT. ALLOCATED(tmp_r_3d)) &
+                  CALL letkf_mpi_abort("no data returned from stateio_class%read_state()")
+          END IF
           CALL timing_stop("io_read")
 
           ! scatter the variable
@@ -909,24 +944,24 @@ CONTAINS
   !================================================================================
   !> Get horizontal grid definition
   !--------------------------------------------------------------------------------
-  function letkf_state_hzgrid_getdef(name) result(res)
-    character(len=*), intent(in) :: name
-    type(letkf_hzgrid_spec) :: res
+  FUNCTION letkf_state_hzgrid_getdef(name) RESULT(res)
+    CHARACTER(len=*), INTENT(in) :: name
+    TYPE(letkf_hzgrid_spec) :: res
 
-    character(:), allocatable :: name0
-    integer :: i
+    CHARACTER(:), ALLOCATABLE :: name0
+    INTEGER :: i
 
     ! TODO, convert to upper, but make sure all the other instances
     ! are already in uppercase
     !    name0 = trim(toupper(name))
-    name0 = trim(name)
-    do i=1,size(hzgrids)
-       if(hzgrids(i)%name == name0) exit
-    end do
-    if (i > size(hzgrids)) &
-         call letkf_mpi_abort("hzgrid definition for '"//name0//"' not found")
+    name0 = TRIM(name)
+    DO i=1,SIZE(hzgrids)
+       IF(hzgrids(i)%name == name0) EXIT
+    END DO
+    IF (i > SIZE(hzgrids)) &
+         CALL letkf_mpi_abort("hzgrid definition for '"//name0//"' not found")
     res = hzgrids(i)
-  end function letkf_state_hzgrid_getdef
+  END FUNCTION letkf_state_hzgrid_getdef
   !================================================================================
 
 
@@ -934,24 +969,24 @@ CONTAINS
   !================================================================================
   !> get vertical grid definition
   !--------------------------------------------------------------------------------
-  function letkf_state_vtgrid_getdef(name) result(res)
-    character(len=*), intent(in) :: name
-    type(letkf_vtgrid_spec) :: res
+  FUNCTION letkf_state_vtgrid_getdef(name) RESULT(res)
+    CHARACTER(len=*), INTENT(in) :: name
+    TYPE(letkf_vtgrid_spec) :: res
 
-    character(:), allocatable :: name0
-    integer :: i
+    CHARACTER(:), ALLOCATABLE :: name0
+    INTEGER :: i
 
     ! TODO, convert to upper, but make sure all the other instances
     ! are already in uppercase
     !    name0 = trim(toupper(name))
-    name0 = trim(name)
-    do i=1,size(vtgrids)
-       if(vtgrids(i)%name == name0) exit
-    end do
-    if (i > size(vtgrids)) &
-         call letkf_mpi_abort("vtgrid definition for '"//name0//"' not found")
+    name0 = TRIM(name)
+    DO i=1,SIZE(vtgrids)
+       IF(vtgrids(i)%name == name0) EXIT
+    END DO
+    IF (i > SIZE(vtgrids)) &
+         CALL letkf_mpi_abort("vtgrid definition for '"//name0//"' not found")
     res = vtgrids(i)
-  end function letkf_state_vtgrid_getdef
+  END FUNCTION letkf_state_vtgrid_getdef
   !================================================================================
 
 
@@ -959,24 +994,24 @@ CONTAINS
   !================================================================================
   !> Get state variable definition
   !--------------------------------------------------------------------------------
-  function letkf_state_var_getdef(name) result(res)
-    character(len=*), intent(in) :: name
-    type(letkf_statevar_spec) :: res
+  FUNCTION letkf_state_var_getdef(name) RESULT(res)
+    CHARACTER(len=*), INTENT(in) :: name
+    TYPE(letkf_statevar_spec) :: res
 
-    character(:), allocatable :: name0
-    integer :: i
+    CHARACTER(:), ALLOCATABLE :: name0
+    INTEGER :: i
 
     ! TODO, convert to upper, but make sure all the other instances
     ! are already in uppercase
     !    name0 = trim(toupper(name))
-    name0 = trim(name)
-    do i=1,size(statevars)
-       if(statevars(i)%name == name0) exit
-    end do
-    if (i > size(statevars)) &
-         call letkf_mpi_abort("state definition for variable '"//name0//"' not found")
+    name0 = TRIM(name)
+    DO i=1,SIZE(statevars)
+       IF(statevars(i)%name == name0) EXIT
+    END DO
+    IF (i > SIZE(statevars)) &
+         CALL letkf_mpi_abort("state definition for variable '"//name0//"' not found")
     res = statevars(i)
-  end function letkf_state_var_getdef
+  END FUNCTION letkf_state_var_getdef
   !================================================================================
 
 
