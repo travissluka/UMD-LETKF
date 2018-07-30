@@ -1,6 +1,6 @@
-[submodule "pkg/geoKdTree"]
-	path = pkg/geoKdTree
+[submodule "dep/geoKdTree"]
+	path = dep/geoKdTree
 	url = https://github.com/travissluka/geoKdTree.git
-[submodule "pkg/fson"]
-	path = pkg/fson
+[submodule "dep/fson"]
+	path = dep/fson
 	url = https://github.com/josephalevin/fson.git
