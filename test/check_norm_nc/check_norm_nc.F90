@@ -1,97 +1,97 @@
-program check_norm_nc
-  use netcdf
-  implicit none
-  
-  character(len=1024) :: file1, file2, str
-  real :: max_norm
+PROGRAM check_norm_nc
+  USE netcdf
+  IMPLICIT NONE
 
-  integer :: i, j, s(4)
-  integer :: nc1, nc2
-  integer :: ndim1, ndim2, nvar1, nvar2
-  integer, allocatable :: dimlen1(:), dimlen2(:)
-  integer :: dimids1(NF90_MAX_VAR_DIMS), dimids2(NF90_MAX_VAR_DIMS)
-  real, allocatable :: tmpr1(:,:,:,:), tmpr2(:,:,:,:)
-  real :: n
+  CHARACTER(len=1024) :: file1, file2, str
+  REAL :: max_norm
 
-  
-  call get_command_argument(1, file1)
-  call get_command_argument(2, file2)
-  call get_command_argument(3, str)
-  read (str, *) max_norm
+  INTEGER :: i, j, s(4)
+  INTEGER :: nc1, nc2
+  INTEGER :: ndim1, ndim2, nvar1, nvar2
+  INTEGER, ALLOCATABLE :: dimlen1(:), dimlen2(:)
+  INTEGER :: dimids1(NF90_MAX_VAR_DIMS), dimids2(NF90_MAX_VAR_DIMS)
+  REAL, ALLOCATABLE :: tmpr1(:,:,:,:), tmpr2(:,:,:,:)
+  REAL :: n
 
-  
-  call check(nf90_open(file1, nf90_nowrite, nc1))
-  call check(nf90_open(file2, nf90_nowrite, nc2))
+
+  CALL get_command_ARGUMENT(1, file1)
+  CALL get_command_ARGUMENT(2, file2)
+  CALL get_command_ARGUMENT(3, str)
+  READ (str, *) max_norm
+
+
+  CALL check(nf90_open(file1, nf90_nowrite, nc1))
+  CALL check(nf90_open(file2, nf90_nowrite, nc2))
 
   ! check the dimensions
-  call check(nf90_inquire(nc1, ndim1, nvar1))
-  call check(nf90_inquire(nc2, ndim2, nvar2))
-  if(ndim1 /= ndim2) then
-     print *, "ndim mismatch"
-     stop 1
-  end if
-  allocate( dimlen1(ndim1), dimlen2(ndim2) )
-  do i =1, ndim1
+  CALL check(nf90_inquire(nc1, ndim1, nvar1))
+  CALL check(nf90_inquire(nc2, ndim2, nvar2))
+  IF(ndim1 /= ndim2) THEN
+     PRINT *, "ndim mismatch"
+     STOP 1
+  END IF
+  ALLOCATE( dimlen1(ndim1), dimlen2(ndim2) )
+  DO i =1, ndim1
      ! check lengths
-     call check(nf90_inquire_dimension(nc1, i, len=dimlen1(i)))
-     call check(nf90_inquire_dimension(nc2, i, len=dimlen2(i)))
-     if(dimlen1(i) /= dimlen2(i)) then
-        print *, "dim length mismatch"
-        stop 1
-     end if
+     CALL check(nf90_inquire_dimension(nc1, i, len=dimlen1(i)))
+     CALL check(nf90_inquire_dimension(nc2, i, len=dimlen2(i)))
+     IF(dimlen1(i) /= dimlen2(i)) THEN
+        PRINT *, "dim length mismatch"
+        STOP 1
+     END IF
      ! TODO: check name
      ! TODO: check attributes
-  end do
+  END DO
 
-  
+
   ! check the variables
-  if(nvar1 /= nvar2) then
-     print *, "nvar mismatch"
-     stop 1
-  end if
-  do i = 1, nvar1
+  IF(nvar1 /= nvar2) THEN
+     PRINT *, "nvar mismatch"
+     STOP 1
+  END IF
+  DO i = 1, nvar1
      ! dimension lengths
-     call check(nf90_inquire_variable(nc1, i, ndims=ndim1))
-     call check(nf90_inquire_variable(nc2, i, ndims=ndim2))
-     if(ndim1 /= ndim2) then
-        print *, "dimension length of variable do not match"
-        stop 1
-     end if
+     CALL check(nf90_inquire_variable(nc1, i, ndims=ndim1))
+     CALL check(nf90_inquire_variable(nc2, i, ndims=ndim2))
+     IF(ndim1 /= ndim2) THEN
+        PRINT *, "dimension length of variable do not match"
+        STOP 1
+     END IF
 
      ! dimension ids
-     call check(nf90_inquire_variable(nc1, i, dimids=dimids1))
-     call check(nf90_inquire_variable(nc2, i, dimids=dimids2))
+     CALL check(nf90_inquire_variable(nc1, i, dimids=dimids1))
+     CALL check(nf90_inquire_variable(nc2, i, dimids=dimids2))
 
      ! variable size
-     s=1     
-     do j=1,ndim1
+     s=1
+     DO j=1,ndim1
         s(j) = dimlen1(dimids1(j))
-     end do
+     END DO
 
      ! variable value
-     allocate(tmpr1(s(1),s(2),s(3),s(4)))
-     allocate(tmpr2(s(1),s(2),s(3),s(4)))     
-     call check(nf90_get_var(nc1,i, tmpr1))
-     call check(nf90_get_var(nc2,i, tmpr2))
-     n = maxval((tmpr1-tmpr2)*(tmpr1-tmpr2))
-     if(n>max_norm) then
-        print *, "max difference of ",n
-        stop 1
-     end if
-     deallocate(tmpr1, tmpr2)
-  end do
+     ALLOCATE(tmpr1(s(1),s(2),s(3),s(4)))
+     ALLOCATE(tmpr2(s(1),s(2),s(3),s(4)))
+     CALL check(nf90_get_var(nc1,i, tmpr1))
+     CALL check(nf90_get_var(nc2,i, tmpr2))
+     n = MAXVAL((tmpr1-tmpr2)*(tmpr1-tmpr2))
+     IF(n>max_norm) THEN
+        PRINT *, "max difference of ",n
+        STOP 1
+     END IF
+     DEALLOCATE(tmpr1, tmpr2)
+  END DO
 
-  
-contains
 
-  
-  subroutine check(status)
-    integer, intent(in) :: status
-    
-    if(status /= nf90_noerr) then
-       write (*,*) trim(nf90_strerror(status))
-       stop 100
-    end if
-  end subroutine check
-  
-end program check_norm_nc
+CONTAINS
+
+
+  SUBROUTINE check(status)
+    INTEGER, INTENT(in) :: status
+
+    IF(status /= nf90_noerr) THEN
+       WRITE (*,*) TRIM(nf90_strerror(status))
+       STOP 100
+    END IF
+  END SUBROUTINE check
+
+END PROGRAM check_norm_nc

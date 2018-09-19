@@ -3,7 +3,7 @@
 !================================================================================
 MODULE letkf_obs_nc
   USE netcdf
-  use letkf_config
+  USE letkf_config
   USE letkf_obs
   USE letkf_mpi
 
@@ -20,7 +20,7 @@ MODULE letkf_obs_nc
   !> observation file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_nc
-     logical :: read_inc
+     LOGICAL :: read_inc
    CONTAINS
      PROCEDURE, NOPASS :: name => obsio_nc_get_name
      PROCEDURE, NOPASS :: desc => obsio_nc_get_desc
@@ -37,7 +37,7 @@ MODULE letkf_obs_nc
   ! Private module components
   !================================================================================
   !================================================================================
-  
+
   !> filename from which the observation files are read
   CHARACTER(:), ALLOCATABLE :: filename_obs
 
@@ -50,7 +50,7 @@ CONTAINS
 
 
 
-  !================================================================================ 
+  !================================================================================
   !> Get the unique name of the observation I/O class
   !! @param name short (less than ~10 character) class name
   !--------------------------------------------------------------------------------
@@ -82,7 +82,7 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_init(self, config)
     CLASS(obsio_nc) :: self
-    type(configuration), intent(in) :: config
+    TYPE(configuration), INTENT(in) :: config
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -91,14 +91,14 @@ CONTAINS
     END IF
 
     ! load in our section of the namelist
-    call config%get("filename_obs", filename_obs)
-    call config%get("filename_obshx", filename_obs_hx)
-    call config%get("read_inc", self%read_inc)
-    if(pe_isroot) then
-       print '(A,A)', " filename_obs=",filename_obs
-       print '(A,A)', " filename_obshx=",filename_obs_hx
-       print *, "read_inc=",self%read_inc
-    end if
+    CALL config%get("filename_obs", filename_obs)
+    CALL config%get("filename_obshx", filename_obs_hx)
+    CALL config%get("read_inc", self%read_inc)
+    IF(pe_isroot) THEN
+       PRINT '(A,A)', " filename_obs=",filename_obs
+       PRINT '(A,A)', " filename_obshx=",filename_obs_hx
+       PRINT *, "read_inc=",self%read_inc
+    END IF
   END SUBROUTINE obsio_nc_init
   !================================================================================
 
@@ -209,7 +209,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !> Read the observation operator output for a single ensemble member.
   !! @param ensmem ensemble member number to load in
@@ -219,7 +219,7 @@ CONTAINS
     CLASS(obsio_nc) :: self
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(out) :: hx(:)
-    real, allocatable :: val(:)
+    REAL, ALLOCATABLE :: val(:)
 
     LOGICAL :: ex
     INTEGER :: ncid, dimid, varid
@@ -261,8 +261,8 @@ CONTAINS
 
     ALLOCATE(hx(n))
 
-    if(self%read_inc) then
-       allocate(val(n))
+    IF(self%read_inc) THEN
+       ALLOCATE(val(n))
        CALL check( nf90_inq_varid(ncid, "val", varid), &
             '"val" in'//filename )
        CALL check( nf90_get_var(ncid, varid, val) )
@@ -270,17 +270,17 @@ CONTAINS
             '"inc" in'//filename )
        CALL check( nf90_get_var(ncid, varid, hx) )
        hx = hx + val
-       deallocate(val)
-    else
+       DEALLOCATE(val)
+    ELSE
        CALL check( nf90_inq_varid(ncid, "hx", varid), &
             '"hx" in'//filename )
        CALL check( nf90_get_var(ncid, varid, hx) )
-    end if
+    END IF
 
     CALL check( nf90_close(ncid))
   END SUBROUTINE obsio_nc_read_hx
   !================================================================================
-  
+
 
 
   !================================================================================
@@ -288,18 +288,18 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE check(status, str)
     INTEGER, INTENT(in) :: status
-    character(*), optional, intent(in) :: str
+    CHARACTER(*), OPTIONAL, INTENT(in) :: str
 
     IF(status /= nf90_noerr) THEN
-       if (present(str)) then
+       IF (PRESENT(str)) THEN
           WRITE (*,*) TRIM(nf90_strerror(status)), ": ",str
-       else
+       ELSE
           WRITE (*,*) TRIM(nf90_strerror(status))
-       end if
+       END IF
        CALL letkf_mpi_abort("NetCDF error")
     END IF
   END SUBROUTINE check
   !================================================================================
-  
+
 
 END MODULE letkf_obs_nc

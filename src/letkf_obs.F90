@@ -10,8 +10,8 @@ MODULE letkf_obs
   USE mpi
   USE timing
   USE kdtree
-  use running_stats_mod
-  use letkf_config
+  USE running_stats_mod
+  USE letkf_config
   USE letkf_mpi
 
   IMPLICIT NONE
@@ -31,7 +31,7 @@ MODULE letkf_obs
   PUBLIC :: letkf_obs_init
   PUBLIC :: letkf_obs_read
   PUBLIC :: letkf_obs_get
-  public :: letkf_obs_getdef
+  PUBLIC :: letkf_obs_getdef
 
 
 
@@ -47,7 +47,7 @@ MODULE letkf_obs
      REAL    :: lat     !< latitude (in degrees)
      REAL    :: lon     !< longitude (in degrees)
      REAL    :: zdim    !< z coordinate, in whatever unit is appropriate for the domain.
-                        !! If this is a 2d observation, this value is ignored
+     !! If this is a 2d observation, this value is ignored
      REAL    :: time    !< time (in hours) from base analysis time
      REAL    :: val     !< observation value
      REAL    :: err     !< standard deviation of observation error
@@ -106,9 +106,9 @@ MODULE letkf_obs
 
      SUBROUTINE I_letkf_obsio_init(self, config)
        IMPORT letkf_obsio
-       import configuration
+       IMPORT configuration
        CLASS(letkf_obsio) :: self
-       type(configuration), intent(in) :: config
+       TYPE(configuration), INTENT(in) :: config
      END SUBROUTINE I_letkf_obsio_init
 
      SUBROUTINE I_letkf_obsio_read_obs(self, obs)
@@ -212,9 +212,9 @@ CONTAINS
   !! definition configuration files.
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_obs_init(config)
-    type(configuration), intent(in) :: config
+    TYPE(configuration), INTENT(in) :: config
 
-    type(configuration) :: ioconfig, config_def, config_def0
+    TYPE(configuration) :: ioconfig, config_def, config_def0
     INTEGER :: i
     CHARACTER(:), ALLOCATABLE :: ioclass, str
 
@@ -237,9 +237,9 @@ CONTAINS
        PRINT *, ""
     END IF
 
-    
+
     ! determine which io class to use
-    call config%get("ioclass", ioclass)
+    CALL config%get("ioclass", ioclass)
     ioclass = tolower(ioclass)
     NULLIFY(obsio_class)
     DO i=1,obsio_reg_num
@@ -252,61 +252,61 @@ CONTAINS
        CALL letkf_mpi_abort("obsio class "//ioclass// " not found.")
     END IF
 
-    
+
     ! read in the observation definition configuration
     IF(pe_isroot) THEN
-       print *, ""
+       PRINT *, ""
        PRINT *, "observation definitions"
        PRINT *, "------------------------------------------------------------"
-       print "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
+       PRINT "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
     END IF
-    call config%get("obsdef", config_def)
-    allocate(obsdef_list(config_def%count()))
-    do i=1,config_def%count()
-       call config_def%get(i, config_def0)
-       call config_def0%get(1, str)
+    CALL config%get("obsdef", config_def)
+    ALLOCATE(obsdef_list(config_def%COUNT()))
+    DO i=1,config_def%COUNT()
+       CALL config_def%get(i, config_def0)
+       CALL config_def0%get(1, str)
        obsdef_list(i)%name = tolower(str)
-       call config_def0%get(2, obsdef_list(i)%id)
-       call config_def0%get(3, str)       
+       CALL config_def0%get(2, obsdef_list(i)%id)
+       CALL config_def0%get(3, str)
        obsdef_list(i)%name_long = str
-       if(pe_isroot) &
-            print "(A10, I6, A5, A)", trim(obsdef_list(i)%name), obsdef_list(i)%id, &
-            "", trim(obsdef_list(i)%name_long)
-    end do
-   
-    
+       IF(pe_isroot) &
+            PRINT "(A10, I6, A5, A)", TRIM(obsdef_list(i)%name), obsdef_list(i)%id, &
+            "", TRIM(obsdef_list(i)%name_long)
+    END DO
+
+
     ! read in the platform definition configuration
     IF(pe_isroot) THEN
-       print *, ""
+       PRINT *, ""
        PRINT *, "platform definitions"
        PRINT *, "------------------------------------------------------------"
-       print "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"       
+       PRINT "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
     END IF
-    call config%get("platdef", config_def)
-    allocate(platdef_list(config_def%count()))
-    do i=1,config_def%count()
-       call config_def%get(i, config_def0)
-       call config_def0%get(1, str)
+    CALL config%get("platdef", config_def)
+    ALLOCATE(platdef_list(config_def%COUNT()))
+    DO i=1,config_def%COUNT()
+       CALL config_def%get(i, config_def0)
+       CALL config_def0%get(1, str)
        platdef_list(i)%name = tolower(str)
-       call config_def0%get(2, platdef_list(i)%id)
-       call config_def0%get(3, str)       
+       CALL config_def0%get(2, platdef_list(i)%id)
+       CALL config_def0%get(3, str)
        platdef_list(i)%name_long = str
-       if(pe_isroot) &
-            print "(A10, I6, A5, A)", trim(platdef_list(i)%name), platdef_list(i)%id, &
-            "", trim(platdef_list(i)%name_long)
-    end do
-    if(pe_isroot) print *, ""
-    
+       IF(pe_isroot) &
+            PRINT "(A10, I6, A5, A)", TRIM(platdef_list(i)%name), platdef_list(i)%id, &
+            "", TRIM(platdef_list(i)%name_long)
+    END DO
+    IF(pe_isroot) PRINT *, ""
+
     ! initialize MPI object for later sending/receving obsservations
-    if(pe_isroot) print *, ""    
+    IF(pe_isroot) PRINT *, ""
     CALL init_mpi_observation()
 
     ! finish initialize  of the obsio class
-    IF (pe_isroot) then
-       print *, ""
+    IF (pe_isroot) THEN
+       PRINT *, ""
        PRINT *, "Intializing I/O ioclass: ",obsio_class%name()
-    end IF
-    call config%get(ioclass, ioconfig)
+    END IF
+    CALL config%get(ioclass, ioconfig)
     CALL obsio_class%init(ioconfig)
 
   END SUBROUTINE letkf_obs_init
@@ -346,11 +346,11 @@ CONTAINS
     CALL mpi_type_commit(mpitype_observation, ierr)
 
     ! derived type for scattering obs_hx
-    call mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
+    CALL mpi_type_get_extent(mpi_real, lb, ex_real, ierr)
     lb = 0
     ex = ex_real*ens_size
-    call mpi_type_create_resized(mpi_real, lb, ex, mpitype_real_nk, ierr)
-    call mpi_type_commit(mpitype_real_nk, ierr)
+    CALL mpi_type_create_resized(mpi_real, lb, ex, mpitype_real_nk, ierr)
+    CALL mpi_type_commit(mpitype_real_nk, ierr)
 
   END SUBROUTINE init_mpi_observation
   !> \endcond
@@ -365,7 +365,7 @@ CONTAINS
   SUBROUTINE letkf_obs_read()
     INTEGER :: i, nobs, ierr
     REAL, ALLOCATABLE :: obs_lats(:), obs_lons(:), tmp_r(:)
-    integer :: obshx_pe(ens_size), obs_pe
+    INTEGER :: obshx_pe(ens_size), obs_pe
 
     CALL timing_start('read_obs')
 
@@ -387,25 +387,25 @@ CONTAINS
     CALL mpi_bcast(obs_def, nobs, mpitype_observation, pe_root, letkf_mpi_comm, ierr)
 
     ! determine who is reading in which obs_hx
-    do i = 1, ens_size
+    DO i = 1, ens_size
        obshx_pe(i) = letkf_mpi_nextio()
-    end do
+    END DO
 
     ! read in the observation operator
     !> \todo do this in parallel with the above obs read
-    ALLOCATE(obs_hx(ens_size, nobs))    
+    ALLOCATE(obs_hx(ens_size, nobs))
     ALLOCATE(tmp_r(nobs))
     obs_hx = 0.0
     DO i=1,ens_size
-       if(pe_rank == obshx_pe(i)) then
+       IF(pe_rank == obshx_pe(i)) THEN
           CALL obsio_class%read_hx(i, tmp_r)
           obs_hx(i,:) = tmp_r
-       end if
+       END IF
     END DO
     ! broadcast the obs_hx values
-    do i=1,ens_size       
-       call mpi_bcast(obs_hx(i,1), nobs, mpitype_real_nk, obshx_pe(i), letkf_mpi_comm, ierr)
-    end do
+    DO i=1,ens_size
+       CALL mpi_bcast(obs_hx(i,1), nobs, mpitype_real_nk, obshx_pe(i), letkf_mpi_comm, ierr)
+    END DO
     DEALLOCATE(tmp_r)
 
 
@@ -423,9 +423,9 @@ CONTAINS
     END DO
 
 
-    if (nobs > 0) then
+    IF (nobs > 0) THEN
        ! print out observation statistics
-       if (pe_isroot) CALL obs_print_stats(obs_def)
+       IF (pe_isroot) CALL obs_print_stats(obs_def)
 
        !> \todo, make sure no bad qc obs go into the tree
 
@@ -440,9 +440,9 @@ CONTAINS
        CALL kd_init(obs_tree, obs_lons, obs_lats)
        DEALLOCATE(obs_lons)
        DEALLOCATE(obs_lats)
-    else
-       if (pe_isroot) print *, "WARNING: there are NO observations to assimilate"
-    end if
+    ELSE
+       IF (pe_isroot) PRINT *, "WARNING: there are NO observations to assimilate"
+    END IF
 
     CALL timing_stop('read_obs')
 
@@ -508,9 +508,9 @@ CONTAINS
     INTEGER, INTENT(out) :: rnum     !< number of observations found
 
     rnum = 0
-    if (size(obs_def) > 0) then
+    IF (SIZE(obs_def) > 0) THEN
        CALL kd_search_radius(obs_tree, slon, slat, sradius, robs, rdist, rnum, .FALSE.)
-    end if
+    END IF
 
   END SUBROUTINE letkf_obs_get
   !================================================================================
@@ -528,8 +528,8 @@ CONTAINS
     INTEGER, ALLOCATABLE :: obst_count(:,:)
     INTEGER, ALLOCATABLE :: plat_count(:,:)
 
-    type(running_stats), allocatable :: odep_stats(:), pdep_stats(:)
-    type(running_stats), allocatable :: osprd_stats(:), psprd_stats(:)
+    TYPE(running_stats), ALLOCATABLE :: odep_stats(:), pdep_stats(:)
+    TYPE(running_stats), ALLOCATABLE :: osprd_stats(:), psprd_stats(:)
 
     INTEGER :: cnt, i, j, cnt_total
 
@@ -538,10 +538,10 @@ CONTAINS
     cnt_total=0
     ALLOCATE(obst_count(SIZE(obsdef_list)+1, 4))
     ALLOCATE(plat_count(SIZE(platdef_list)+1, 4))
-    allocate(odep_stats(SIZE(obsdef_list)))
-    allocate(pdep_stats(SIZE(platdef_list)))
-    allocate(osprd_stats(SIZE(obsdef_list)))
-    allocate(psprd_stats(SIZE(platdef_list)))
+    ALLOCATE(odep_stats(SIZE(obsdef_list)))
+    ALLOCATE(pdep_stats(SIZE(platdef_list)))
+    ALLOCATE(osprd_stats(SIZE(obsdef_list)))
+    ALLOCATE(psprd_stats(SIZE(platdef_list)))
 
     obst_count = 0
     plat_count = 0
@@ -566,10 +566,10 @@ CONTAINS
              obst_count(j,cnt) = obst_count(j,cnt) +1
 
              ! departure stats if this is a good ob
-             if (obs_t(i)%qc == 0) then
-                call odep_stats(j)%add( obs_def(i)%val-obs_hx_mean(i))
-                call osprd_stats(j)%add(sum(obs_hx(:,i)*obs_hx(:,i))/ens_size)
-             end if
+             IF (obs_t(i)%qc == 0) THEN
+                CALL odep_stats(j)%add( obs_def(i)%val-obs_hx_mean(i))
+                CALL osprd_stats(j)%add(SUM(obs_hx(:,i)*obs_hx(:,i))/ens_size)
+             END IF
 
              EXIT
           END IF
@@ -584,10 +584,10 @@ CONTAINS
              plat_count(j,cnt) = plat_count(j,cnt) +1
 
              ! departure stats if this is a good ob
-             if (obs_t(i)%qc == 0) then
-                call pdep_stats(j)%add( obs_def(i)%val-obs_hx_mean(i))
-                call psprd_stats(j)%add(sum(obs_hx(:,i)*obs_hx(:,i))/ens_size)
-             end if
+             IF (obs_t(i)%qc == 0) THEN
+                CALL pdep_stats(j)%add( obs_def(i)%val-obs_hx_mean(i))
+                CALL psprd_stats(j)%add(SUM(obs_hx(:,i)*obs_hx(:,i))/ens_size)
+             END IF
 
              EXIT
           END IF
@@ -646,10 +646,10 @@ CONTAINS
     DO i=1,SIZE(obst_count,1)
        IF (obst_count(i,1) == 0) CYCLE
        IF (i < SIZE(obst_count,1)) THEN
-         PRINT '(A10,6F12.5)', &
-              TRIM(obsdef_list(i)%name), sqrt(odep_stats(i)%mean(2)), &
-              odep_stats(i)%mean(1), odep_stats(i)%min(), odep_stats(i)%max(), &
-              sqrt(osprd_stats(i)%mean())
+          PRINT '(A10,6F12.5)', &
+               TRIM(obsdef_list(i)%name), SQRT(odep_stats(i)%mean(2)), &
+               odep_stats(i)%mean(1), odep_stats(i)%MIN(), odep_stats(i)%MAX(), &
+               SQRT(osprd_stats(i)%mean())
        END IF
     END DO
 
@@ -659,10 +659,10 @@ CONTAINS
     DO i=1,SIZE(plat_count,1)
        IF (plat_count(i,1) == 0) CYCLE
        IF (i < SIZE(plat_count,1)) THEN
-         PRINT '(A10,5F12.5)', &
-              TRIM(platdef_list(i)%name), sqrt(pdep_stats(i)%mean(2)), &
-              pdep_stats(i)%mean(1), pdep_stats(i)%min(), pdep_stats(i)%max(), &
-              sqrt(psprd_stats(i)%mean())
+          PRINT '(A10,5F12.5)', &
+               TRIM(platdef_list(i)%name), SQRT(pdep_stats(i)%mean(2)), &
+               pdep_stats(i)%mean(1), pdep_stats(i)%MIN(), pdep_stats(i)%MAX(), &
+               SQRT(psprd_stats(i)%mean())
        END IF
     END DO
 
@@ -674,41 +674,41 @@ CONTAINS
   !================================================================================
   !> Get and observation or platform definition information.
   !--------------------------------------------------------------------------------
-  function letkf_obs_getdef(obs_plat, name) result(res)
-    character(len=1), intent(in) :: obs_plat !< set to 'P' or 'O' if a platform or
-                                             !! observation definiont is requested
-    character(len=*), intent(in) :: name     !< platform or observation name to get
-    type(letkf_obsplatdef) :: res            !< the returned definition
+  FUNCTION letkf_obs_getdef(obs_plat, name) RESULT(res)
+    CHARACTER(len=1), INTENT(in) :: obs_plat !< set to 'P' or 'O' if a platform or
+    !! observation definiont is requested
+    CHARACTER(len=*), INTENT(in) :: name     !< platform or observation name to get
+    TYPE(letkf_obsplatdef) :: res            !< the returned definition
 
-    character(:), allocatable :: name0
-    integer :: i
+    CHARACTER(:), ALLOCATABLE :: name0
+    INTEGER :: i
 
-    name0 = trim(tolower(name))
+    name0 = TRIM(tolower(name))
     i =1
-    if (obs_plat == 'O') then
-       do while (i <= size(obsdef_list))
-          if(obsdef_list(i)%name == name0) exit
+    IF (obs_plat == 'O') THEN
+       DO WHILE (i <= SIZE(obsdef_list))
+          IF(obsdef_list(i)%name == name0) EXIT
           i = i + 1
-       end do
-       if ( i > size(obsdef_list)) &
-            call letkf_mpi_abort("observation definition for '"//name0//"' not found")
+       END DO
+       IF ( i > SIZE(obsdef_list)) &
+            CALL letkf_mpi_abort("observation definition for '"//name0//"' not found")
        res = obsdef_list(i)
 
-    else if (obs_plat == 'P') then
-       do while (i <= size(platdef_list))
-          if(platdef_list(i)%name == name0) exit
+    ELSE IF (obs_plat == 'P') THEN
+       DO WHILE (i <= SIZE(platdef_list))
+          IF(platdef_list(i)%name == name0) EXIT
           i = i + 1
-       end do
-       if ( i > size(platdef_list)) &
-            call letkf_mpi_abort("platform definition for '"//name0//"' not found")
+       END DO
+       IF ( i > SIZE(platdef_list)) &
+            CALL letkf_mpi_abort("platform definition for '"//name0//"' not found")
        res = platdef_list(i)
 
-    else
-       call letkf_mpi_abort("letkf_obs_getdef: first argument must be 'P' or 'O'")
+    ELSE
+       CALL letkf_mpi_abort("letkf_obs_getdef: first argument must be 'P' or 'O'")
 
-    end if
+    END IF
 
-  end function letkf_obs_getdef
+  END FUNCTION letkf_obs_getdef
   !================================================================================
 
 

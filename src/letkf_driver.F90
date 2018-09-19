@@ -2,25 +2,25 @@
 !> Basic driver program that calls the LETKF initialize and run routines
 !! with the default classes.
 !================================================================================
-program letkf_driver
-  use letkf
-  implicit none
+PROGRAM letkf_driver
+  USE letkf
+  IMPLICIT NONE
 
-  integer :: i
-  character(len=:),allocatable :: config_filename
+  INTEGER :: i
+  CHARACTER(len=:),ALLOCATABLE :: config_filename
 
   ! Get the command line argument pointing to the namelist to use
-  i=command_argument_count()
-  if (i == 1) then
-    allocate(character(1024) :: config_filename)
-    call get_command_argument(1, config_filename)
-    config_filename=trim(config_filename)
-  else
+  i=command_argument_COUNT()
+  IF (i == 1) THEN
+     ALLOCATE(CHARACTER(1024) :: config_filename)
+     CALL get_command_ARGUMENT(1, config_filename)
+     config_filename=TRIM(config_filename)
+  ELSE
      config_filename="letkf.json"
-  end if
+  END IF
 
   ! initialize and run
-  call letkf_init(config_filename)
-  call letkf_run()
+  CALL letkf_init(config_filename)
+  CALL letkf_run()
 
-end program
+END PROGRAM letkf_driver

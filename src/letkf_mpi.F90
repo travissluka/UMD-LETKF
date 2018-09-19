@@ -3,13 +3,13 @@
 !================================================================================
 MODULE letkf_mpi
   USE mpi
-  use letkf_config
+  USE letkf_config
 
   IMPLICIT NONE
   PRIVATE
 
-  
-  
+
+
   !================================================================================
   !================================================================================
   ! Public module components
@@ -49,20 +49,20 @@ MODULE letkf_mpi
   INTEGER, PUBLIC :: mpitype_grid_nxy_real
   INTEGER, PUBLIC :: mpitype_grid_nk_ns
   INTEGER, PUBLIC :: mpitype_grid_ns
-  
+
   ! ensemble parameters
   !--------------------------------------------------------------------------------
   INTEGER, PUBLIC, PROTECTED :: ens_size  !< ensemble size
 
- 
 
-  
+
+
   !================================================================================
   !================================================================================
   ! Private module components
   !================================================================================
   !================================================================================
-  
+
   ! grid definition
   !--------------------------------------------------------------------------------
   INTEGER :: grid_nx  !< size of the global x dimension
@@ -76,7 +76,7 @@ MODULE letkf_mpi
   INTEGER :: ppn
 
 
-  
+
 CONTAINS
 
 
@@ -115,12 +115,12 @@ CONTAINS
   !! Read in a namelist, determine grid distribution.
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_init(config)
-    type(configuration), intent(in) :: config
+    TYPE(configuration), INTENT(in) :: config
 
-    
+
     ! read in our section of the configuration
-    call config%get("ens_size", ens_size)
-    call config%get("ppn", ppn)
+    CALL config%get("ens_size", ens_size)
+    CALL config%get("ppn", ppn)
 
     ! output basic MPI info
     IF(pe_isroot) THEN
@@ -131,9 +131,9 @@ CONTAINS
        ELSE
           PRINT *, "MPI communicaotr: ", letkf_mpi_comm
        END IF
-       print *, ""
-       print '(A,I0)', " mpi.ens_size=", ens_size
-       print '(A,I0)', " mpi.ppn=", ppn
+       PRINT *, ""
+       PRINT '(A,I0)', " mpi.ens_size=", ens_size
+       PRINT '(A,I0)', " mpi.ppn=", ppn
     ENDIF
 
   END SUBROUTINE letkf_mpi_init
@@ -249,7 +249,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
@@ -278,21 +278,21 @@ CONTAINS
          CALL mpi_waitall(pe_size, recvs, MPI_STATUSES_IGNORE, ierr)
   END SUBROUTINE letkf_mpi_ij2grd_real
   !================================================================================
-  
 
-  
+
+
   !================================================================================
   !> Decompose a 2D grid from a single PE and scatter it across the PEs
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_grd2ij_real(root, grd, ij)
     INTEGER, INTENT(in) :: root
-    REAL, allocatable, INTENT(in) :: grd(:,:)
+    REAL, ALLOCATABLE, INTENT(in) :: grd(:,:)
     REAL, INTENT(out) :: ij(ij_count)
 
     INTEGER :: recv_req, send_req(0:pe_size-1), ierr, p
 
-    if (pe_isroot .and. .not. allocated(grd)) &
-         call letkf_mpi_abort("2D grid not allocated on root node")
+    IF (pe_isroot .AND. .NOT. ALLOCATED(grd)) &
+         CALL letkf_mpi_abort("2D grid not allocated on root node")
 
     ! TODO, change this so that we're using mpi_scatter call instead?
 
@@ -353,7 +353,7 @@ CONTAINS
 
 
   !================================================================================
-  !> 
+  !>
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_mpi_barrier
     INTEGER :: ierr
@@ -362,8 +362,8 @@ CONTAINS
   END SUBROUTINE letkf_mpi_barrier
   !================================================================================
 
-  
-  
+
+
   !================================================================================
   !> Return the next PE that should handle IO. This function distributes the
   !! PEs so that work should be spread out evenly across nodes
@@ -377,7 +377,7 @@ CONTAINS
     ! TODO allow option to place an upper bound on this, in case we are
     ! severely memory limited
     nextio = pe+ppn
-    if (nextio >= pe_size) nextio = MOD(nextio+1, pe_size)
+    IF (nextio >= pe_size) nextio = MOD(nextio+1, pe_size)
   END FUNCTION letkf_mpi_nextio
   !================================================================================
 

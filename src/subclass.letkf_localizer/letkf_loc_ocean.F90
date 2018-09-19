@@ -18,7 +18,7 @@ MODULE letkf_loc_ocean
      LOGICAL :: vt_split_ml
      TYPE(linearinterp_lat) :: hzdist_prof
      TYPE(linearinterp_lat) :: hzdist_sat
-     real :: tloc_prof, tloc_sat
+     REAL :: tloc_prof, tloc_sat
    CONTAINS
      PROCEDURE, NOPASS :: name => loc_ocean_name
      PROCEDURE, NOPASS :: desc => loc_ocean_desc
@@ -78,13 +78,13 @@ CONTAINS
     self%hzdist_prof = linearinterp_lat(str)
     CALL config%get("hzloc_sat", str)
     self%hzdist_sat = linearinterp_lat(str)
-    call config%get("tloc_prof", self%tloc_prof, default=-1.0)
-    call config%get("tloc_sat",  self%tloc_sat, default=-1.0)
-    
+    CALL config%get("tloc_prof", self%tloc_prof, default=-1.0)
+    CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
+
     IF(pe_isroot) THEN
-!       PRINT *, "loc_ocean.vt_split_ml=", self%vt_split_ml
-       print *, "loc_ocean.tloc_prof=", self%tloc_prof
-       print *, "loc_ocean.tloc_sat=",  self%tloc_sat
+       !       PRINT *, "loc_ocean.vt_split_ml=", self%vt_split_ml
+       PRINT *, "loc_ocean.tloc_prof=", self%tloc_prof
+       PRINT *, "loc_ocean.tloc_sat=",  self%tloc_sat
     END IF
 
   END SUBROUTINE loc_ocean_init
@@ -146,12 +146,12 @@ CONTAINS
     ! \todo remove hardcoding of plat ids
     IF(obs%platid == 1000) THEN
        loc = letkf_loc_gc(dist, self%hzdist_sat%get_dist(lat_ij(ij)))
-       if(self%tloc_sat > 0) &
+       IF(self%tloc_sat > 0) &
             loc = loc * letkf_loc_gc(obs%time, self%tloc_sat)
     ELSE IF(obs%platid == 1) THEN
        loc = letkf_loc_gc(dist, self%hzdist_prof%get_dist( lat_ij(ij)))
-       if(self%tloc_prof > 0) &
-            loc = loc * letkf_loc_gc(obs%time, self%tloc_prof)       
+       IF(self%tloc_prof > 0) &
+            loc = loc * letkf_loc_gc(obs%time, self%tloc_prof)
     ELSE
        PRINT *, "PLATID: ", obs%platid
        CALL letkf_mpi_abort("unhandled platid in loc_ocean_localize")
