@@ -78,6 +78,10 @@ MODULE letkf_state
      INTEGER           :: grid_s_idx
      !> number of vertical levels this state variable consists of
      INTEGER           :: levels
+     !> maximum absolute value of the analysis increment
+     REAL :: ana_inc_max = 9.99e36
+     !> valid bounds of the state variable analysis
+     REAL :: ana_bounds(2)= (/-9.99e36, 9.99e36/)
   END TYPE letkf_statevar_spec
   !--------------------------------------------------------------------------------
 
@@ -598,10 +602,20 @@ CONTAINS
        PRINT *, "----------------------------------------"
        DO i=1,SIZE(statevars)
           PRINT *, 'Name: "', TRIM(statevars(i)%name),'"'
-          PRINT *, ' hz grid: "', TRIM(statevars(i)%hzgrid),'"'
-          PRINT *, ' vt grid: "', TRIM(statevars(i)%vtgrid),'"'
-          PRINT '(X,A,I0,A,I0)', ' slabs:    ',statevars(i)%grid_s_idx,' to ',&
-               statevars(i)%grid_s_idx+statevars(i)%levels-1
+          PRINT *, '  hz grid: "', TRIM(statevars(i)%hzgrid),'"'
+          PRINT *, '  vt grid: "', TRIM(statevars(i)%vtgrid),'"'
+
+          IF (statevars(i)%ana_bounds(1) > -9e36 .OR. &
+               statevars(i)%ana_bounds(2) < 9e36) THEN
+             PRINT *, '  ana_bounds:', statevars(i)%ana_bounds
+          END IF
+          IF (statevars(i)%ana_inc_max < 9e36)  THEN
+             PRINT *, '  ana_inc_max:', statevars(i)%ana_inc_max
+          END IF
+
+          PRINT '(X,A,I0,A,I0)', '  lg_slab_idx:  ',statevars(i)%grid_s_idx, &
+               ' to ', statevars(i)%grid_s_idx+statevars(i)%levels-1
+
           PRINT *, ""
        END DO
 
@@ -704,6 +718,10 @@ CONTAINS
        CALL mpi_bcast(statevars(i)%levels, 1, mpi_integer, &
             pe_root, letkf_mpi_comm, ierr)
        CALL mpi_bcast(statevars(i)%grid_s_idx, 1, mpi_integer, &
+            pe_root, letkf_mpi_comm, ierr)
+       CALL mpi_bcast(statevars(i)%ana_bounds, 2, mpi_real, &
+            pe_root, letkf_mpi_comm, ierr)
+       CALL mpi_bcast(statevars(i)%ana_inc_max, 1, mpi_real, &
             pe_root, letkf_mpi_comm, ierr)
     END DO
 

@@ -264,14 +264,29 @@ CONTAINS
     PRINT *, "Found ",grd_cnt," state definitions."
     PRINT *, ""
     DO i=1, grd_cnt
-       ! grid name
+       ! for each state variable
        CALL self%statedef%get(i, config)
+
+       ! get name
        CALL config%name(str)
        statevars(i)%name = str
+
+       ! get grids
        CALL config%get("hzgrid", str)
        statevars(i)%hzgrid = str
        CALL config%get("vtgrid", str)
        statevars(i)%vtgrid = str
+
+       ! get other optional variables
+       IF(config%found("ana_bounds")) THEN
+          CALL config%get("ana_bounds", cfg2)
+          CALL cfg2%get(1, statevars(i)%ana_bounds(1))
+          CALL cfg2%get(2, statevars(i)%ana_bounds(2))
+       END IF
+
+       IF(config%found("ana_inc_max")) THEN
+          CALL config%get("ana_inc_max", statevars(i)%ana_inc_max)
+       END IF
     END DO
 
   END SUBROUTINE stateio_nc_read_specs

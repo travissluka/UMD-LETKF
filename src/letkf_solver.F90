@@ -109,7 +109,7 @@ CONTAINS
   SUBROUTINE letkf_solver_run()
     ! TODO, a bit messy, get rid of the duplicate "obs_lg" variables
     REAL :: maxhz
-    INTEGER :: i, idx, ij, lg, slab
+    INTEGER :: i, j, k, idx, ij, lg, slab
     REAL :: obs_cnt_loc
     REAL :: r
     REAL :: max_search_dist
@@ -241,11 +241,29 @@ CONTAINS
        END DO lg_loop
 
 
+       ! TODO, the following should be rearranged for improved performance
+       ! things are being unecessarily recalculated repeatedly
+
        ! recenter the analysis perturbations on the new analysis mean
        DO i=1, grid_ns
           state_ij(:,i,ij) = state_ij(:,i,ij) + bkg_mean_ij(i)
           state_mean_ij(i,ij) = SUM(state_ij(:,i,ij),1)/ens_size
           state_ij(:,i,ij) = state_ij(:,i,ij) - state_mean_ij(i,ij)
+       END DO
+
+
+       ! clip analysis increment based on both
+       ! 1) max analysis increment 2) analysis bounds
+       DO i=1, SIZE(statevars)
+          DO j = statevars(i)%grid_s_idx, statevars(i)%grid_s_idx+statevars(i)%levels-1
+             r = state_mean_ij(j,ij)-bkg_mean_ij(j)
+             r = MAX(r, -statevars(i)%ana_inc_max)
+             r = MIN(r,  statevars(i)%ana_inc_max)
+             r = MAX(r, statevars(i)%ana_bounds(1)-bkg_mean_ij(j))
+             r = MIN(r, statevars(i)%ana_bounds(2)-bkg_mean_ij(j))
+             state_mean_ij(j,ij) = r + bkg_mean_ij(j)
+          END DO
+          ! TODO set a flag to alert user that AI was clipped
        END DO
 
 
@@ -283,6 +301,24 @@ CONTAINS
        ! TODO apply additive inflation
 
        ! TODO apply adaptive inflation
+
+       ! bounds check on individual analysis ensemble members
+       DO i=1, SIZE(statevars)
+          DO j = statevars(i)%grid_s_idx, statevars(i)%grid_s_idx+statevars(i)%levels-1
+             DO k = 1, ens_size
+                r = state_ij(k,j,ij)
+                r = MAX(r, statevars(i)%ana_bounds(1)-state_mean_ij(j,ij))
+                r = MIN(r, statevars(i)%ana_bounds(2)-state_mean_ij(j,ij))
+                state_ij(k,j,ij) = r
+             END DO
+             ! adjusting the mean afterward correctly
+             r = SUM(state_ij(:,j,ij),1)/ens_size
+             state_ij(:,j,ij) = state_ij(:,j,ij) -r
+             state_mean_ij(j,ij) = state_mean_ij(j,ij) +r
+             !    ! TODO set a flag to alert user that AI was clipped
+          END DO
+       END DO
+
 
        ! calc final analysis members, spread
        DO i = 1, grid_ns
