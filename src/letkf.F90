@@ -21,13 +21,13 @@ MODULE letkf
   IMPLICIT NONE
   PRIVATE
 
-  
+
   ! use this to get the repository version at compile time
 #ifndef CVERSION
 #define CVERSION "Unknown"
 #endif
 
-  
+
   !================================================================================
   !================================================================================
   ! Public module components

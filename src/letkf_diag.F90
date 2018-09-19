@@ -2,76 +2,76 @@
 !>
 !================================================================================
 MODULE letkf_diag
-  use netcdf
-  use timing
-  use letkf_mpi
-  use letkf_state
+  USE netcdf
+  USE timing
+  USE letkf_mpi
+  USE letkf_state
 
-  implicit NONE
-  private
+  IMPLICIT NONE
+  PRIVATE
 
-  
-  public :: letkf_diag_reg
-  public :: letkf_diag_set
-  public :: letkf_diag_write
+
+  PUBLIC :: letkf_diag_reg
+  PUBLIC :: letkf_diag_set
+  PUBLIC :: letkf_diag_write
 
 
   !================================================================================
   !> Linked list node for diagnostic field definition
   !--------------------------------------------------------------------------------
-  type :: diag_field
-     character(len=20) :: field
-     character(len=20) :: units
-     character(len=100):: desc
-     real, allocatable ::  val_ij(:)
-     type(diag_field), pointer :: next
-  end type diag_field
+  TYPE :: diag_field
+     CHARACTER(len=20) :: field
+     CHARACTER(len=20) :: units
+     CHARACTER(len=100):: desc
+     REAL, ALLOCATABLE ::  val_ij(:)
+     TYPE(diag_field), POINTER :: next
+  END TYPE diag_field
   !================================================================================
 
 
-  type(diag_field), pointer :: diag_fields => null()
-
-  
-contains
+  TYPE(diag_field), POINTER :: diag_fields => NULL()
 
 
-  
+CONTAINS
+
+
+
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  subroutine letkf_diag_reg(field, desc, units)
-    CHARACTER(*), intent(in) :: field
-    CHARACTER(*), intent(in), optional :: desc
-    CHARACTER(*), intent(in), optional :: units
+  SUBROUTINE letkf_diag_reg(field, desc, units)
+    CHARACTER(*), INTENT(in) :: field
+    CHARACTER(*), INTENT(in), OPTIONAL :: desc
+    CHARACTER(*), INTENT(in), OPTIONAL :: units
 
-    type(diag_field), pointer :: newField
-    type(diag_field), pointer :: parent
-    
-    if(pe_isroot) print *, 'Registering diagnostic field "', field,'"...'
+    TYPE(diag_field), POINTER :: newField
+    TYPE(diag_field), POINTER :: parent
+
+    IF(pe_isroot) PRINT *, 'Registering diagnostic field "', field,'"...'
 
     ! create new field definition
-    allocate(newField)
+    ALLOCATE(newField)
     newField%field = field
-    newField%next => null()
+    newField%next => NULL()
     newField%units = ""
     newField%desc = ""
-    if(present(units))  newField%units = units
-    if(present(desc))   newField%desc  = desc
-    allocate(newField%val_ij(ij_count))
+    IF(PRESENT(units))  newField%units = units
+    IF(PRESENT(desc))   newField%desc  = desc
+    ALLOCATE(newField%val_ij(ij_count))
     newField%val_ij = 0.0
 
     ! add to end of the linked list
-    if(.not. associated(diag_fields)) then
+    IF(.NOT. ASSOCIATED(diag_fields)) THEN
        diag_fields => newField
-    else
+    ELSE
        parent=>diag_fields
-       do while(associated(parent%next))
+       DO WHILE(ASSOCIATED(parent%next))
           parent=>parent%next
-       end do
+       END DO
        parent%next=>newField
-    end if
-    
-  end subroutine letkf_diag_reg
+    END IF
+
+  END SUBROUTINE letkf_diag_reg
   !--------------------------------------------------------------------------------
 
 
@@ -79,102 +79,102 @@ contains
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  subroutine letkf_diag_set(field, ij, val)
-    character(*), intent(in) :: field
-    integer, intent(in) :: ij
-    real,    intent(in) :: val
+  SUBROUTINE letkf_diag_set(field, ij, val)
+    CHARACTER(*), INTENT(in) :: field
+    INTEGER, INTENT(in) :: ij
+    REAL,    INTENT(in) :: val
 
-    type(diag_field), pointer :: p
+    TYPE(diag_field), POINTER :: p
 
     ! find relevant node
     p=>diag_fields
-    do while(associated(p))
-       if(p%field == field) exit
+    DO WHILE(ASSOCIATED(p))
+       IF(p%field == field) EXIT
        p=>p%next
-    end do
-    if(.not. associated(p)) call letkf_mpi_abort("diag field not found: "//field)
+    END DO
+    IF(.NOT. ASSOCIATED(p)) CALL letkf_mpi_abort("diag field not found: "//field)
 
     p%val_ij(ij) = val
-  end subroutine letkf_diag_set
+  END SUBROUTINE letkf_diag_set
   !================================================================================
 
 
-  
+
 
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  subroutine letkf_diag_write()
+  SUBROUTINE letkf_diag_write()
     INTEGER :: ncid
     INTEGER :: d_x, d_y, d_z, d_t
     INTEGER :: vid
 
-    real :: tmp2d(grid_nx, grid_ny)
-    
-    type(diag_field), pointer :: p
+    REAL :: tmp2d(grid_nx, grid_ny)
 
-    call timing_start("diag_write")
-    
-    if(pe_isroot) then
-       call check(nf90_create("letkf.diag.nc", NF90_CLOBBER, ncid))
+    TYPE(diag_field), POINTER :: p
+
+    CALL timing_start("diag_write")
+
+    IF(pe_isroot) THEN
+       CALL check(nf90_create("letkf.diag.nc", NF90_CLOBBER, ncid))
 
        ! define hz grid
-       if(size(hzgrids) > 1) &
-            call letkf_mpi_abort("letkf_diag_write: more than 1 hz grid not yet supported")
-       call check(nf90_def_dim(ncid, "time", 1, d_t))
-       call check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
-       call check(nf90_def_dim(ncid, "lon", grid_nx, d_x))       
-       call check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), vid))
-       call check(nf90_put_att(ncid, vid, "axis", "Y"))
-       call check(nf90_put_att(ncid, vid, "units", "degrees_north"))
-       call check(nf90_def_var(ncid, "lon", nf90_real, (/d_x/), vid))
-       call check(nf90_put_att(ncid, vid, "axis", "X"))
-       call check(nf90_put_att(ncid, vid, "units", "degrees_east"))       
+       IF(SIZE(hzgrids) > 1) &
+            CALL letkf_mpi_abort("letkf_diag_write: more than 1 hz grid not yet supported")
+       CALL check(nf90_def_dim(ncid, "time", 1, d_t))
+       CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
+       CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))
+       CALL check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), vid))
+       CALL check(nf90_put_att(ncid, vid, "axis", "Y"))
+       CALL check(nf90_put_att(ncid, vid, "units", "degrees_north"))
+       CALL check(nf90_def_var(ncid, "lon", nf90_real, (/d_x/), vid))
+       CALL check(nf90_put_att(ncid, vid, "axis", "X"))
+       CALL check(nf90_put_att(ncid, vid, "units", "degrees_east"))
 
        ! define fields
        p=>diag_fields
-       do while(associated(p))
-          call check(nf90_def_var(ncid, p%field, nf90_real, (/d_x, d_y, d_t/), vid))
-          if(p%units /= "") call check(nf90_put_att(ncid, vid, "units", p%units))
-          if(p%desc /= "")  call check(nf90_put_att(ncid, vid, "long_name", p%desc)) 
+       DO WHILE(ASSOCIATED(p))
+          CALL check(nf90_def_var(ncid, p%field, nf90_real, (/d_x, d_y, d_t/), vid))
+          IF(p%units /= "") CALL check(nf90_put_att(ncid, vid, "units", p%units))
+          IF(p%desc /= "")  CALL check(nf90_put_att(ncid, vid, "long_name", p%desc))
           p=>p%next
-       end do
+       END DO
 
-       call check(nf90_enddef(ncid))
+       CALL check(nf90_enddef(ncid))
 
 
        ! write hz grid
-       call check(nf90_inq_varid(ncid, "lat", vid))
-       call check(nf90_put_var(ncid, vid, hzgrids(1)%lat_nom))
-       call check(nf90_inq_varid(ncid, "lon", vid))
-       call check(nf90_put_var(ncid, vid, hzgrids(1)%lon_nom))
-                 
-    end if
+       CALL check(nf90_inq_varid(ncid, "lat", vid))
+       CALL check(nf90_put_var(ncid, vid, hzgrids(1)%lat_nom))
+       CALL check(nf90_inq_varid(ncid, "lon", vid))
+       CALL check(nf90_put_var(ncid, vid, hzgrids(1)%lon_nom))
+
+    END IF
 
     ! gather the fields and write out
     ! TODO, gather and write at same time
     p=>diag_fields
-    do while(associated(p))
-       call letkf_mpi_ij2grd(pe_root, p%val_ij, tmp2d)
-       if(pe_isroot) then
-          call check(nf90_inq_varid(ncid, p%field, vid))
-          call check(nf90_put_var(ncid, vid, tmp2d))
-       end if
+    DO WHILE(ASSOCIATED(p))
+       CALL letkf_mpi_ij2grd(pe_root, p%val_ij, tmp2d)
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, p%field, vid))
+          CALL check(nf90_put_var(ncid, vid, tmp2d))
+       END IF
        p=>p%next
-    end do
-    
-    ! all done
-    if(pe_isroot) then
-       call check(nf90_close(ncid))
-    end if
+    END DO
 
-    call timing_stop("diag_write")
-    
-  end subroutine letkf_diag_write
+    ! all done
+    IF(pe_isroot) THEN
+       CALL check(nf90_close(ncid))
+    END IF
+
+    CALL timing_stop("diag_write")
+
+  END SUBROUTINE letkf_diag_write
   !================================================================================
 
 
-  
+
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
@@ -189,8 +189,8 @@ contains
           WRITE (*,*) TRIM(nf90_strerror(status))
        END IF
        CALL letkf_mpi_abort("NetCDF error")
-    END IF    
-  END SUBROUTINE check  
+    END IF
+  END SUBROUTINE check
   !================================================================================
-  
-end MODULE letkf_diag
+
+END MODULE letkf_diag

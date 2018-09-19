@@ -15,11 +15,11 @@ MODULE letkf_config
   ! Public components
   !================================================================================
   !================================================================================
-  
+
   PUBLIC :: letkf_config_loadfile
 
 
-  
+
   !================================================================================
   !> A node of the configuration tree.
   !--------------------------------------------------------------------------------
@@ -56,7 +56,7 @@ MODULE letkf_config
 
   END TYPE configuration
   !================================================================================
-  
+
 
   !================================================================================
   !>
@@ -66,7 +66,7 @@ MODULE letkf_config
   END TYPE fson_value_ptr
   !================================================================================
 
-  
+
 
   LOGICAL, PUBLIC :: letkf_config_log = .TRUE.
 
@@ -75,7 +75,7 @@ MODULE letkf_config
 CONTAINS
 
 
-  
+
   !================================================================================
   !> Load a json based configuration file.
   !!
@@ -85,7 +85,7 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_config_loadfile(filename, res)
     CHARACTER(len=*), INTENT(in) :: filename
-    type(configuration), INTENT(out) :: res
+    TYPE(configuration), INTENT(out) :: res
 
     TYPE(configuration) :: res2
     TYPE(fson_value), POINTER :: ptr, ptr2, ptr3, parent
@@ -125,15 +125,15 @@ CONTAINS
        IF (found) THEN
           ! get parent node
           parent => ptr%parent
-          if(associated(parent%name)) then
+          IF(ASSOCIATED(parent%name)) THEN
              l=fson_string_length(parent%name)
              ALLOCATE(CHARACTER(l)::str)
              CALL fson_string_copy(parent%name, str)
              parent_name = str
              DEALLOCATE(str)
-          else
+          ELSE
              parent_name="."
-          end if
+          END IF
 
           ! get filename to load, and load it into "ptr2"
           l=fson_string_length(ptr%value_string)
@@ -197,7 +197,7 @@ CONTAINS
 
 
   FUNCTION get_array_count(self) RESULT(val)
-    CLASS(configuration),intent(in) :: self
+    CLASS(configuration),INTENT(in) :: self
     INTEGER :: val
     TYPE(fson_value), POINTER :: ptr
     val =0

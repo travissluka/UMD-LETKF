@@ -9,7 +9,7 @@ set( letkf_lib_srcs
   running_stats.F90
   ${JSON_SRC_FILES}
   ${KDTREE_SRC_FILES}
-   
+
   letkf.F90
   letkf_config.F90
   letkf_core.F90
@@ -63,4 +63,3 @@ endforeach(m)
 add_executable( letkfdriver letkf_driver.F90)
 target_link_libraries( letkfdriver letkf )
 install(TARGETS letkfdriver RUNTIME DESTINATION bin)
-

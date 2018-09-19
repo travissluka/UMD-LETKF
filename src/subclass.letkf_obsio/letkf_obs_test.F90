@@ -4,7 +4,7 @@
 MODULE letkf_obs_test
   USE kdtree
   USE mpi
-  use letkf_config
+  USE letkf_config
   USE letkf_mpi
   USE letkf_obs
   USE letkf_state
@@ -18,7 +18,7 @@ MODULE letkf_obs_test
   !================================================================================
   !================================================================================
 
-  !================================================================================  
+  !================================================================================
   !> observation file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_test
@@ -34,7 +34,7 @@ MODULE letkf_obs_test
   !================================================================================
 
 
-  
+
 CONTAINS
 
 
@@ -66,8 +66,8 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_init(self, config)
     CLASS(obsio_test) :: self
-    type(configuration), intent(in) :: config
-    type(configuration) :: config_ob
+    TYPE(configuration), INTENT(in) :: config
+    TYPE(configuration) :: config_ob
 
     INTEGER :: nobs
     INTEGER :: i, t, ierr
@@ -75,41 +75,41 @@ CONTAINS
     INTEGER, ALLOCATABLE :: grd_idx(:)
     REAL,    ALLOCATABLE :: grd_dist(:), min_dist(:), hx2(:,:)
     INTEGER, ALLOCATABLE :: ob_pe1(:), ob_pe2(:)
-    character(len=60), allocatable :: ob_state_type(:)
+    CHARACTER(len=60), ALLOCATABLE :: ob_state_type(:)
 
-    integer :: lvl, s, j, k, m
-    character(:), allocatable :: str
-    
-    type(letkf_obsplatdef) :: def
-    type(letkf_statevar_spec) :: state_def
+    INTEGER :: lvl, s, j, k, m
+    CHARACTER(:), ALLOCATABLE :: str
+
+    TYPE(letkf_obsplatdef) :: def
+    TYPE(letkf_statevar_spec) :: state_def
 
 
     ! read in the configuration file
-    nobs = config%count()
-    allocate(self%obs(nobs), ob_state_type(nobs))
-    do i=1,nobs
-       call config%get(i, config_ob)
+    nobs = config%COUNT()
+    ALLOCATE(self%obs(nobs), ob_state_type(nobs))
+    DO i=1,nobs
+       CALL config%get(i, config_ob)
 
-       call config_ob%get(1, str)
+       CALL config_ob%get(1, str)
        def = letkf_obs_getdef('O', str)
        self%obs(i)%obsid = def%id
 
-       call config_ob%get(2, str)
+       CALL config_ob%get(2, str)
        def = letkf_obs_getdef('P', str)
        self%obs(i)%platid = def%id
 
-       call config_ob%get(3, str)
+       CALL config_ob%get(3, str)
        ob_state_type(i) = str
 
-       call config_ob%get(4, self%obs(i)%lat)
-       call config_ob%get(5, self%obs(i)%lon)
-       call config_ob%get(6, self%obs(i)%zdim)
-       call config_ob%get(7, self%obs(i)%time)
-       call config_ob%get(8, self%obs(i)%val)
-       call config_ob%get(9, self%obs(i)%err)
+       CALL config_ob%get(4, self%obs(i)%lat)
+       CALL config_ob%get(5, self%obs(i)%lon)
+       CALL config_ob%get(6, self%obs(i)%zdim)
+       CALL config_ob%get(7, self%obs(i)%time)
+       CALL config_ob%get(8, self%obs(i)%val)
+       CALL config_ob%get(9, self%obs(i)%err)
 
        self%obs(nobs)%qc = 0
-    end do
+    END DO
 
 
 
@@ -156,18 +156,18 @@ CONTAINS
           ! TODO get the correct vertical grid when we move to more than 1 grid
           ! TODO use the correct vert_ij if 2 or 3d vertical coord
           j=1
-          k=size(vtgrids(1)%vert_nom)
-          do while(j < k-1)
+          k=SIZE(vtgrids(1)%vert_nom)
+          DO WHILE(j < k-1)
              m=(j+k)/2
-             if(vtgrids(1)%vert_nom(m) > self%obs(i)%zdim) then
+             IF(vtgrids(1)%vert_nom(m) > self%obs(i)%zdim) THEN
                 k = m
-             else
+             ELSE
                 j = m
-             end if
-          end do
-          lvl = merge(j,k, &
-               abs(vtgrids(1)%vert_nom(j)-self%obs(i)%zdim) < &
-               abs(vtgrids(1)%vert_nom(k)-self%obs(i)%zdim))
+             END IF
+          END DO
+          lvl = MERGE(j,k, &
+               ABS(vtgrids(1)%vert_nom(j)-self%obs(i)%zdim) < &
+               ABS(vtgrids(1)%vert_nom(k)-self%obs(i)%zdim))
 
 
           ! determine the slab offset based on var type and depth
@@ -227,6 +227,6 @@ CONTAINS
 
   END SUBROUTINE obsio_test_read_hx
   !================================================================================
-  
+
 
 END MODULE letkf_obs_test

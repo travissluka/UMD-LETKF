@@ -12,7 +12,7 @@ MODULE timing
   PUBLIC :: timing_start
   PUBLIC :: timing_stop
 
-  integer, public, parameter :: TIMER_SYNC = 1
+  INTEGER, PUBLIC, PARAMETER :: TIMER_SYNC = 1
 
   TYPE timer
      CHARACTER(len=20) :: name
@@ -32,11 +32,11 @@ MODULE timing
   !================================================================================
   !================================================================================
 
-  
+
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  TYPE timer_ptr     
+  TYPE timer_ptr
      TYPE(timer), POINTER :: p
   END TYPE timer_ptr
   !================================================================================
@@ -81,7 +81,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !> Start a timer
   !--------------------------------------------------------------------------------
@@ -89,13 +89,13 @@ CONTAINS
     CHARACTER(*), INTENT(in) :: timer_name
     TYPE(timer), POINTER :: new_timer
     TYPE(timer), POINTER :: ct
-    integer, optional, intent(in) :: flags
+    INTEGER, OPTIONAL, INTENT(in) :: flags
 
-    integer :: ierr
-    integer :: flags0
+    INTEGER :: ierr
+    INTEGER :: flags0
 
     ! set default flags if none given
-    flags0 = merge(flags, 0, present(flags))
+    flags0 = MERGE(flags, 0, PRESENT(flags))
 
     ! make sure the timer doesn't already exist as the current timer or any of its parents
     ! TODO
@@ -129,9 +129,9 @@ CONTAINS
     END IF
 
     ! wait for synchronization, if desired
-    if (Iand(flags0, TIMER_SYNC) > 0) then
-       call mpi_barrier(pe_comm, ierr)
-    end if
+    IF (IAND(flags0, TIMER_SYNC) > 0) THEN
+       CALL mpi_barrier(pe_comm, ierr)
+    END IF
 
     ! set the clock start time
     CALL system_CLOCK(new_timer%start_tick)
@@ -141,7 +141,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !> Stop a timer
   !--------------------------------------------------------------------------------
@@ -174,7 +174,7 @@ CONTAINS
   !================================================================================
 
 
-  
+
   !================================================================================
   !> Print out the across-PE timing statistics
   !! TODO: check for common multiple timers in the tree to sum up
