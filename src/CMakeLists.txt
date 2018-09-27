@@ -13,7 +13,6 @@ set( letkf_lib_srcs
   letkf.F90
   letkf_config.F90
   letkf_core.F90
-  letkf_diag.F90
   letkf_loc.F90
   letkf_mpi.F90
   letkf_obs.F90

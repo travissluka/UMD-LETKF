@@ -31,6 +31,7 @@ MODULE letkf_loc
   !! parameters
   !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_localizer_group
+     INTEGER :: id
      INTEGER, ALLOCATABLE :: slab(:)
   END TYPE letkf_localizer_group
   !================================================================================
@@ -43,6 +44,7 @@ MODULE letkf_loc
   !! horizontal / temporal / vertical / variable localization
   !--------------------------------------------------------------------------------
   TYPE, PUBLIC, ABSTRACT :: letkf_localizer
+     INTEGER :: maxgroups = -1
    CONTAINS
      PROCEDURE(I_letkf_loc_str),  NOPASS,   DEFERRED :: name
      PROCEDURE(I_letkf_loc_str),  NOPASS,   DEFERRED :: desc
@@ -186,6 +188,11 @@ CONTAINS
 
     !initialize the localizer class
     CALL localizer_class%init(config)
+
+    ! do some sanity checks
+    IF(localizer_class%maxgroups <= 0) &
+         CALL letkf_mpi_abort("localizer class needs to properly define 'maxgroups'")
+
   END SUBROUTINE letkf_loc_init
   !================================================================================
 

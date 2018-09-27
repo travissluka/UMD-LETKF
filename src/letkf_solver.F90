@@ -2,9 +2,9 @@
 !> does the majority of the real "LETKF" work.
 !--------------------------------------------------------------------------------
 MODULE letkf_solver
+  USE netcdf
   USE timing
   USE letkf_config
-  USE letkf_diag
   USE letkf_mpi
   USE letkf_loc
   USE letkf_state
@@ -23,6 +23,7 @@ MODULE letkf_solver
 
   PUBLIC :: letkf_solver_init
   PUBLIC :: letkf_solver_run
+  PUBLIC :: letkf_solver_final
 
 
   !================================================================================
@@ -39,7 +40,12 @@ MODULE letkf_solver
   REAL :: infl_rtpp
   REAL :: infl_mul
 
-
+  ! optional diagnostic fields
+  LOGICAL :: save_diag = .TRUE.
+  REAL, ALLOCATABLE :: diag_maxhz(:)
+  REAL, ALLOCATABLE :: diag_obscount(:)
+  REAL, ALLOCATABLE :: diag_lg_obscount(:,:)
+  REAL, ALLOCATABLE :: diag_lg_obsloc(:,:)
 
 CONTAINS
 
@@ -60,6 +66,9 @@ CONTAINS
        PRINT *, "======================================================================"
     END IF
 
+    IF(config%found("save_diag")) THEN
+       CALL config%get("save_diag", save_diag)
+    END IF
 
     ! get the inflation parameters
     CALL config%get("inflation", infl_config)
@@ -68,7 +77,7 @@ CONTAINS
     CALL infl_config%get("rtpp", infl_rtpp, default=0.0)
 
     IF(pe_isroot) THEN
-       PRINT *, "Inflation: "
+       PRINT *, "solver.save_diag=",save_diag
        PRINT *, "solver.inflation.rtps=",infl_rtps
        PRINT *, "solver.inflation.rtpp=",infl_rtpp
        PRINT *, "solver.inflation.mul=",infl_mul
@@ -90,14 +99,19 @@ CONTAINS
 
     CALL letkf_core_init(ens_size)
 
-    ! initialize the diagnostic fields
-    CALL letkf_diag_reg("maxhz",&
-         desc="max observation search radius")
-    CALL letkf_diag_reg("obs_count",&
-         desc="number of observations returned from KD tree")
-    CALL letkf_diag_reg("obs_count_loc", &
-         desc="sum of localization values for obs within maxhz of gridpoint")
 
+    ! initialize the diagnostic fields
+    IF (save_diag) THEN
+       ALLOCATE(diag_maxhz(ij_count))
+       diag_maxhz = 0
+       ALLOCATE(diag_obscount(ij_count))
+       diag_obscount = 0
+       ALLOCATE(diag_lg_obscount(ij_count, localizer_class%maxgroups))
+       diag_lg_obscount = 0
+       ALLOCATE(diag_lg_obsloc(ij_count, localizer_class%maxgroups))
+       diag_lg_obsloc = 0
+    END IF
+    
   END SUBROUTINE letkf_solver_init
   !================================================================================
 
@@ -148,9 +162,6 @@ CONTAINS
        PRINT *, "======================================================================"
     END IF
 
-    ! TODO make diag_obs_cnt_loc multidimensional, depending on the max
-    ! number of localization groups expected
-    !    ALLOCATE(diag_obs_cnt_loc(ij_count))
 
     ! perform analysis at each grid point
     ij_loop: DO ij=1,ij_count
@@ -161,8 +172,8 @@ CONTAINS
 
        ! get the max horizontal search distance
        maxhz = localizer_class%maxhz(ij)
-       CALL letkf_diag_set("maxhz", ij, maxhz)
        max_search_dist = maxhz * stdev2max
+       IF (save_diag) diag_maxhz(ij) = maxhz
 
        ! search for all observations within a given radius of this point
        ! using a fast O(n log n) kd-tree
@@ -170,7 +181,7 @@ CONTAINS
        CALL letkf_obs_get(lat_ij(ij), lon_ij(ij), max_search_dist, &
             obs_ij_idx, obs_ij_dist, obs_ij_cnt)
        CALL timing_stop("obs_search")
-       CALL letkf_diag_set("obs_count", ij, REAL(obs_ij_cnt))
+       IF(save_diag) diag_obscount(ij) = REAL(obs_ij_cnt)
 
 
        ! If there are observations found, prepare them
@@ -189,12 +200,11 @@ CONTAINS
        bkg_mean_ij=state_mean_ij(:,ij)
        bkg_sprd_ij=state_sprd_ij(:,ij)
 
+
        ! for each localization group
        lg_loop: DO lg=1, SIZE(loc_groups)
-          ! TEMPORARY
-          IF (lg > 1) CALL letkf_mpi_abort(">1 loc group not yet supported")
 
-          ! localize the obsservations, keeping only the obs with localization > 0.0
+          ! localize the observations, keeping only the obs with localization > 0.0
           obs_lg_cnt = 0
           obs_cnt_loc = 0.0
           obs_loop: DO i=1,obs_ij_cnt
@@ -215,8 +225,13 @@ CONTAINS
                 obs_lg_rdiag(obs_lg_cnt) = obs_ij_rdiag(i)
              END IF
           END DO obs_loop
-          CALL letkf_diag_set("obs_count_loc", ij, obs_cnt_loc)
 
+          IF (save_diag) THEN
+             diag_lg_obscount(ij,lg) = obs_lg_cnt
+             diag_lg_obsloc(ij,lg) = obs_cnt_loc
+          END IF
+
+          
           ! if there are still good quality obs to assimilate, do so
           IF (obs_lg_cnt > 0) THEN
 
@@ -338,4 +353,137 @@ CONTAINS
   !================================================================================
 
 
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  SUBROUTINE letkf_solver_final
+    INTEGER :: ncid
+    INTEGER :: d_x, d_y, d_lg, d_t
+    INTEGER ::vid, i
+
+    REAL :: tmp2d(grid_nx,grid_ny)
+    REAL :: tmp3d(grid_nx,grid_ny, localizer_class%maxgroups)
+
+
+    CALL timing_start("diag_write")
+    IF (save_diag ) THEN
+
+       ! setup output netCDF file
+       IF (pe_isroot) THEN
+          CALL check(nf90_create("diag.solver.nc", NF90_CLOBBER, ncid))
+
+          ! TODO, handle more than hz/vt grid
+          ! TODO, fill in time
+          CALL check(nf90_def_dim(ncid, "time", 1, d_t))
+          CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
+          CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))
+          CALL check(nf90_def_dim(ncid, "loc_group", &
+               localizer_class%maxgroups, d_lg))
+
+          CALL check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), vid))
+          CALL check(nf90_put_att(ncid, vid, "axis", "Y"))
+          CALL check(nf90_put_att(ncid, vid, "units", "degrees_north"))
+
+          CALL check(nf90_def_var(ncid, "lon", nf90_real, (/d_x/), vid))
+          CALL check(nf90_put_att(ncid, vid, "axis", "X"))
+          CALL check(nf90_put_att(ncid, vid, "units", "degrees_east"))
+
+          CALL check(nf90_def_var(ncid, "col_maxhz", nf90_real, &
+               (/d_x, d_y, d_t/), vid))
+          CALL check(nf90_put_att(ncid, vid, "long_name", &
+               "max observation search radius for the column"))
+          CALL check(nf90_put_att(ncid, vid, "units", "m"))
+
+          CALL check(nf90_def_var(ncid, "col_obscount", nf90_real, &
+               (/d_x, d_y, d_t/), vid))
+          CALL check(nf90_put_att(ncid, vid, "long_name", &
+               "observations per horizontal gridpoint"))
+
+          CALL check(nf90_def_var(ncid, "lg_obscount", nf90_real, &
+               (/d_x, d_y, d_lg, d_t/), vid))
+          CALL check(nf90_put_att(ncid, vid, "long_name", &
+               "observations per localization group"))
+
+          CALL check(nf90_def_var(ncid, "lg_obsloc", nf90_real, &
+               (/d_x, d_y, d_lg, d_t/), vid))
+          CALL check(nf90_put_att(ncid, vid, "long_name", &
+               "sum of localization values for observations used"))
+
+          CALL check(nf90_enddef(ncid))
+       END IF
+
+
+       ! write the grid
+       IF(pe_isroot) THEN
+          ! TODO allow for multiple horizontal grids
+          ! TODO set the attributes needed for non-lat/lon grids
+          CALL check(nf90_inq_varid(ncid,"lat", vid))
+          CALL check(nf90_put_var(ncid, vid, hzgrids(1)%lat_nom))
+          CALL check(nf90_inq_varid(ncid,"lon", vid))
+          CALL check(nf90_put_var(ncid, vid, hzgrids(1)%lon_nom))
+       END IF
+
+       ! write the values
+       CALL letkf_mpi_ij2grd(pe_root, diag_maxhz, tmp2d)
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, "col_maxhz", vid))
+          CALL check(nf90_put_var(ncid, vid, tmp2d))
+       END IF
+
+       CALL letkf_mpi_ij2grd(pe_root, diag_obscount, tmp2d)
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, "col_obscount", vid))
+          CALL check(nf90_put_var(ncid, vid, tmp2d))
+       END IF
+
+       DO i = 1, localizer_class%maxgroups
+          CALL letkf_mpi_ij2grd(pe_root, diag_lg_obsloc(:,i), tmp3d(:,:,i))
+       END DO
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, "lg_obsloc", vid))
+          CALL check(nf90_put_var(ncid, vid, tmp3d))
+       END IF
+
+       DO i = 1, localizer_class%maxgroups
+          CALL letkf_mpi_ij2grd(pe_root, diag_lg_obscount(:,i), tmp3d(:,:,i))
+       END DO
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, "lg_obscount", vid))
+          CALL check(nf90_put_var(ncid, vid, tmp3d))
+       END IF
+
+
+       ! close the netCDF file
+       IF (pe_isroot) THEN
+          CALL check(nf90_close(ncid))
+       END IF
+
+       ! cleanup allocations
+       DEALLOCATE(diag_maxhz)
+       DEALLOCATE(diag_obscount)
+       DEALLOCATE(diag_lg_obsloc)
+       DEALLOCATE(diag_lg_obscount)
+       
+    END IF
+    CALL timing_stop("diag_write")
+
+
+  CONTAINS
+
+    SUBROUTINE check(status, str)
+      INTEGER, INTENT(in) :: status
+      CHARACTER(*), OPTIONAL, INTENT(in) :: str
+
+      IF(status /= nf90_noerr) THEN
+         IF(PRESENT(str)) THEN
+            WRITE (*,*) TRIM(nf90_strerror(status)), ": ", str
+         ELSE
+            WRITE (*,*) TRIM(nf90_strerror(status))
+         END IF
+         CALL letkf_mpi_abort("NetCDF error")
+      END IF
+    END SUBROUTINE check
+  END SUBROUTINE letkf_solver_final
+  !================================================================================
 END MODULE letkf_solver

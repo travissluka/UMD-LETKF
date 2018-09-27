@@ -4,7 +4,6 @@
 MODULE letkf
 
   USE letkf_config
-  USE letkf_diag
   USE letkf_loc
   USE letkf_loc_novrt
   USE letkf_loc_ocean
@@ -171,7 +170,7 @@ CONTAINS
     END IF
 
     ! miscellaneous diagnostics from the LETKF solver
-    CALL letkf_diag_write()
+    CALL letkf_solver_final()
 
     ! ensemble mean, spread
     CALL letkf_state_write_meansprd("ana")
