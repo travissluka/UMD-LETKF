@@ -49,6 +49,7 @@ MODULE letkf_loc
      PROCEDURE(I_letkf_loc_str),  NOPASS,   DEFERRED :: name
      PROCEDURE(I_letkf_loc_str),  NOPASS,   DEFERRED :: desc
      PROCEDURE(I_letkf_loc_init),           DEFERRED :: init
+     PROCEDURE(I_letkf_loc_final),          DEFERRED :: FINAL
      PROCEDURE(I_letkf_loc_groups),         DEFERRED :: groups
      PROCEDURE(I_letkf_loc_maxhz),          DEFERRED :: maxhz
      PROCEDURE(I_letkf_loc_group_localize), DEFERRED :: localize
@@ -66,6 +67,11 @@ MODULE letkf_loc
        CLASS(letkf_localizer), INTENT(inout) :: self
        TYPE(configuration), INTENT(in) :: config
      END SUBROUTINE I_letkf_loc_init
+
+     SUBROUTINE I_letkf_loc_final(self)
+       IMPORT letkf_localizer
+       CLASS(letkf_localizer), INTENT(inout) :: self
+     END SUBROUTINE I_letkf_loc_final
 
      SUBROUTINE I_letkf_loc_groups(self, ij, groups)
        IMPORT letkf_localizer

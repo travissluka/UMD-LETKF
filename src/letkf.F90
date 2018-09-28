@@ -171,6 +171,7 @@ CONTAINS
 
     ! miscellaneous diagnostics from the LETKF solver
     CALL letkf_solver_final()
+    CALL localizer_class%FINAL()
 
     ! ensemble mean, spread
     CALL letkf_state_write_meansprd("ana")

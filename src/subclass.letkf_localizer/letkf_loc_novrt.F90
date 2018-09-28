@@ -30,6 +30,7 @@ MODULE letkf_loc_novrt
      PROCEDURE, NOPASS :: name => loc_novrt_name
      PROCEDURE, NOPASS :: desc => loc_novrt_desc
      PROCEDURE         :: init => loc_novrt_init
+     PROCEDURE         :: FINAL => loc_novrt_final
      PROCEDURE         :: groups => loc_novrt_groups
      PROCEDURE         :: localize => loc_novrt_localize
      PROCEDURE         :: maxhz => loc_novrt_maxhz
@@ -77,10 +78,20 @@ CONTAINS
     END IF
     self%hzloc = (/500.0d3, 50.0d3/)
     self%maxgroups=1
-    
+
   END SUBROUTINE loc_novrt_init
   !================================================================================
 
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  SUBROUTINE loc_novrt_final(self)
+    CLASS(loc_novrt), INTENT(inout) :: self
+
+    ! ... nothing to do here
+  END SUBROUTINE loc_novrt_final
+  !================================================================================
 
 
   !================================================================================

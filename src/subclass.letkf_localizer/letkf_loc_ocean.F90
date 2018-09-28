@@ -2,6 +2,7 @@
 !>
 !================================================================================
 MODULE letkf_loc_ocean
+  USE netcdf
   USE letkf_config
   USE letkf_mpi
   USE letkf_loc
@@ -30,10 +31,14 @@ MODULE letkf_loc_ocean
      INTEGER :: bkg_t_var_idx
      INTEGER :: bkg_t_var_len
 
+     ! optional diagnostics to save
+     REAL, ALLOCATABLE :: diag_vtloc_surf(:)
+
    CONTAINS
      PROCEDURE, NOPASS :: name => loc_ocean_name
      PROCEDURE, NOPASS :: desc => loc_ocean_desc
      PROCEDURE         :: init => loc_ocean_init
+     PROCEDURE         :: FINAL => loc_ocean_final
      PROCEDURE         :: groups => loc_ocean_groups
      PROCEDURE         :: localize => loc_ocean_localize
      PROCEDURE         :: maxhz => loc_ocean_maxhz
@@ -49,6 +54,8 @@ MODULE letkf_loc_ocean
 
   INTEGER, PARAMETER :: LOC_GROUP_SURF=0  !< surface localization group
   INTEGER, PARAMETER :: LOC_GROUP_SUBML=1 !< below the mixed layer loc group
+
+
 
 CONTAINS
 
@@ -102,7 +109,7 @@ CONTAINS
     self%hzdist_prof = linearinterp_lat(str)
     CALL config%get("hzloc_sat",  str)
     self%hzdist_sat = linearinterp_lat(str)
-    CALL config%get("tloc_prof", self%tloc_prof, default=-1.0)
+    CALL config%get("tloc_prdiag_surf_depthof", self%tloc_prof, default=-1.0)
     CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
 
     IF(pe_isroot) THEN
@@ -123,7 +130,7 @@ CONTAINS
        IF(pe_isroot) PRINT *, 'vtloc_surf.type  = "', str, '"'
 
        ! determine the parameters of the vertical localization
-       IF(str == "NONE") THEN
+       IF(str == "none") THEN
           ! No vertical localization
           CONTINUE
 
@@ -144,7 +151,7 @@ CONTAINS
 
        ELSE
           ! ERROR, unknown given type
-          CALL letkf_mpi_abort("illegal vtloc_s5urf 'type' given: "//str)
+          CALL letkf_mpi_abort("illegal vtloc_surf 'type' given: "//str)
        END IF
 
        ! determine the list of observations or platform ids that are considered
@@ -168,7 +175,79 @@ CONTAINS
 
     END IF
 
+    ! setup optional diagnostics
+    IF(self%save_diag) THEN
+       ALLOCATE(self%diag_vtloc_surf(ij_count))
+       self%diag_vtloc_surf = 0
+    END IF
+
   END SUBROUTINE loc_ocean_init
+  !================================================================================
+
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  SUBROUTINE loc_ocean_final(self)
+    CLASS(loc_ocean), INTENT(inout) :: self
+
+    INTEGER :: ncid, vid, i
+    INTEGER :: d_x, d_y, d_t
+    REAL :: tmp2d(grid_nx, grid_ny)
+
+    IF(self%save_diag) THEN
+       !setup oiutput netcdf file
+       IF(pe_isroot) THEN
+          CALL check(nf90_create("diag.loc_ocean.nc", NF90_CLOBBER, ncid))
+          CALL check(nf90_def_dim(ncid, "time", 1, d_t))
+          CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
+          CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))
+
+          CALL check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), vid))
+          CALL check(nf90_put_att(ncid, vid, "axis", "Y"))
+          CALL check(nf90_put_att(ncid, vid, "units", "degrees_north"))
+
+          CALL check(nf90_def_var(ncid, "lon", nf90_real, (/d_x/), vid))
+          CALL check(nf90_put_att(ncid, vid, "axis", "X"))
+          CALL check(nf90_put_att(ncid, vid, "units", "degrees_east"))
+
+          CALL check(nf90_def_var(ncid, "vtloc_surf", nf90_real, &
+               (/d_x, d_y, d_t/), vid))
+          CALL check(nf90_put_att(ncid, vid, "long_name", &
+               "depth, in levels, of the surface localization group"))
+
+          CALL check(nf90_enddef(ncid))
+       END IF
+
+       ! write the values
+       CALL letkf_mpi_ij2grd(pe_root, self%diag_vtloc_surf, tmp2d)
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, "vtloc_surf", vid))
+          CALL check(nf90_put_var(ncid, vid, tmp2d))
+       END IF
+
+       IF(pe_isroot) THEN
+          CALL check(nf90_close(ncid))
+       END IF
+    END IF
+
+  CONTAINS
+
+    SUBROUTINE check(status, str)
+      INTEGER, INTENT(in) :: status
+      CHARACTER(*), OPTIONAL, INTENT(in) :: str
+
+      IF(status /= nf90_noerr) THEN
+         IF(PRESENT(str)) THEN
+            WRITE (*,*) TRIM(nf90_strerror(status)), ": ", str
+         ELSE
+            WRITE (*,*) TRIM(nf90_strerror(status))
+         END IF
+         CALL letkf_mpi_abort("NetCDF error")
+      END IF
+    END SUBROUTINE check
+
+  END SUBROUTINE loc_ocean_final
   !================================================================================
 
 
@@ -198,6 +277,8 @@ CONTAINS
        ELSE
           CALL letkf_mpi_abort("no ocean vertical localization other than BKGT implemented yet.")
        END IF
+
+       IF(self%save_diag) self%diag_vtloc_surf(ij) = vtloc_lvl
 
        ! for each variable, split its levels into the two groups
        group1_count = 0
