@@ -10,4 +10,4 @@ letkf_data(
 # run a test for each of these .json configuration files
 letkf_test(mom6_1deg obsio_nc)
 letkf_test(mom6_1deg obsio_test)
-#letkf_test(mom6_1deg vtloc)
+letkf_test(mom6_1deg vtloc)

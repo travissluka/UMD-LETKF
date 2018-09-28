@@ -15,11 +15,20 @@ MODULE letkf_loc_ocean
   !>
   !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_localizer), PUBLIC :: loc_ocean
+     LOGICAL :: save_diag = .FALSE.
+
+     ! horizontal and temporal localization
      TYPE(linearinterp_lat) :: hzdist_prof
      TYPE(linearinterp_lat) :: hzdist_sat
      REAL :: tloc_prof, tloc_sat
 
+     ! SST vertical localization type, and parameters to go with it
      INTEGER :: vtloc_surf_src = 0
+     INTEGER, ALLOCATABLE :: surf_obs(:)
+     INTEGER, ALLOCATABLE :: surf_plats(:)
+     REAL :: bkg_t_delta
+     INTEGER :: bkg_t_var_idx
+     INTEGER :: bkg_t_var_len
 
    CONTAINS
      PROCEDURE, NOPASS :: name => loc_ocean_name
@@ -77,7 +86,10 @@ CONTAINS
 
     LOGICAL :: b
     CHARACTER(:), ALLOCATABLE :: str
-    TYPE(configuration) :: config2
+    TYPE(configuration) :: config2, config3
+    TYPE(letkf_statevar_spec) :: state_def
+    TYPE(letkf_obsplatdef) :: obsplat_def
+    INTEGER :: i
 
     IF (pe_isroot) THEN
        PRINT *, ""
@@ -85,33 +97,75 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
+    CALL config%get("save_diag", self%save_diag, .FALSE.)
     CALL config%get("hzloc_prof", str)
     self%hzdist_prof = linearinterp_lat(str)
-    CALL config%get("hzloc_sat", str)
+    CALL config%get("hzloc_sat",  str)
     self%hzdist_sat = linearinterp_lat(str)
     CALL config%get("tloc_prof", self%tloc_prof, default=-1.0)
     CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
 
+    IF(pe_isroot) THEN
+       PRINT *, "save_diag  = ", self%save_diag
+       PRINT *, "tloc_prof  = ", self%tloc_prof
+       PRINT *, "tloc_sat   = ", self%tloc_sat
+       PRINT *, "hzloc_prof = ", "??"
+       PRINT *, "hzloc_sat  = ", "??"
+    END IF
+
+    ! get type of vertical localization used for SST obs
     self%maxgroups = 1
     self%vtloc_surf_src = VTLOC_SURF_SRC_NONE
-
     IF(config%found("vtloc_surf"))THEN
        CALL config%get("vtloc_surf", config2)
        CALL config2%get("type", str)
-       IF(str == "none") THEN
+
+       IF(pe_isroot) PRINT *, 'vtloc_surf.type  = "', str, '"'
+
+       ! determine the parameters of the vertical localization
+       IF(str == "NONE") THEN
+          ! No vertical localization
           CONTINUE
-       ELSE IF(str == "mld:bkg_t") THEN
+
+       ELSE IF(str == "bkg_t") THEN
+          ! localized to MLD based on temperature delta
           self%maxgroups = 2
           self%vtloc_surf_src = VTLOC_SURF_SRC_BKGT
-       ELSE
-          CALL letkf_mpi_abort("illegal vtloc_surf 'type' given: "//str)
-       END IF
-    END IF
+          CALL config2%get("bkg_t_delta", self%bkg_t_delta)
+          CALL config2%get("bkg_t_var", str)
+          state_def = letkf_state_var_getdef(str)
+          self%bkg_t_var_idx = state_def%grid_s_idx
+          self%bkg_t_var_len = state_def%levels
 
-    IF(pe_isroot) THEN
-       !       PRINT *, "loc_ocean.vt_split_ml=", self%vt_split_ml
-       PRINT *, "loc_ocean.tloc_prof=", self%tloc_prof
-       PRINT *, "loc_ocean.tloc_sat=",  self%tloc_sat
+          IF(pe_isroot) THEN
+             PRINT *, "vtloc_surf.bkg_t_delta = ", self%bkg_t_delta
+             PRINT *, 'vtloc_surf.bkg_t_var   = "', str,'"'
+          END IF
+
+       ELSE
+          ! ERROR, unknown given type
+          CALL letkf_mpi_abort("illegal vtloc_s5urf 'type' given: "//str)
+       END IF
+
+       ! determine the list of observations or platform ids that are considered
+       ! surface observations that need to be localized. Convert from a specified
+       ! string on the config file to the associated integer id.
+       CALL config2%get("surf_obs", config3)
+       ALLOCATE(self%surf_obs(config3%COUNT()))
+       DO i = 1, SIZE(self%surf_obs)
+          CALL config3%get(i,str)
+          obsplat_def = letkf_obs_getdef('O',str)
+          self%surf_obs(i) = obsplat_def%id
+       END DO
+
+       CALL config2%get("surf_plats", config3)
+       ALLOCATE(self%surf_plats(config3%COUNT()))
+       DO i = 1, SIZE(self%surf_plats)
+          CALL config3%get(i,str)
+          obsplat_def = letkf_obs_getdef('P',str)
+          self%surf_plats(i) = obsplat_def%id
+       END DO
+
     END IF
 
   END SUBROUTINE loc_ocean_init
@@ -139,6 +193,7 @@ CONTAINS
        ! determine the surface localization max depth level
        vtloc_lvl=1
        IF(self%vtloc_surf_src == VTLOC_SURF_SRC_BKGT) THEN
+          ! if based on MLD from background temperature delta
           vtloc_lvl = calc_mldlvl_bkgt(self,ij)
        ELSE
           CALL letkf_mpi_abort("no ocean vertical localization other than BKGT implemented yet.")
@@ -190,14 +245,26 @@ CONTAINS
 
 
   !================================================================================
-  !>
+  !> Calculates the vertical localization depth based on the background temperature
   !--------------------------------------------------------------------------------
   FUNCTION calc_mldlvl_bkgt(self, ij) RESULT(mldlvl)
     CLASS(loc_ocean), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     INTEGER :: mldlvl
+    INTEGER :: i
+    REAL :: t0, t1
 
-    mldlvl = 1
+    ! find the depth at which the mixed layer ends
+    t0 = state_mean_ij(self%bkg_t_var_idx, ij)
+    mldlvl=self%bkg_t_var_len
+    DO i = 1, self%bkg_t_var_len-1
+       t1 = state_mean_ij(self%bkg_t_var_idx+i, ij)
+       ! IF(pe_isroot)   PRINT *, self%bkg_t_var_idx+i, t1
+       IF (ABS(t0-t1) > self%bkg_t_delta) THEN
+          mldlvl = i
+          EXIT
+       END IF
+    END DO
 
   END FUNCTION calc_mldlvl_bkgt
   !================================================================================
@@ -230,21 +297,42 @@ CONTAINS
     TYPE(letkf_observation), INTENT(in) :: obs
     REAL, INTENT(in) :: dist
     REAL :: loc
+    INTEGER :: i
+    LOGICAL :: surf
+
+    ! Is this a surface/satellite observation?
+    ! test by comparing observation and platform ids against a user
+    ! defined list.
+    surf = .TRUE.
+    IF (SIZE(self%surf_obs) > 0) THEN
+       DO i = 1, SIZE(self%surf_obs)
+          IF (obs%obsid == self%surf_obs(i)) EXIT
+       END DO
+       IF (i > SIZE(self%surf_obs)) surf = .FALSE.
+    END IF
+    IF (SIZE(self%surf_plats) > 0) THEN
+       DO i = 1, SIZE(self%surf_plats)
+          IF (obs%platid == self%surf_plats(i)) EXIT
+       END DO
+       IF (i > SIZE(self%surf_plats)) surf = .FALSE.
+    END IF
 
 
-    ! TODO remove hardcoding of plat ids, obs grid_s_idx
-    IF(obs%platid == 1000) THEN
-       ! satellite observations
+    ! calculate the horizontal / vertical / temporal localization
+    IF(surf) THEN
+       ! if a surface/satellite observation
        IF(group%id == LOC_GROUP_SUBML) THEN
+          ! don't use surface observations below the mixed layer
           loc = 0.0
        ELSE
+          ! otherwise, in the surface mixed layer, use the satellite ob
           loc = letkf_loc_gc(dist, self%hzdist_sat%get_dist(lat_ij(ij)))
           IF(self%tloc_sat > 0) &
                loc = loc * letkf_loc_gc(obs%time, self%tloc_sat)
        END IF
 
     ELSE IF(obs%platid == 1) THEN
-       ! profile T/S observations
+       ! If this is a T/S profile observation, apply no vertical localization
        loc = letkf_loc_gc(dist, self%hzdist_prof%get_dist( lat_ij(ij)))
        IF(self%tloc_prof > 0) &
             loc = loc * letkf_loc_gc(obs%time, self%tloc_prof)
