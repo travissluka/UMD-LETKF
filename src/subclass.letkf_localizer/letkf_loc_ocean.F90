@@ -32,7 +32,8 @@ MODULE letkf_loc_ocean
      INTEGER :: bkg_t_var_len
 
      ! optional diagnostics to save
-     REAL, ALLOCATABLE :: diag_vtloc_surf(:)
+     REAL, ALLOCATABLE :: diag_vtloc_surf_lvl(:)
+     REAL, ALLOCATABLE :: diag_vtloc_surf_dpth(:)
 
    CONTAINS
      PROCEDURE, NOPASS :: name => loc_ocean_name
@@ -177,8 +178,10 @@ CONTAINS
 
     ! setup optional diagnostics
     IF(self%save_diag) THEN
-       ALLOCATE(self%diag_vtloc_surf(ij_count))
-       self%diag_vtloc_surf = 0
+       ALLOCATE(self%diag_vtloc_surf_lvl(ij_count))
+       ALLOCATE(self%diag_vtloc_surf_dpth(ij_count))
+       self%diag_vtloc_surf_lvl = 0
+       self%diag_vtloc_surf_dpth = 0
     END IF
 
   END SUBROUTINE loc_ocean_init
@@ -211,18 +214,30 @@ CONTAINS
           CALL check(nf90_put_att(ncid, vid, "axis", "X"))
           CALL check(nf90_put_att(ncid, vid, "units", "degrees_east"))
 
-          CALL check(nf90_def_var(ncid, "vtloc_surf", nf90_real, &
+          CALL check(nf90_def_var(ncid, "vtloc_surf_lvl", nf90_real, &
                (/d_x, d_y, d_t/), vid))
           CALL check(nf90_put_att(ncid, vid, "long_name", &
                "depth, in levels, of the surface localization group"))
+
+          CALL check(nf90_def_var(ncid, "vtloc_surf_depth", nf90_real, &
+               (/d_x, d_y, d_t/), vid))
+          CALL check(nf90_put_att(ncid, vid, "long_name", &
+               "depth, in meters, of the surface localization group"))
+          CALL check(nf90_put_att(ncid, vid, "units", "meters"))
 
           CALL check(nf90_enddef(ncid))
        END IF
 
        ! write the values
-       CALL letkf_mpi_ij2grd(pe_root, self%diag_vtloc_surf, tmp2d)
+       CALL letkf_mpi_ij2grd(pe_root, self%diag_vtloc_surf_lvl, tmp2d)
        IF(pe_isroot) THEN
-          CALL check(nf90_inq_varid(ncid, "vtloc_surf", vid))
+          CALL check(nf90_inq_varid(ncid, "vtloc_surf_lvl", vid))
+          CALL check(nf90_put_var(ncid, vid, tmp2d))
+       END IF
+
+       CALL letkf_mpi_ij2grd(pe_root, self%diag_vtloc_surf_dpth, tmp2d)
+       IF(pe_isroot) THEN
+          CALL check(nf90_inq_varid(ncid, "vtloc_surf_depth", vid))
           CALL check(nf90_put_var(ncid, vid, tmp2d))
        END IF
 
@@ -278,7 +293,12 @@ CONTAINS
           CALL letkf_mpi_abort("no ocean vertical localization other than BKGT implemented yet.")
        END IF
 
-       IF(self%save_diag) self%diag_vtloc_surf(ij) = vtloc_lvl
+       ! save diagnostics for output later
+       IF(self%save_diag) THEN
+          self%diag_vtloc_surf_lvl(ij) = vtloc_lvl
+          ! TODO, handle 3D vertical coordinates
+          self%diag_vtloc_surf_dpth(ij) = vtgrids(1)%vert_nom(vtloc_lvl)
+       END IF
 
        ! for each variable, split its levels into the two groups
        group1_count = 0
