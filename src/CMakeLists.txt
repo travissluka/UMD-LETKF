@@ -18,7 +18,7 @@ set( letkf_lib_srcs
   letkf_obs.F90
   letkf_solver.F90
   letkf_state.F90
-  letkf_state_config.F90
+  letkf_state_helper.F90
   )
 
 

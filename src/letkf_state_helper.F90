@@ -1,4 +1,7 @@
-MODULE letkf_state_config
+!================================================================================
+!> Module providing optional model state IO helper functions.
+!--------------------------------------------------------------------------------
+MODULE letkf_state_helper
 
   USE letkf_mpi
   USE letkf_config
@@ -8,19 +11,42 @@ MODULE letkf_state_config
   !PRIVATE
 
 
+  TYPE, PUBLIC :: var_file
+     CHARACTER(len=:), ALLOCATABLE :: var
+     CHARACTER(len=:), ALLOCATABLE :: file
+  END TYPE var_file
+
+
+  !> name of variable / file to load (optional, depending on plugin)
+  TYPE, PUBLIC :: hzgrid_files
+     TYPE(var_file) :: lat
+     TYPE(var_file) :: lon
+     TYPE(var_file) :: nomlat
+     TYPE(var_file) :: nomlon
+     TYPE(var_file) :: mask
+  END TYPE hzgrid_files
+
+
+  TYPE, PUBLIC :: vtgrid_files
+     TYPE(var_file) :: vt1d
+  END TYPE vtgrid_files
+
+
+
 CONTAINS
 
 
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  SUBROUTINE parse_hzgrids(config, hzgrids)
+  SUBROUTINE parse_hzgrids(config, hzgrids, hzgrids_files)
     TYPE(configuration), INTENT(in) :: config
     TYPE(letkf_hzgrid_spec), ALLOCATABLE, INTENT(out) :: hzgrids(:)
+    TYPE(hzgrid_files) , ALLOCATABLE, INTENT(out) :: hzgrids_files(:)
 
     TYPE(configuration) :: hz_config, config2, config3
     INTEGER :: cnt, i
-    CHARACTER(len=:), ALLOCATABLE :: str, filename, varname
+    CHARACTER(len=:), ALLOCATABLE :: str
 
     PRINT *, ""
     PRINT *, "Parsing horizontal grid specs..."
@@ -34,6 +60,7 @@ CONTAINS
     ! How many horizontal grids are there?
     cnt = hz_config%COUNT()
     ALLOCATE(hzgrids(cnt))
+    ALLOCATE(hzgrids_files(cnt))
     PRINT *, " Found ",cnt," horizontal grid definition(s)."
 
     ! for each horizontal grid
@@ -46,53 +73,55 @@ CONTAINS
        hzgrids(i)%name = str
 
        ! latitude
-       hzgrids(i)%lat_var_name = ""
-       hzgrids(i)%lat_var_file = ""
-       hzgrids(i)%nomlat_var_name = ""
-       hzgrids(i)%nomlat_var_file = ""
+       hzgrids_files(i)%lat%var = ""
+       hzgrids_files(i)%lat%file = ""
+       hzgrids_files(i)%nomlat%var = ""
+       hzgrids_files(i)%nomlat%file = ""
        IF(config2%found("lat2d")) THEN
           CALL config2%get("lat2d", config3)
-          CALL config3%get(1, varname)
-          CALL config3%get(2, filename)
-          PRINT *,'   lat2d: ("', varname, '", "',filename,'")'
-          hzgrids(i)%lat_var_name = varname
-          hzgrids(i)%lat_var_file = filename
+          CALL config3%get(1, hzgrids_files(i)%lat%var)
+          CALL config3%get(2, hzgrids_files(i)%lat%file)
+          PRINT *,'   lat2d: ("', hzgrids_files(i)%lat%var,&
+               '", "',hzgrids_files(i)%lat%file,'")'
+
        END IF
        IF(config2%found("lat1d")) THEN
           CALL config2%get("lat1d", config3)
-          CALL config3%get(1, varname)
-          CALL config3%get(2, filename)
-          PRINT *,'   lat1d: ("', varname, '", "',filename,'")'
-          hzgrids(i)%nomlat_var_name = varname
-          hzgrids(i)%nomlat_var_file = filename
+          CALL config3%get(1, hzgrids_files(i)%nomlat%var)
+          CALL config3%get(2, hzgrids_files(i)%nomlat%file)
+          PRINT *,'   lat1d: ("', hzgrids_files(i)%nomlat%var, &
+               '", "',hzgrids_files(i)%nomlat%file,'")'
        END IF
 
        ! Longitude
+       hzgrids_files(i)%lon%var = ""
+       hzgrids_files(i)%lon%file = ""
+       hzgrids_files(i)%nomlon%var = ""
+       hzgrids_files(i)%nomlon%file = ""
        IF(config2%found("lon2d")) THEN
           CALL config2%get("lon2d", config3)
-          CALL config3%get(1, varname)
-          CALL config3%get(2, filename)
-          PRINT *,'   lon2d: ("', varname, '", "',filename,'")'
-          hzgrids(i)%lon_var_name = varname
-          hzgrids(i)%lon_var_file = filename
+          CALL config3%get(1, hzgrids_files(i)%lon%var)
+          CALL config3%get(2, hzgrids_files(i)%lon%file)
+          PRINT *,'   lon2d: ("', hzgrids_files(i)%lon%var,&
+               '", "',hzgrids_files(i)%lon%file,'")'
        END IF
        IF(config2%found("lon1d")) THEN
           CALL config2%get("lon1d", config3)
-          CALL config3%get(1, varname)
-          CALL config3%get(2, filename)
-          PRINT *,'   lon1d: ("', varname, '", "',filename,'")'
-          hzgrids(i)%nomlon_var_name = varname
-          hzgrids(i)%nomlon_var_file = filename
+          CALL config3%get(1, hzgrids_files(i)%nomlon%var)
+          CALL config3%get(2, hzgrids_files(i)%nomlon%file)
+          PRINT *,'   lon1d: ("', hzgrids_files(i)%nomlon%var, &
+               '", "',hzgrids_files(i)%nomlon%file,'")'
        END IF
 
        ! mask
+       hzgrids_files(i)%mask%var = ""
+       hzgrids_files(i)%mask%file = ""
        IF(config2%found("mask")) THEN
           CALL config2%get("mask", config3)
-          CALL config3%get(1, varname)
-          CALL config3%get(2, filename)
-          PRINT *,'   mask:  ("', varname, '", "',filename,'")'
-          hzgrids(i)%mask_var_name = varname
-          hzgrids(i)%mask_var_file = filename
+          CALL config3%get(1, hzgrids_files(i)%mask%var)
+          CALL config3%get(2, hzgrids_files(i)%mask%file)
+          PRINT *,'   mask:  ("', hzgrids_files(i)%mask%var, &
+               '", "',hzgrids_files(i)%mask%file,'")'
        END IF
 
     END DO
@@ -154,9 +183,10 @@ CONTAINS
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  SUBROUTINE parse_vtgrids(config, vtgrids)
+  SUBROUTINE parse_vtgrids(config, vtgrids, vtgrids_files)
     TYPE(configuration), INTENT(in) :: config
     TYPE(letkf_vtgrid_spec), ALLOCATABLE, INTENT(out) :: vtgrids(:)
+    TYPE(vtgrid_files) , ALLOCATABLE, INTENT(out) :: vtgrids_files(:)
 
     TYPE(configuration) :: vt_config, config2, config3
     INTEGER :: cnt, i
@@ -174,6 +204,7 @@ CONTAINS
     ! How many horizontal grids are there?
     cnt = vt_config%COUNT()
     ALLOCATE(vtgrids(cnt))
+    ALLOCATE(vtgrids_files(cnt))
     PRINT *, " Found ",cnt," vertical grid definition(s)."
 
     ! for each vertical grid
@@ -195,8 +226,8 @@ CONTAINS
           CALL config3%get(2, filename)
           PRINT *,'   vert1d: ("', varname, '", "',filename,'")'
           vtgrids(i)%dims=1
-          vtgrids(i)%vert_var_name = varname
-          vtgrids(i)%vert_var_file = filename
+          vtgrids_files(i)%vt1d%var = varname
+          vtgrids_files(i)%vt1d%file = filename
        ELSE
           CALL letkf_mpi_abort("vert1d is missing for "//TRIM(vtgrids(i)%name))
        END IF
@@ -322,4 +353,4 @@ CONTAINS
 
   END SUBROUTINE parse_statedef
 
-END MODULE letkf_state_config
+END MODULE letkf_state_helper

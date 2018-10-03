@@ -38,21 +38,11 @@ MODULE letkf_state
   !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_hzgrid_spec
      CHARACTER(len=20)         :: name      !< unique name of the horizontal grid
-
-     ! actual values
-     REAL,         ALLOCATABLE :: lat(:,:)  !< 2D lattidue grid (in degrees)
+     REAL,         ALLOCATABLE :: lat(:,:)  !< 2D latidue grid (in degrees)
      REAL,         ALLOCATABLE :: lon(:,:)  !< 2D longitude grid (in degrees)
      REAL,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees)
      REAL,         ALLOCATABLE :: lon_nom(:)!< nominal 1D longitude grid (in degrees)
      LOGICAL,      ALLOCATABLE :: mask(:,:) !< 2D mask
-
-     ! name of variable / file to load (optional, depending on plugin)
-     CHARACTER(len=:), ALLOCATABLE :: lat_var_name, lat_var_file
-     CHARACTER(len=:), ALLOCATABLE :: lon_var_name, lon_var_file
-     CHARACTER(len=:), ALLOCATABLE :: nomlat_var_name, nomlat_var_file
-     CHARACTER(len=:), ALLOCATABLE :: nomlon_var_name, nomlon_var_file
-     CHARACTER(len=:), ALLOCATABLE :: mask_var_name, mask_var_file
-
   END TYPE letkf_hzgrid_spec
   !================================================================================
 
@@ -67,14 +57,8 @@ MODULE letkf_state
   TYPE, PUBLIC :: letkf_vtgrid_spec
      CHARACTER(len=20)         :: name !< unique name of the vertical grid
      INTEGER                   :: dims !< dimensions of the grid (0, 1, 2, or 3)
-
-     ! actual values
      REAL,         ALLOCATABLE :: vert(:,:,:) !< vertical grid
      REAL,         ALLOCATABLE :: vert_nom(:) !< nominal 1D vertival grid
-
-     ! name of variable / file to load
-     CHARACTER(len=:), ALLOCATABLE :: vert_var_name, vert_var_file
-
   END TYPE letkf_vtgrid_spec
   !--------------------------------------------------------------------------------
 

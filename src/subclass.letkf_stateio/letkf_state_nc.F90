@@ -5,7 +5,7 @@ MODULE letkf_state_nc
   USE netcdf
   USE letkf_config
   USE letkf_state
-  USE letkf_state_config
+  USE letkf_state_helper
   USE letkf_mpi
 
   IMPLICIT NONE
@@ -97,12 +97,16 @@ CONTAINS
 
   !================================================================================
   !>
+  !! Note: this subroutine is called only by the root PE
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_read_specs(self, hzgrids, vtgrids, statevars)
     CLASS(stateio_nc) :: self
     TYPE(letkf_hzgrid_spec),   ALLOCATABLE, INTENT(out) :: hzgrids(:)
     TYPE(letkf_vtgrid_spec),   ALLOCATABLE, INTENT(out) :: vtgrids(:)
     TYPE(letkf_statevar_spec), ALLOCATABLE, INTENT(out) :: statevars(:)
+
+    TYPE(hzgrid_files), ALLOCATABLE :: hzgrids_files(:)
+    TYPE(vtgrid_files), ALLOCATABLE :: vtgrids_files(:)
 
     TYPE(configuration) :: config, cfg2
 
@@ -112,26 +116,25 @@ CONTAINS
 
     INTEGER :: nx, ny, i, grd_cnt, j
 
-
     ! Read horizontal grids
     ! ------------------------------------------------------------
-    CALL parse_hzgrids(self%config, hzgrids)
+    CALL parse_hzgrids(self%config, hzgrids, hzgrids_files)
 
     DO i = 1, SIZE(hzgrids)
        ! load lats
-       IF (hzgrids(i)%lat_var_name /= "") CALL read_nc_d2( &
-            hzgrids(i)%lat_var_name, hzgrids(i)%lat_var_file, &
+       IF (hzgrids_files(i)%lat%var /= "") CALL read_nc_d2( &
+            hzgrids_files(i)%lat%var, hzgrids_files(i)%lat%file, &
             hzgrids(i)%lat)
-       IF (hzgrids(i)%nomlat_var_name /= "") CALL read_nc_d1( &
-            hzgrids(i)%nomlat_var_name, hzgrids(i)%nomlat_var_file, &
+       IF (hzgrids_files(i)%nomlat%var /= "") CALL read_nc_d1( &
+            hzgrids_files(i)%nomlat%var, hzgrids_files(i)%nomlat%file, &
             hzgrids(i)%lat_nom)
 
        ! load lons
-       IF (hzgrids(i)%lon_var_name /= "") CALL read_nc_d2( &
-            hzgrids(i)%lon_var_name, hzgrids(i)%lon_var_file, &
+       IF (hzgrids_files(i)%lon%var /= "") CALL read_nc_d2( &
+            hzgrids_files(i)%lon%var, hzgrids_files(i)%lon%file, &
             hzgrids(i)%lon)
-       IF (hzgrids(i)%nomlon_var_name /= "") CALL read_nc_d1( &
-            hzgrids(i)%nomlon_var_name, hzgrids(i)%nomlon_var_file, &
+       IF (hzgrids_files(i)%nomlon%var /= "") CALL read_nc_d1( &
+            hzgrids_files(i)%nomlon%var, hzgrids_files(i)%nomlon%file, &
             hzgrids(i)%lon_nom)
 
        ! generate nominal 1D lat/lon, or fill in 2D lat/lon from 1D lat/lon
@@ -142,9 +145,9 @@ CONTAINS
        ! read in mask
        ALLOCATE(hzgrids(i)%mask(nx,ny))
        hzgrids(i)%mask = .FALSE.
-       IF(hzgrids(i)%mask_var_name /= "") THEN
+       IF(hzgrids_files(i)%mask%var /= "") THEN
           CALL read_nc_d2( &
-               hzgrids(i)%mask_var_name, hzgrids(i)%mask_var_file, &
+               hzgrids_files(i)%mask%var, hzgrids_files(i)%mask%file, &
                tmp_r_2d)
           WHERE (tmp_r_2d <= 0) hzgrids(i)%mask =.TRUE.
           DEALLOCATE(tmp_r_2d)
@@ -154,12 +157,12 @@ CONTAINS
 
     ! read vertical grid
     !------------------------------------------------------------
-    CALL parse_vtgrids(self%config, vtgrids)
+    CALL parse_vtgrids(self%config, vtgrids, vtgrids_files)
 
     DO i = 1, SIZE(vtgrids)
        ! read in a 1 dimensional vertical coordinate
        CALL read_nc_d1( &
-            vtgrids(i)%vert_var_name, vtgrids(i)%vert_var_file, &
+            vtgrids_files(i)%vt1d%var, vtgrids_files(i)%vt1d%file, &
             vtgrids(i)%vert_nom)
 
        ! generate a 3d vertical coordinate field from the 1D field
@@ -339,7 +342,6 @@ CONTAINS
     filename=str_ens_pattern(statevar%input_file, ensmem)
     invar = statevar%input_var
 
-    PRINT *, ensmem, state_var, filename
     ! make sure this file exists
     ! TODO
     IF (self%verbose) &
