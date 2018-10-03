@@ -5,6 +5,7 @@ MODULE letkf_state_nc
   USE netcdf
   USE letkf_config
   USE letkf_state
+  USE letkf_state_config
   USE letkf_mpi
 
   IMPLICIT NONE
@@ -25,9 +26,7 @@ MODULE letkf_state_nc
   !--------------------------------------------------------------------------------
   TYPE, PUBLIC, EXTENDS(letkf_stateio) :: stateio_nc
      INTEGER :: compression !< nc4 compression (0-9)
-     TYPE(configuration) :: hzgriddef
-     TYPE(configuration) :: vtgriddef
-     TYPE(configuration) :: statedef
+     TYPE(configuration) :: config
 
    CONTAINS
 
@@ -84,12 +83,12 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
+    ! save our section of the config file for later
+    self%config = config
+
     ! load in our section of the configuration
     CALL config%get("compression", self%compression)
     IF (pe_isroot) PRINT *, " state.compression=", self%compression
-    CALL config%get("hzgrid", self%hzgriddef)
-    CALL config%get("vtgrid", self%vtgriddef)
-    CALL config%get("statedef", self%statedef)
 
   END SUBROUTINE stateio_nc_init
   !================================================================================
@@ -112,182 +111,66 @@ CONTAINS
     REAL, ALLOCATABLE :: tmp_r_2d(:,:)
 
     INTEGER :: nx, ny, i, grd_cnt, j
-    nx = -1
-    ny = -1
+
 
     ! Read horizontal grids
     ! ------------------------------------------------------------
-    PRINT *, ""
-    PRINT *, "Loading horizontal grid specs..."
-    grd_cnt = self%hzgriddef%COUNT()
-    ALLOCATE(hzgrids(grd_cnt))
-    PRINT *, "Found ",grd_cnt," horizontal grids definitions."
-    PRINT *, ""
+    CALL parse_hzgrids(self%config, hzgrids)
 
-    !  for each horizontal grid:
-    DO i=1,grd_cnt
+    DO i = 1, SIZE(hzgrids)
+       ! load lats
+       IF (hzgrids(i)%lat_var_name /= "") CALL read_nc_d2( &
+            hzgrids(i)%lat_var_name, hzgrids(i)%lat_var_file, &
+            hzgrids(i)%lat)
+       IF (hzgrids(i)%nomlat_var_name /= "") CALL read_nc_d1( &
+            hzgrids(i)%nomlat_var_name, hzgrids(i)%nomlat_var_file, &
+            hzgrids(i)%lat_nom)
 
-       ! grid name
-       CALL self%hzgriddef%get(i, config)
-       CALL config%name(str)
+       ! load lons
+       IF (hzgrids(i)%lon_var_name /= "") CALL read_nc_d2( &
+            hzgrids(i)%lon_var_name, hzgrids(i)%lon_var_file, &
+            hzgrids(i)%lon)
+       IF (hzgrids(i)%nomlon_var_name /= "") CALL read_nc_d1( &
+            hzgrids(i)%nomlon_var_name, hzgrids(i)%nomlon_var_file, &
+            hzgrids(i)%lon_nom)
 
-       PRINT *, "loading horizontal grid: ", str
-       hzgrids(i)%name = str
+       ! generate nominal 1D lat/lon, or fill in 2D lat/lon from 1D lat/lon
+       CALL check_hzgrid(hzgrids(i))
+       nx = SIZE(hzgrids(i)%lon_nom)
+       ny = SIZE(hzgrids(i)%lat_nom)
 
-       ! latitude
-       IF(config%found("lat2d")) THEN
-          CALL config%get("lat2d", cfg2)
-          CALL cfg2%get(1, varname)
-          CALL cfg2%get(2, filename)
-          PRINT *,' loading 2D "lat2d" from "', varname, '" of "',filename,'"'
-          CALL read_nc_d2(varname, filename, hzgrids(i)%lat)
-       END IF
-       IF(config%found("lat1d")) THEN
-          CALL config%get("lat1d", cfg2)
-          CALL cfg2%get(1, varname)
-          CALL cfg2%get(2, filename)
-          PRINT *,' loading 1D "lat1d" from "', varname, '" of "',filename,'"'
-          CALL read_nc_d1(varname, filename, hzgrids(i)%lat_nom)
-       END IF
-       IF (ALLOCATED(hzgrids(i)%lat)) THEN
-          ! 2d fields was read in
-          nx = SIZE(hzgrids(i)%lat, 1)
-          ny = SIZE(hzgrids(i)%lat, 2)
-       END IF
-       IF (ny < 0 .AND. ALLOCATED(hzgrids(i)%lat_nom)) &
-            ny = SIZE(hzgrids(i)%lat_nom)
-
-
-       ! longitude
-       IF(config%found("lon2d")) THEN
-          CALL config%get("lon2d", cfg2)
-          CALL cfg2%get(1, varname)
-          CALL cfg2%get(2, filename)
-          PRINT *,' loading 2D "lon2d" from "', varname, '" of "',filename,'"'
-          CALL read_nc_d2(varname, filename, hzgrids(i)%lon)
-       END IF
-       IF(config%found("lon1d")) THEN
-          CALL config%get("lon1d", cfg2)
-          CALL cfg2%get(1, varname)
-          CALL cfg2%get(2, filename)
-          PRINT *,' loading 1D "lon1d" from "', varname, '" of "',filename,'"'
-          CALL read_nc_d1(varname, filename, hzgrids(i)%lon_nom)
-       END IF
-       IF (nx < 0 .AND. ALLOCATED(hzgrids(i)%lon_nom)) &
-            nx = SIZE(hzgrids(i)%lon_nom)
-
-       ! if we need to generate the 2d lat/lon from the 1d lat/lon
-       IF( .NOT. ALLOCATED(hzgrids(i)%lat) .OR. .NOT. ALLOCATED(hzgrids(i)%lon)) THEN
-          IF (.NOT. ALLOCATED(hzgrids(i)%lat_nom) .OR. .NOT. ALLOCATED(hzgrids(i)%lon_nom) ) &
-               CALL letkf_mpi_abort("neither a 2D lat/lon nor 1D lat/lon was specified")
-          ALLOCATE(hzgrids(i)%lat(nx,ny))
-          ALLOCATE(hzgrids(i)%lon(nx,ny))
-          DO j=1,nx
-             hzgrids(i)%lon(j,:) = hzgrids(i)%lon_nom(j)
-          END DO
-          DO j=1,ny
-             hzgrids(i)%lat(:,j) = hzgrids(i)%lat_nom(j)
-          END DO
-       END IF
-
-       ! if we need to generate the 1d nominal lat/lon from the 2d lat/lon
-       IF (.NOT. ALLOCATED(hzgrids(i)%lat_nom) .OR. .NOT. ALLOCATED(hzgrids(i)%lon_nom)) THEN
-          PRINT *, ""
-          PRINT *, "WARNING: a 2D lat/lon grid was specified, but a nominal ",&
-               "1D lat/lon was not. Estimating a viable nominal 1D lat/lon, but ",&
-               "cordinates of resulting files might not be ideal."
-          PRINT *, ""
-          hzgrids(i)%lat_nom = SUM(hzgrids(i)%lat, dim=1)/nx
-          hzgrids(i)%lon_nom = SUM(hzgrids(i)%lon, dim=2)/ny
-       END IF
-
-       ! read mask
+       ! read in mask
        ALLOCATE(hzgrids(i)%mask(nx,ny))
        hzgrids(i)%mask = .FALSE.
-       IF(config%found("mask")) THEN
-          CALL config%get("mask", cfg2)
-          CALL cfg2%get(1, varname)
-          CALL cfg2%get(2, filename)
-          PRINT *,' loading 2D "mask"  from "', varname, '" of "',filename,'"'
-          CALL read_nc_d2(varname, filename,tmp_r_2d)
-          WHERE (tmp_r_2d <= 0) hzgrids(i)%mask = .TRUE.
+       IF(hzgrids(i)%mask_var_name /= "") THEN
+          CALL read_nc_d2( &
+               hzgrids(i)%mask_var_name, hzgrids(i)%mask_var_file, &
+               tmp_r_2d)
+          WHERE (tmp_r_2d <= 0) hzgrids(i)%mask =.TRUE.
+          DEALLOCATE(tmp_r_2d)
        END IF
-
-       PRINT *, ""
     END DO
 
 
     ! read vertical grid
     !------------------------------------------------------------
-    ! TODO, interpret depth/height vs thickness
-    PRINT *, ""
-    PRINT *, "Loading vertical grid specs..."
-    grd_cnt = self%vtgriddef%COUNT()
-    ALLOCATE(vtgrids(grd_cnt))
-    PRINT *, "Found ",grd_cnt," vertical grids definitions."
-    PRINT *, ""
+    CALL parse_vtgrids(self%config, vtgrids)
 
-    DO i=1,grd_cnt
-       ! grid name
-       CALL self%vtgriddef%get(i, config)
-       CALL config%name(str)
-       PRINT *, "loading vertical grid: ", str
-       vtgrids(i)%name = str
+    DO i = 1, SIZE(vtgrids)
+       ! read in a 1 dimensional vertical coordinate
+       CALL read_nc_d1( &
+            vtgrids(i)%vert_var_name, vtgrids(i)%vert_var_file, &
+            vtgrids(i)%vert_nom)
 
-       ! levels
-       IF (ALLOCATED(tmp_r_1d)) DEALLOCATE(tmp_r_1d)
-       IF(config%found("vert1d")) THEN
-          CALL config%get("vert1d", cfg2)
-          CALL cfg2%get(1, varname)
-          CALL cfg2%get(2, filename)
-          PRINT *,' loading 1D "vert1d" from "', varname, '" of "',filename,'"'
-          CALL read_nc_d1(varname, filename, tmp_r_1d)
-          vtgrids(i)%dims=1
-          ALLOCATE(vtgrids(i)%vert(SIZE(tmp_r_1d),1,1))
-          ALLOCATE(vtgrids(i)%vert_nom(SIZE(tmp_r_1d)))
-          vtgrids(i)%vert(:,1,1) = tmp_r_1d
-          vtgrids(i)%vert_nom = tmp_r_1d
-       ELSE
-          CALL letkf_mpi_abort("vert1d is missing for "//TRIM(vtgrids(i)%name))
-       END IF
-
-       PRINT *, ""
+       ! generate a 3d vertical coordinate field from the 1D field
+       CALL check_vtgrid(vtgrids(i))
     END DO
 
 
     ! Read state variable config
     ! ------------------------------------------------------------
-    PRINT *, ""
-    PRINT *, "Loading model state specs..."
-    grd_cnt = self%statedef%COUNT()
-    ALLOCATE(statevars(grd_cnt))
-    PRINT *, "Found ",grd_cnt," state definitions."
-    PRINT *, ""
-    DO i=1, grd_cnt
-       ! for each state variable
-       CALL self%statedef%get(i, config)
-
-       ! get name
-       CALL config%name(str)
-       statevars(i)%name = str
-
-       ! get grids
-       CALL config%get("hzgrid", str)
-       statevars(i)%hzgrid = str
-       CALL config%get("vtgrid", str)
-       statevars(i)%vtgrid = str
-
-       ! get other optional variables
-       IF(config%found("ana_bounds")) THEN
-          CALL config%get("ana_bounds", cfg2)
-          CALL cfg2%get(1, statevars(i)%ana_bounds(1))
-          CALL cfg2%get(2, statevars(i)%ana_bounds(2))
-       END IF
-
-       IF(config%found("ana_inc_max")) THEN
-          CALL config%get("ana_inc_max", statevars(i)%ana_inc_max)
-       END IF
-    END DO
+    ! config is parsed. The actual values are read by other subroutines in this module
+    CALL parse_statedef(self%config, statevars)
 
   END SUBROUTINE stateio_nc_read_specs
   !================================================================================
@@ -301,7 +184,6 @@ CONTAINS
     CLASS(stateio_nc) :: self
     CHARACTER(len=*), INTENT(in) :: ftype
     INTEGER, INTENT(in) :: ensmem
-    TYPE(configuration) :: config, config2
 
     CHARACTER(:), ALLOCATABLE :: filename,  name, str
     INTEGER :: ncid, d_t, d_x, d_y, d_z(100), varid ! TODO, remove hardcoded dz size
@@ -348,20 +230,17 @@ CONTAINS
     ! for each "state_out" defined in the config file, create the output variable
     !TODO, handle file name output templating where variables are split out to multiple files
     !TODO, remove the "state_out" section, and just add another set of variable name, file, fields?
-    DO i = 1, self%statedef%COUNT()
-       CALL self%statedef%get(i, config)
-       CALL config%name(name)
+    DO i = 1, SIZE(statevars)
 
        ! determine which vertical coordinate is the matching one
-       CALL config%get("vtgrid", str)
+       str = statevars(i)%vtgrid
        DO j=1, SIZE(vtgrids)
           IF (vtgrids(j)%name == str) EXIT
        END DO
        IF(j > SIZE(vtgrids))&
             CALL letkf_mpi_abort("cannot find vertical grid in stateio_nc_write_init")
 
-       CALL config%get("output", config2)
-       CALL config2%get(1, str)
+       str = statevars(i)%output_var
        CALL check(nf90_def_var(ncid, str,&
             nf90_real, (/d_x,d_y,d_z(j),d_t/),varid))
        CALL check(nf90_def_var_deflate(ncid, varid, 1, 1, self%compression))
@@ -395,7 +274,7 @@ CONTAINS
     CHARACTER(*),   INTENT(in) :: state_var
     REAL,           INTENT(in) :: state_val(:,:,:)
 
-    TYPE(configuration) :: config, config2
+    TYPE(letkf_statevar_spec) :: state_spec
     CHARACTER(:), ALLOCATABLE :: filename, varname, name
 
     INTEGER :: i
@@ -412,16 +291,8 @@ CONTAINS
     CALL check(nf90_open(filename, nf90_write, ncid))
 
     ! find which variable this data should be written to
-    varname = ""
-    DO i=1, self%statedef%COUNT()
-       CALL self%statedef%get(i, config)
-       CALL config%name(name)
-       IF (name == state_var) THEN
-          CALL config%get("output", config2)
-          CALL config2%get(1, varname)
-          EXIT
-       END IF
-    END DO
+    state_spec = letkf_state_var_getdef(state_var)
+    varname = state_spec%output_var
 
     ! if line in the config file was not found, abort
     IF (varname == "") CALL letkf_mpi_abort("Variable "//TRIM(state_var)//&
@@ -451,25 +322,24 @@ CONTAINS
     CHARACTER(*), INTENT(in)  :: state_var
     REAL, ALLOCATABLE, INTENT(out) :: state_val(:,:,:)
 
-    TYPE(configuration) :: config, config2
     CHARACTER(:), ALLOCATABLE :: filename, invar, str
 
     INTEGER :: nx, ny, nz, i
     INTEGER :: ncid, dimids(4), varid
     TYPE(letkf_hzgrid_spec) :: hgrid
     TYPE(letkf_vtgrid_spec) :: vgrid
+    TYPE(letkf_statevar_spec) :: statevar
 
     ! TODO, use the toupper function
 
-    ! find matching data entry from config file
-    CALL self%statedef%get(state_var, config)
+    ! find matching state definition
+    statevar = letkf_state_var_getdef(state_var)
 
     ! determine the filename to load in. Subsituting #ENSx# with the ensemble num
-    CALL config%get("input", config2)
-    CALL config2%get(1, invar)
-    CALL config2%get(2, filename)
-    filename=str_ens_pattern(filename, ensmem)
+    filename=str_ens_pattern(statevar%input_file, ensmem)
+    invar = statevar%input_var
 
+    PRINT *, ensmem, state_var, filename
     ! make sure this file exists
     ! TODO
     IF (self%verbose) &
@@ -477,10 +347,8 @@ CONTAINS
          TRIM(state_var),'" from "',TRIM(invar),'" of "', TRIM(filename)
 
     ! get the x,y,z dimensions based on the specified grid
-    CALL config%get("hzgrid", str)
-    hgrid = letkf_state_hzgrid_getdef(str)
-    CALL config%get("vtgrid", str)
-    vgrid = letkf_state_vtgrid_getdef(str)
+    hgrid = letkf_state_hzgrid_getdef(statevar%hzgrid)
+    vgrid = letkf_state_vtgrid_getdef(statevar%vtgrid)
 
     ! load field
     ! TODO, handle 2D vars

@@ -38,11 +38,21 @@ MODULE letkf_state
   !--------------------------------------------------------------------------------
   TYPE, PUBLIC :: letkf_hzgrid_spec
      CHARACTER(len=20)         :: name      !< unique name of the horizontal grid
+
+     ! actual values
      REAL,         ALLOCATABLE :: lat(:,:)  !< 2D lattidue grid (in degrees)
      REAL,         ALLOCATABLE :: lon(:,:)  !< 2D longitude grid (in degrees)
      REAL,         ALLOCATABLE :: lat_nom(:)!< nominal 1D lattitude grid (in degrees)
      REAL,         ALLOCATABLE :: lon_nom(:)!< nominal 1D longitude grid (in degrees)
      LOGICAL,      ALLOCATABLE :: mask(:,:) !< 2D mask
+
+     ! name of variable / file to load (optional, depending on plugin)
+     CHARACTER(len=:), ALLOCATABLE :: lat_var_name, lat_var_file
+     CHARACTER(len=:), ALLOCATABLE :: lon_var_name, lon_var_file
+     CHARACTER(len=:), ALLOCATABLE :: nomlat_var_name, nomlat_var_file
+     CHARACTER(len=:), ALLOCATABLE :: nomlon_var_name, nomlon_var_file
+     CHARACTER(len=:), ALLOCATABLE :: mask_var_name, mask_var_file
+
   END TYPE letkf_hzgrid_spec
   !================================================================================
 
@@ -57,8 +67,14 @@ MODULE letkf_state
   TYPE, PUBLIC :: letkf_vtgrid_spec
      CHARACTER(len=20)         :: name !< unique name of the vertical grid
      INTEGER                   :: dims !< dimensions of the grid (0, 1, 2, or 3)
+
+     ! actual values
      REAL,         ALLOCATABLE :: vert(:,:,:) !< vertical grid
      REAL,         ALLOCATABLE :: vert_nom(:) !< nominal 1D vertival grid
+
+     ! name of variable / file to load
+     CHARACTER(len=:), ALLOCATABLE :: vert_var_name, vert_var_file
+
   END TYPE letkf_vtgrid_spec
   !--------------------------------------------------------------------------------
 
@@ -74,6 +90,13 @@ MODULE letkf_state
      CHARACTER(len=20) :: hzgrid
      !> name of vertial grid (letkf_obs::letkf_vtgrid_spec) this variable is on
      CHARACTER(len=20) :: vtgrid
+
+     CHARACTER(len=:), ALLOCATABLE :: input_var
+     CHARACTER(len=:), ALLOCATABLE :: input_file
+     CHARACTER(len=:), ALLOCATABLE :: output_var
+     CHARACTER(len=:), ALLOCATABLE :: output_file
+
+
      !> the internal starting index of the "slab" this variable is on
      INTEGER           :: grid_s_idx
      !> number of vertical levels this state variable consists of
@@ -663,6 +686,7 @@ CONTAINS
 
        ! TODO, initializing with 0 size on non root nodes to silence gfortran
        ! runtime debug errors. Do I ever need the full 2d grid on other PEs?
+       ! TODO, also, scatter input filenames to other PEs?
        IF (.NOT. pe_isroot) THEN
           ALLOCATE(hzgrids(i)%lat(0,0))
           ALLOCATE(hzgrids(i)%lon(0,0))
@@ -723,10 +747,32 @@ CONTAINS
             pe_root, letkf_mpi_comm, ierr)
        CALL mpi_bcast(statevars(i)%ana_inc_max, 1, mpi_real, &
             pe_root, letkf_mpi_comm, ierr)
+       CALL bcast_str(statevars(i)%input_var)
+       CALL bcast_str(statevars(i)%input_file)
+       CALL bcast_str(statevars(i)%output_var)
+       CALL bcast_str(statevars(i)%output_file)
     END DO
 
-
     CALL timing_stop("read_state_specs")
+
+  CONTAINS
+
+    SUBROUTINE bcast_str(str)
+      CHARACTER(len=:), ALLOCATABLE, INTENT(inout) :: str
+      INTEGER :: ierr, i
+      LOGICAL :: valid
+
+      ! only continue if the string is valid on the root pe
+      valid = ALLOCATED(str)
+      CALL mpi_bcast(valid, 1, mpi_logical, pe_root, letkf_mpi_comm, ierr)
+      IF( .NOT. valid) RETURN
+
+      ! get the size of the string, and allocate space on the non-root PEs
+      IF (pe_isroot) i = LEN(str)
+      CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
+      IF (.NOT. pe_isroot) ALLOCATE(CHARACTER(len=i) :: str)
+      CALL mpi_bcast(str, i, mpi_character, pe_root, letkf_mpi_comm, ierr)
+    END SUBROUTINE bcast_str
 
   END SUBROUTINE letkf_state_init_spec
   !> \endcond
