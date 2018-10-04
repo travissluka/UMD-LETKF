@@ -76,7 +76,7 @@ CONTAINS
        PRINT *, "LOC_NOVRT initialization"
        PRINT *, "------------------------------------------------------------"
     END IF
-    self%hzloc = (/500.0d3, 50.0d3/)
+    self%hzloc = (/500.0e3, 50.0e3/)
     self%maxgroups=1
 
   END SUBROUTINE loc_novrt_init

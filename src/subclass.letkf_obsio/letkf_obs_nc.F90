@@ -16,11 +16,20 @@ MODULE letkf_obs_nc
   !================================================================================
   !================================================================================
 
+  INTEGER, PARAMETER :: MAX_FILENAME_LEN = 1024
+  
   !================================================================================
   !> observation file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_nc
      LOGICAL :: read_inc
+
+     !> filename from which the observation files are read
+     CHARACTER(LEN=MAX_FILENAME_LEN) :: filename_obs
+
+     !> filename from which the ensemble model state in obseration space is read
+     CHARACTER(LEN=MAX_FILENAME_LEN) :: filename_obs_hx
+
    CONTAINS
      PROCEDURE, NOPASS :: name => obsio_nc_get_name
      PROCEDURE, NOPASS :: desc => obsio_nc_get_desc
@@ -31,18 +40,6 @@ MODULE letkf_obs_nc
   !================================================================================
 
 
-
-  !================================================================================
-  !================================================================================
-  ! Private module components
-  !================================================================================
-  !================================================================================
-
-  !> filename from which the observation files are read
-  CHARACTER(:), ALLOCATABLE :: filename_obs
-
-  !> filename from which the ensemble model state in obseration space is read
-  CHARACTER(:), ALLOCATABLE :: filename_obs_hx
 
 
 
@@ -84,6 +81,8 @@ CONTAINS
     CLASS(obsio_nc) :: self
     TYPE(configuration), INTENT(in) :: config
 
+    CHARACTER(len=:), ALLOCATABLE :: str
+
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
        PRINT *, " letkf_obsio_nc_init() : "
@@ -91,12 +90,14 @@ CONTAINS
     END IF
 
     ! load in our section of the namelist
-    CALL config%get("filename_obs", filename_obs)
-    CALL config%get("filename_obshx", filename_obs_hx)
+    CALL config%get("filename_obs", str)
+    self%filename_obs = str
+    CALL config%get("filename_obshx", str)
+    self%filename_obs_hx = str
     CALL config%get("read_inc", self%read_inc)
     IF(pe_isroot) THEN
-       PRINT '(A,A)', " filename_obs=",filename_obs
-       PRINT '(A,A)', " filename_obshx=",filename_obs_hx
+       PRINT '(A,A)', " filename_obs=", self%filename_obs
+       PRINT '(A,A)', " filename_obshx=", self%filename_obs_hx
        PRINT *, "read_inc=",self%read_inc
     END IF
   END SUBROUTINE obsio_nc_init
@@ -120,14 +121,15 @@ CONTAINS
     INTEGER, ALLOCATABLE :: tmp_i(:)
     REAL(4), ALLOCATABLE :: tmp_r(:)
 
-    PRINT *, "Reading observations from file: ", filename_obs
+    PRINT *, "Reading observations from file: ", self%filename_obs
 
     ! make sure the file exists
-    INQUIRE(file=filename_obs, exist=ex)
-    IF (.NOT. ex) CALL letkf_mpi_abort("File not found: "//filename_obs)
+    INQUIRE(file=self%filename_obs, exist=ex)
+    IF (.NOT. ex) CALL letkf_mpi_abort(&
+         "File not found: "//self%filename_obs)
 
     ! open the file, get size of observations
-    CALL check( nf90_open(filename_obs, nf90_nowrite, ncid))
+    CALL check( nf90_open(self%filename_obs, nf90_nowrite, ncid))
     CALL check( nf90_inq_dimid(ncid, "obs", dimid), &
          'Reading dimension "obs"')
     CALL check( nf90_inquire_dimension(ncid, dimid, len=nobs) )
@@ -139,63 +141,63 @@ CONTAINS
 
     ! read in the variables
     CALL check( nf90_inq_varid(ncid, "obid", varid), &
-         '"obid" in '//filename_obs)
+         '"obid" in '//self%filename_obs)
     CALL check( nf90_get_var(ncid, varid, tmp_i) )
     DO n=1,nobs
        obs(n)%obsid = tmp_i(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "plat", varid), &
-         '"plat" in '//filename_obs)
+         '"plat" in '//self%filename_obs)
     CALL check( nf90_get_var(ncid, varid, tmp_i) )
     DO n=1,nobs
        obs(n)%platid = tmp_i(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "lat", varid),&
-         '"lat" in '//filename_obs )
+         '"lat" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_r) )
     DO n=1,nobs
        obs(n)%lat = tmp_r(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "lon", varid),&
-         '"lon" in '//filename_obs )
+         '"lon" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_r) )
     DO n=1,nobs
        obs(n)%lon = tmp_r(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "depth", varid),&
-         '"depth" in '//filename_obs )
+         '"depth" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_r) )
     DO n=1,nobs
        obs(n)%zdim = tmp_r(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "hr", varid),&
-         '"hr" in '//filename_obs )
+         '"hr" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_r) )
     DO n=1,nobs
        obs(n)%time = tmp_r(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "val", varid), &
-         '"val" in '//filename_obs )
+         '"val" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_r) )
     DO n=1,nobs
        obs(n)%val = tmp_r(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "err", varid),&
-         '"err" in '//filename_obs )
+         '"err" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_r) )
     DO n=1,nobs
        obs(n)%err = tmp_r(n)
     END DO
 
     CALL check( nf90_inq_varid(ncid, "qc", varid), &
-         '"qc" in '//filename_obs )
+         '"qc" in '//self%filename_obs )
     CALL check( nf90_get_var(ncid, varid, tmp_i) )
     DO n=1,nobs
        obs(n)%qc = tmp_i(n)
@@ -231,18 +233,18 @@ CONTAINS
     ! determine the filename to load in.
     ! filename_obs_hx provides the template into which we need to subsitute the
     ! ensemble number in the filename.
-    filename = filename_obs_hx
+    filename = self%filename_obs_hx
     DO n=1,9
        ! we are looking for "#ENSx#" strings, where "x" is the number of digits.
        ! For example, "#ENS4#" in the filename will be replaced with "0001" for
        ! ensemble member number 1.
        WRITE (pattern, "(A,I0,A)") "#ENS",n, "#"
-       i = INDEX(filename_obs_hx, pattern)
+       i = INDEX(self%filename_obs_hx, pattern)
 
        IF(i > 0) THEN
           WRITE (fmt, '(A,I0,A)') '(A,I0.', n, ',A)'
-          WRITE (filename, fmt) filename_obs_hx(1:i-1), ensmem, &
-               filename_obs_hx(i+LEN(pattern):LEN(filename_obs_hx))
+          WRITE (filename, fmt) self%filename_obs_hx(1:i-1), ensmem, &
+               self%filename_obs_hx(i+LEN(pattern):LEN(self%filename_obs_hx))
           EXIT
        END IF
     END DO
@@ -255,7 +257,7 @@ CONTAINS
     ! load in the data
     CALL check( nf90_open(filename, nf90_nowrite, ncid) )
     CALL check( nf90_inq_dimid(ncid, "obs", dimid), &
-         '"obs" in '//filename_obs)
+         '"obs" in '//self%filename_obs)
     CALL check( nf90_inquire_dimension(ncid, dimid, len=n) )
 
 

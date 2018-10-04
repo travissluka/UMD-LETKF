@@ -221,6 +221,7 @@ CONTAINS
     ! print header
     IF (pe_isroot) THEN
        PRINT *, ""
+       PRINT *, ""
        PRINT *, "============================================================"
        PRINT *, " letkf_obs_init() : observation module initialization"
        PRINT *, "============================================================"
@@ -237,20 +238,6 @@ CONTAINS
        PRINT *, ""
     END IF
 
-
-    ! determine which io class to use
-    CALL config%get("ioclass", ioclass)
-    ioclass = tolower(ioclass)
-    NULLIFY(obsio_class)
-    DO i=1,obsio_reg_num
-       IF (tolower(obsio_reg(i)%p%name()) == ioclass) THEN
-          obsio_class => obsio_reg(i)%p
-          EXIT
-       END IF
-    END DO
-    IF (.NOT. ASSOCIATED(obsio_class)) THEN
-       CALL letkf_mpi_abort("obsio class "//ioclass// " not found.")
-    END IF
 
 
     ! read in the observation definition configuration
@@ -297,8 +284,24 @@ CONTAINS
     END DO
     IF(pe_isroot) PRINT *, ""
 
+
+    ! determine which io class to use
+    CALL config%get("ioclass", ioclass)
+    ioclass = tolower(ioclass)
+    IF (pe_isroot) PRINT *, "observation.ioclass= "//ioclass
+    NULLIFY(obsio_class)
+    DO i=1,obsio_reg_num
+       IF (tolower(obsio_reg(i)%p%name()) == ioclass) THEN
+          obsio_class => obsio_reg(i)%p
+          EXIT
+       END IF
+    END DO
+    IF (.NOT. ASSOCIATED(obsio_class)) THEN
+       CALL letkf_mpi_abort("obsio class "//ioclass// " not found.")
+    END IF
+
+    
     ! initialize MPI object for later sending/receving obsservations
-    IF(pe_isroot) PRINT *, ""
     CALL init_mpi_observation()
 
     ! finish initialize  of the obsio class
@@ -430,7 +433,6 @@ CONTAINS
        !> \todo, make sure no bad qc obs go into the tree
 
        ! add obs to KD tree
-       IF(pe_isroot) PRINT '(//,X,A)', "Adding observations to local KDTree..."
        ALLOCATE(obs_lons(nobs))
        ALLOCATE(obs_lats(nobs))
        DO i=1,nobs

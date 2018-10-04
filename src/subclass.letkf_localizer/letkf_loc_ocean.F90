@@ -92,7 +92,6 @@ CONTAINS
     CLASS(loc_ocean), INTENT(inout) :: self
     TYPE(configuration), INTENT(in) :: config
 
-    LOGICAL :: b
     CHARACTER(:), ALLOCATABLE :: str
     TYPE(configuration) :: config2, config3
     TYPE(letkf_statevar_spec) :: state_def
@@ -194,13 +193,15 @@ CONTAINS
   SUBROUTINE loc_ocean_final(self)
     CLASS(loc_ocean), INTENT(inout) :: self
 
-    INTEGER :: ncid, vid, i
+    INTEGER :: ncid, vid
     INTEGER :: d_x, d_y, d_t
     REAL :: tmp2d(grid_nx, grid_ny)
 
     IF(self%save_diag) THEN
        !setup oiutput netcdf file
        IF(pe_isroot) THEN
+          PRINT *, ""
+          PRINT *, 'Saving localization diagnostics to "diag.loc_ocean.nc"...'
           CALL check(nf90_create("diag.loc_ocean.nc", NF90_CLOBBER, ncid))
           CALL check(nf90_def_dim(ncid, "time", 1, d_t))
           CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))

@@ -74,13 +74,6 @@ MODULE letkf_state
      CHARACTER(len=20) :: hzgrid
      !> name of vertial grid (letkf_obs::letkf_vtgrid_spec) this variable is on
      CHARACTER(len=20) :: vtgrid
-
-     CHARACTER(len=:), ALLOCATABLE :: input_var
-     CHARACTER(len=:), ALLOCATABLE :: input_file
-     CHARACTER(len=:), ALLOCATABLE :: output_var
-     CHARACTER(len=:), ALLOCATABLE :: output_file
-
-
      !> the internal starting index of the "slab" this variable is on
      INTEGER           :: grid_s_idx
      !> number of vertical levels this state variable consists of
@@ -105,7 +98,6 @@ MODULE letkf_state
      PROCEDURE(I_letkf_stateio_getstr), NOPASS, DEFERRED :: name
      PROCEDURE(I_letkf_stateio_getstr), NOPASS, DEFERRED :: desc
      PROCEDURE(I_letkf_stateio_init),           DEFERRED :: init
-     PROCEDURE(I_letkf_stateio_read_specs),     DEFERRED :: read_specs
      PROCEDURE(I_letkf_stateio_read_state),     DEFERRED :: read_state
      PROCEDURE(I_letkf_stateio_write_state),    DEFERRED :: write_state
   END TYPE letkf_stateio
@@ -115,21 +107,18 @@ MODULE letkf_state
        CHARACTER(:), ALLOCATABLE :: I_letkf_stateio_getstr
      END FUNCTION I_letkf_stateio_getstr
 
-     SUBROUTINE I_letkf_stateio_init(self, config)
+     SUBROUTINE I_letkf_stateio_init(self, config, hzgrids, vtgrids, statevars)
        IMPORT letkf_stateio
+       IMPORT letkf_hzgrid_spec
+       IMPORT letkf_vtgrid_spec
+       IMPORT letkf_statevar_spec
        IMPORT configuration
        CLASS(letkf_stateio)             :: self
        TYPE(configuration), INTENT(in)  :: config
-     END SUBROUTINE I_letkf_stateio_init
-
-     SUBROUTINE I_letkf_stateio_read_specs(self, hzgrids, vtgrids, statevars)
-       IMPORT letkf_stateio, letkf_hzgrid_spec
-       IMPORT letkf_vtgrid_spec, letkf_statevar_spec
-       CLASS(letkf_stateio)                               :: self
        TYPE(letkf_hzgrid_spec),  ALLOCATABLE, INTENT(out) :: hzgrids(:)
        TYPE(letkf_vtgrid_spec),  ALLOCATABLE, INTENT(out) :: vtgrids(:)
        TYPE(letkf_statevar_spec),ALLOCATABLE, INTENT(out) :: statevars(:)
-     END SUBROUTINE I_letkf_stateio_read_specs
+     END SUBROUTINE I_letkf_stateio_init
 
      SUBROUTINE I_letkf_stateio_read_state(self, ensmem, state_var, state_val)
        IMPORT letkf_stateio
@@ -257,7 +246,6 @@ CONTAINS
   SUBROUTINE letkf_state_init(config)
     TYPE(configuration), INTENT(in) :: config
 
-    TYPE(configuration) :: config_ioclass
     INTEGER ::  i,  s, n
     CHARACTER(:), ALLOCATABLE :: ioclass
     LOGICAL :: write_bkg_meansprd = .TRUE.
@@ -273,14 +261,10 @@ CONTAINS
        PRINT *, ""
     END IF
 
-    ! read some global configuration settings
-    CALL config%get("verbose", verbose, default=.FALSE.)
-    IF (pe_isroot) PRINT *, "state.verbose=",verbose
 
     ! print a list of all stateio classes that have been registered
     IF (pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "List of stateio classes registered:"
+       PRINT *, "List of stateio classes registered and available:"
        DO i=1, stateio_reg_num
           PRINT *, ' * "', tolower(stateio_reg(i)%p%name()), &
                '"  (', stateio_reg(i)%p%desc(), ")"
@@ -288,10 +272,14 @@ CONTAINS
        PRINT *, ""
     END IF
 
+    ! read some global configuration settings
+    CALL config%get("verbose", verbose, default=.FALSE.)
+    IF (pe_isroot) PRINT *, "state.verbose=",verbose
+
     ! determine the stateio class to use
     CALL config%get("ioclass", ioclass)
     ioclass = tolower(ioclass)
-    IF (pe_isroot) PRINT '(A,A)',  " state.ioclass=",ioclass
+    IF (pe_isroot) PRINT '(A,A)',  " state.ioclass= ",ioclass
     NULLIFY(stateio_class)
     DO i=1, stateio_reg_num
        IF (tolower(stateio_reg(i)%p%name()) == ioclass) THEN
@@ -305,11 +293,7 @@ CONTAINS
 
     ! initialize the stateio class
     stateio_class%verbose = verbose
-    config_ioclass = config ! TODO, get the correct tree
-    CALL stateio_class%init(config_ioclass)
-
-    ! Read in the grid /variable specs
-    CALL letkf_state_init_spec()
+    CALL letkf_state_init_class(config)
 
     ! allocate the memory needed by this pe for the ensemble model state
     ALLOCATE( state_ij( ens_size, grid_ns, ij_count))
@@ -365,7 +349,7 @@ CONTAINS
     INTEGER :: sends_num, recvs_num
 
     REAL,    ALLOCATABLE :: tmp_r_3d(:,:,:)
-    INTEGER :: dest, ierr,  i, j, k, p, s, tag
+    INTEGER :: dest, ierr,  i, j, k, p, tag
     INTEGER :: mode_mean, mode_sprd, mode2
     INTEGER :: pe_mean, pe_sprd
 
@@ -462,21 +446,21 @@ CONTAINS
   !> Reads in the grid specification (horizontal and vertical grids) and the
   !! specification of what state variables are involved with the state IO
   !--------------------------------------------------------------------------------
-  SUBROUTINE letkf_state_init_spec()
+  SUBROUTINE letkf_state_init_class(config)
+    TYPE(configuration), INTENT(in) :: config
     INTEGER :: i, j, ierr
 
     CALL timing_start("read_state_specs")
 
+    ! call the class initialization routine
+    ! note, that hzgrids, vtgrids, and statevars are only guaranteed to
+    ! have been initialized on the root PE
+    CALL stateio_class%init(config, hzgrids, vtgrids, statevars)
 
     !------------------------------------------------------------------------
     ! Load the grid/state specification
     !------------------------------------------------------------------------
     IF (pe_isroot) THEN
-
-       ! TODO currently only handling the first hzgrid, and first vtgrid,
-       ! modify to handle an arbitrary number
-       !TODO, no point keeping the separate lat,lon,mask variables around
-       CALL stateio_class%read_specs(hzgrids, vtgrids, statevars)
 
 
        ! Check the horizontal grid, print summary of grid stats
@@ -505,6 +489,7 @@ CONTAINS
           !TODO, create nominal lat/lon if not already given
        END DO
 
+       PRINT *, ""
        PRINT *, ""
        PRINT *, "Horizontal grids summary"
        PRINT *, "----------------------------------------"
@@ -610,7 +595,7 @@ CONTAINS
        grid_ny = SIZE(hzgrids(1)%lat,dim=2)
     END IF
 
-
+    IF (pe_isroot) PRINT *, "------------------------------"
 
     !---------------------------------------------------------------------------
     ! Scatter the grid data and variable definitions
@@ -628,7 +613,12 @@ CONTAINS
     ! broadcast horizontal grid spec to all mpi procs
     IF(pe_isroot) i=SIZE(hzgrids)
     CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
-    IF (.NOT. pe_isroot) ALLOCATE(hzgrids(i))
+    IF (.NOT. pe_isroot) THEN
+       ! since we are broadcasting from root to all other PE,
+       ! make sure hzgrids hasn't already been allocated on the other PEs
+       IF (ALLOCATED(hzgrids)) DEALLOCATE(hzgrids)
+       ALLOCATE(hzgrids(i))
+    END IF
     DO i=1,SIZE(hzgrids)
        CALL mpi_bcast(hzgrids(i)%name, 20, mpi_character, pe_root, &
             letkf_mpi_comm, ierr)
@@ -667,7 +657,12 @@ CONTAINS
     ! broadcast vertical grid specs to all mpi PEs
     IF (pe_isroot) i=SIZE(vtgrids)
     CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
-    IF (.NOT. pe_isroot) ALLOCATE(vtgrids(i))
+    IF (.NOT. pe_isroot) THEN
+       ! since we are broadcasting from root to all other PEs
+       ! make sure non-root PEs haven't already been allocated
+       IF (ALLOCATED(vtgrids)) DEALLOCATE(vtgrids)
+       ALLOCATE(vtgrids(i))
+    END IF
     DO i=1, SIZE(vtgrids)
        CALL mpi_bcast(vtgrids(i)%name, 20, mpi_character, pe_root, letkf_mpi_comm, ierr)
        CALL mpi_bcast(vtgrids(i)%dims, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
@@ -692,7 +687,10 @@ CONTAINS
     ! broadcast the state variable definitions
     IF (pe_isroot) i=SIZE(statevars)
     CALL mpi_bcast(i, 1, mpi_integer, pe_root, letkf_mpi_comm, ierr)
-    IF (.NOT. pe_isroot)  ALLOCATE(statevars(i))
+    IF (.NOT. pe_isroot) THEN
+       IF (ALLOCATED(statevars)) DEALLOCATE(statevars)
+       ALLOCATE(statevars(i))
+    END IF
     DO i=1,SIZE(statevars)
        CALL mpi_bcast(statevars(i)%name, 20, mpi_character,&
             pe_root, letkf_mpi_comm, ierr)
@@ -708,10 +706,6 @@ CONTAINS
             pe_root, letkf_mpi_comm, ierr)
        CALL mpi_bcast(statevars(i)%ana_inc_max, 1, mpi_real, &
             pe_root, letkf_mpi_comm, ierr)
-       CALL bcast_str(statevars(i)%input_var)
-       CALL bcast_str(statevars(i)%input_file)
-       CALL bcast_str(statevars(i)%output_var)
-       CALL bcast_str(statevars(i)%output_file)
     END DO
 
     CALL timing_stop("read_state_specs")
@@ -735,7 +729,7 @@ CONTAINS
       CALL mpi_bcast(str, i, mpi_character, pe_root, letkf_mpi_comm, ierr)
     END SUBROUTINE bcast_str
 
-  END SUBROUTINE letkf_state_init_spec
+  END SUBROUTINE letkf_state_init_class  
   !> \endcond
   !================================================================================
 
@@ -746,7 +740,7 @@ CONTAINS
   !> Writes the state ensemble in parallel
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_write_ens()
-    INTEGER :: i, j, k, p, s, tag, sends_num, recvs_num, ierr
+    INTEGER :: i, j, k, p, tag, sends_num, recvs_num, ierr
     REAL, ALLOCATABLE :: tmp_r_3d(:,:,:)
     INTEGER :: pe_ens_io(ens_size)
     INTEGER :: recvs(grid_ns*pe_size)

@@ -11,13 +11,22 @@ MODULE letkf_state_helper
   !PRIVATE
 
 
+  INTEGER, PARAMETER :: MAX_VAR_LEN = 60
+  INTEGER, PARAMETER :: MAX_FILE_LEN = 1024
+  !============================================================
+  !>
+  !------------------------------------------------------------
   TYPE, PUBLIC :: var_file
-     CHARACTER(len=:), ALLOCATABLE :: var
-     CHARACTER(len=:), ALLOCATABLE :: file
+     CHARACTER(LEN=MAX_VAR_LEN) :: var
+     CHARACTER(LEN=MAX_FILE_LEN) :: file
   END TYPE var_file
+  !============================================================
+  
 
 
+  !============================================================
   !> name of variable / file to load (optional, depending on plugin)
+  !------------------------------------------------------------
   TYPE, PUBLIC :: hzgrid_files
      TYPE(var_file) :: lat
      TYPE(var_file) :: lon
@@ -25,13 +34,29 @@ MODULE letkf_state_helper
      TYPE(var_file) :: nomlon
      TYPE(var_file) :: mask
   END TYPE hzgrid_files
+  !============================================================
 
 
+  
+  !============================================================
+  !>
+  !------------------------------------------------------------
   TYPE, PUBLIC :: vtgrid_files
      TYPE(var_file) :: vt1d
   END TYPE vtgrid_files
+  !============================================================
 
+  
 
+  !============================================================
+  !>
+  !------------------------------------------------------------
+  TYPE, PUBLIC :: statevar_files
+     TYPE(var_file) :: input
+     TYPE(var_file) :: output
+  END TYPE statevar_files
+  !============================================================
+  
 
 CONTAINS
 
@@ -79,18 +104,24 @@ CONTAINS
        hzgrids_files(i)%nomlat%file = ""
        IF(config2%found("lat2d")) THEN
           CALL config2%get("lat2d", config3)
-          CALL config3%get(1, hzgrids_files(i)%lat%var)
-          CALL config3%get(2, hzgrids_files(i)%lat%file)
-          PRINT *,'   lat2d: ("', hzgrids_files(i)%lat%var,&
-               '", "',hzgrids_files(i)%lat%file,'")'
+          CALL config3%get(1, str)
+          hzgrids_files(i)%lat%var = str
+          CALL config3%get(2, str)
+          hzgrids_files(i)%lat%file = str
+          PRINT *,'   lat2d: ("', &
+               trim(hzgrids_files(i)%lat%var), '", "', &
+               trim(hzgrids_files(i)%lat%file),'")'
 
        END IF
        IF(config2%found("lat1d")) THEN
           CALL config2%get("lat1d", config3)
-          CALL config3%get(1, hzgrids_files(i)%nomlat%var)
-          CALL config3%get(2, hzgrids_files(i)%nomlat%file)
-          PRINT *,'   lat1d: ("', hzgrids_files(i)%nomlat%var, &
-               '", "',hzgrids_files(i)%nomlat%file,'")'
+          CALL config3%get(1, str)
+          hzgrids_files(i)%nomlat%var = str
+          CALL config3%get(2, str)
+          hzgrids_files(i)%nomlat%file = str
+          PRINT *,'   lat1d: ("', &
+               trim(hzgrids_files(i)%nomlat%var), '", "', &
+               trim(hzgrids_files(i)%nomlat%file),'")'
        END IF
 
        ! Longitude
@@ -100,17 +131,23 @@ CONTAINS
        hzgrids_files(i)%nomlon%file = ""
        IF(config2%found("lon2d")) THEN
           CALL config2%get("lon2d", config3)
-          CALL config3%get(1, hzgrids_files(i)%lon%var)
-          CALL config3%get(2, hzgrids_files(i)%lon%file)
-          PRINT *,'   lon2d: ("', hzgrids_files(i)%lon%var,&
-               '", "',hzgrids_files(i)%lon%file,'")'
+          CALL config3%get(1, str)
+          hzgrids_files(i)%lon%var = str
+          CALL config3%get(2, str)
+          hzgrids_files(i)%lon%file = str
+          PRINT *,'   lon2d: ("', &
+               trim(hzgrids_files(i)%lon%var), '", "', &
+               trim(hzgrids_files(i)%lon%file),'")'
        END IF
        IF(config2%found("lon1d")) THEN
           CALL config2%get("lon1d", config3)
-          CALL config3%get(1, hzgrids_files(i)%nomlon%var)
-          CALL config3%get(2, hzgrids_files(i)%nomlon%file)
-          PRINT *,'   lon1d: ("', hzgrids_files(i)%nomlon%var, &
-               '", "',hzgrids_files(i)%nomlon%file,'")'
+          CALL config3%get(1, str)
+          hzgrids_files(i)%nomlon%var = str
+          CALL config3%get(2, str)
+          hzgrids_files(i)%nomlon%file = str
+          PRINT *,'   lon1d: ("', &
+               trim(hzgrids_files(i)%nomlon%var), '", "', &
+               trim(hzgrids_files(i)%nomlon%file),'")'
        END IF
 
        ! mask
@@ -118,10 +155,13 @@ CONTAINS
        hzgrids_files(i)%mask%file = ""
        IF(config2%found("mask")) THEN
           CALL config2%get("mask", config3)
-          CALL config3%get(1, hzgrids_files(i)%mask%var)
-          CALL config3%get(2, hzgrids_files(i)%mask%file)
-          PRINT *,'   mask:  ("', hzgrids_files(i)%mask%var, &
-               '", "',hzgrids_files(i)%mask%file,'")'
+          CALL config3%get(1, str)
+          hzgrids_files(i)%mask%var = str
+          CALL config3%get(2, str)
+          hzgrids_files(i)%mask%file = str
+          PRINT *,'   mask:  ("', &
+               trim(hzgrids_files(i)%mask%var), '", "', &
+               trim(hzgrids_files(i)%mask%file), '")'
        END IF
 
     END DO
@@ -137,7 +177,8 @@ CONTAINS
   SUBROUTINE check_hzgrid(hzgrid)
     TYPE(letkf_hzgrid_spec) :: hzgrid
     INTEGER :: nx, ny
-    INTEGER :: i, j
+    INTEGER :: j
+
     nx = -1
     ny = -1
 
@@ -265,12 +306,13 @@ CONTAINS
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  SUBROUTINE parse_statedef(config, statevars)
+  SUBROUTINE parse_statedef(config, statevars, statevars_files)
     TYPE(configuration) :: config
     TYPE(letkf_statevar_spec), ALLOCATABLE, INTENT(out) :: statevars(:)
+    TYPE(statevar_files), ALLOCATABLE, INTENT(out) :: statevars_files(:)
 
     TYPE(configuration) :: state_config, config2, config3
-    CHARACTER(len=:), ALLOCATABLE :: str, str2
+    CHARACTER(len=:), ALLOCATABLE :: str
     INTEGER :: cnt, i
 
     PRINT *, ""
@@ -285,6 +327,7 @@ CONTAINS
     ! How many state vars are there?
     cnt = state_config%COUNT()
     ALLOCATE(statevars(cnt))
+    ALLOCATE(statevars_files(cnt))
     PRINT *, " Found ",cnt," state variable definition(s)."
 
     ! for each state variable
@@ -333,10 +376,13 @@ CONTAINS
                '"input" field missing for state variable "'//statevars(i)%name)
        END IF
        CALL config2%get("input", config3)
-       CALL config3%get(1, statevars(i)%input_var)
-       CALL config3%get(2, statevars(i)%input_file)
-       PRINT *, '   input:  ("',statevars(i)%input_var,'", "', &
-            statevars(i)%input_file,'")'
+       CALL config3%get(1, str)
+       statevars_files(i)%input%var = str
+       CALL config3%get(2, str)
+       statevars_files(i)%input%file = str
+       PRINT *, '   input:  ("', &
+            trim(statevars_files(i)%input%var), '", "', &
+            trim(statevars_files(i)%input%file), '")'
 
        ! load output filename
        IF(.NOT. config2%found("output")) THEN
@@ -344,10 +390,13 @@ CONTAINS
                '"output" field missing for state variable "'//statevars(i)%name)
        END IF
        CALL config2%get("output", config3)
-       CALL config3%get(1, statevars(i)%output_var)
-       CALL config3%get(2, statevars(i)%output_file)
-       PRINT *, '   output: ("',statevars(i)%output_var,'", "', &
-            statevars(i)%output_file,'")'
+       CALL config3%get(1, str)
+       statevars_files(i)%output%var = str
+       CALL config3%get(2, str)
+       statevars_files(i)%output%file = str
+       PRINT *, '   output: ("', &
+            trim(statevars_files(i)%output%var), '", "', &
+            trim(statevars_files(i)%output%file), '")'
 
     END DO
 

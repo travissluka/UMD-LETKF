@@ -176,11 +176,13 @@ CONTAINS
           PRINT *, " * ", toupper(localizer_reg(i)%p%name()), &
                "  (", localizer_reg(i)%p%desc(), ")"
        END DO
+       PRINT *, ""
     END IF
 
     ! determine the loc class to use
     CALL config%get("class", loc_class)
     loc_class=toupper(loc_class)
+    IF (pe_isroot) PRINT *, "localization.class= "//loc_class
     NULLIFY(localizer_class)
     DO i=1, localizer_reg_num
        IF (localizer_reg(i)%p%name() == loc_class) THEN
@@ -300,7 +302,6 @@ CONTAINS
     REAL :: dist
 
     INTEGER :: i
-    REAL :: r
 
     i=1
     DO WHILE(ABS(lat) > self%lat(i))

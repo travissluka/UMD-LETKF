@@ -85,6 +85,7 @@ CONTAINS
        PRINT *, " version:  ", CVERSION
        PRINT *, "======================================================================"
        PRINT *, "======================================================================"
+       PRINT *, ""
     END IF
 
     ! load in the configuration file
@@ -95,10 +96,6 @@ CONTAINS
     letkf_config_log = pe_isroot
     CALL letkf_config_loadfile(config_filename, config)
 
-
-    ! initialize the rest of MPI
-    ! (determines the processor distribution for I/O)
-    ! TODO
 
     ! setup the default observation I/O classes
     ALLOCATE(obsio_nc :: obsio_ptr)
@@ -113,7 +110,6 @@ CONTAINS
     ! setup the default localizer classes
     ALLOCATE(loc_novrt :: localizer_ptr)
     CALL letkf_loc_register(localizer_ptr)
-
     ALLOCATE(loc_ocean :: localizer_ptr)
     CALL letkf_loc_register(localizer_ptr)
 
@@ -164,10 +160,6 @@ CONTAINS
     ! LETKF final output
     ! ------------------------------------------------------------
     CALL timing_start("output", TIMER_SYNC)
-    IF(pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "Saving output..."
-    END IF
 
     ! miscellaneous diagnostics from the LETKF solver
     CALL letkf_solver_final()

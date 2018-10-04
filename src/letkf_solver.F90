@@ -62,7 +62,7 @@ CONTAINS
     IF (pe_isroot) THEN
        PRINT *, ""
        PRINT *, "======================================================================"
-       PRINT *, " letkf_solver_init() : "
+       PRINT *, " letkf_solver_init() : Core LETKF solver initialization"
        PRINT *, "======================================================================"
     END IF
 
@@ -80,7 +80,7 @@ CONTAINS
        PRINT *, "solver.save_diag=",save_diag
        PRINT *, "solver.inflation.rtps=",infl_rtps
        PRINT *, "solver.inflation.rtpp=",infl_rtpp
-       PRINT *, "solver.inflation.mul=",infl_mul
+       PRINT *, "solver.inflation.mul= ",infl_mul
     END IF
 
     ! make sure the inflation parameters are correct
@@ -160,6 +160,8 @@ CONTAINS
        PRINT *, "======================================================================"
        PRINT *, "letkf_solver_run() : Core LETKF routine"
        PRINT *, "======================================================================"
+       PRINT *, ""
+       PRINT *, "Performing LETKF solver..."
     END IF
 
 
@@ -347,8 +349,9 @@ CONTAINS
 
     END DO ij_loop
 
+    IF (pe_isroot) PRINT *, "LETKF solver completed."
     CALL timing_stop('solver')
-
+    
   END SUBROUTINE letkf_solver_run
   !================================================================================
 
@@ -368,9 +371,12 @@ CONTAINS
 
     CALL timing_start("diag_write")
     IF (save_diag ) THEN
-
+       
        ! setup output netCDF file
        IF (pe_isroot) THEN
+          PRINT *, ""
+          PRINT *, 'Saving LETKF solver diagnostics to "diag.solver.nc"...'
+
           CALL check(nf90_create("diag.solver.nc", NF90_CLOBBER, ncid))
 
           ! TODO, handle more than hz/vt grid
