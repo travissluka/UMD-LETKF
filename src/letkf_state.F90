@@ -856,6 +856,7 @@ CONTAINS
     IF (pe_isroot) THEN
        PRINT *, "Reading and distributing ensemble state..."
     END IF
+    CALL letkf_mpi_barrier()
 
     ! initialize all the receives
     !------------------------------

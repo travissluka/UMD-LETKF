@@ -377,8 +377,10 @@ CONTAINS
     ! TODO allow option to place an upper bound on this, in case we are
     ! severely memory limited
     nextio = pe+ppn
-    IF (nextio >= pe_size) nextio = MOD(nextio+1, pe_size)
+    IF (nextio >= pe_size) THEN
+       nextio = MOD(MOD(nextio, pe_size) + 1, ppn)
+    END IF    
   END FUNCTION letkf_mpi_nextio
   !================================================================================
-
+  
 END MODULE letkf_mpi
