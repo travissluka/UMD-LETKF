@@ -108,7 +108,6 @@ MODULE letkf_state
      PROCEDURE(I_letkf_stateio_read_specs),     DEFERRED :: read_specs
      PROCEDURE(I_letkf_stateio_read_state),     DEFERRED :: read_state
      PROCEDURE(I_letkf_stateio_write_state),    DEFERRED :: write_state
-     PROCEDURE(I_letkf_stateio_write_init),     DEFERRED :: write_init
   END TYPE letkf_stateio
 
   ABSTRACT INTERFACE
@@ -140,20 +139,11 @@ MODULE letkf_state
        REAL, ALLOCATABLE, INTENT(out) :: state_val(:,:,:)
      END SUBROUTINE I_letkf_stateio_read_state
 
-     SUBROUTINE I_letkf_stateio_write_init(self, ftype, ensmem)
-       IMPORT letkf_stateio
-       CLASS(letkf_stateio) :: self
-       CHARACTER(len=*), INTENT(in) :: ftype
-       INTEGER, INTENT(in) :: ensmem
-     END SUBROUTINE I_letkf_stateio_write_init
-
-     SUBROUTINE I_letkf_stateio_write_state(self, ftype, ensmem, state_var, state_val)
+     SUBROUTINE I_letkf_stateio_write_state(self, ensmem, state_vals)
        IMPORT letkf_stateio
        CLASS(letkf_stateio)      :: self
-       CHARACTER(len=*), INTENT(in) :: ftype
        INTEGER,       INTENT(in) :: ensmem
-       CHARACTER(*),  INTENT(in) :: state_var
-       REAL,          INTENT(in) :: state_val(:,:,:)
+       REAL,          INTENT(in) :: state_vals(:,:,:)
      END SUBROUTINE I_letkf_stateio_write_state
 
   END INTERFACE
@@ -369,13 +359,18 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_write_meansprd(mode)
     CHARACTER(*), INTENT(in) :: mode !< either "ana" or "bkg"
+
     INTEGER, ALLOCATABLE :: sends(:)
     INTEGER, ALLOCATABLE :: recvs(:)
     INTEGER :: sends_num, recvs_num
 
     REAL,    ALLOCATABLE :: tmp_r_3d(:,:,:)
     INTEGER :: dest, ierr,  i, j, k, p, s, tag
-    INTEGER :: mode_mean, mode_sprd
+    INTEGER :: mode_mean, mode_sprd, mode2
+    INTEGER :: pe_mean, pe_sprd
+
+    IF (pe_isroot) PRINT '(/,X,A)', "Writing background mean/spread..."
+    CALL timing_start("write_meansprd")
 
     ! check input mode argument
     IF (mode == "bkg" ) THEN
@@ -388,87 +383,69 @@ CONTAINS
        IF(pe_isroot) CALL letkf_mpi_abort("Invalid mode: "//mode)
     END IF
 
-
-    CALL timing_start("write_meansprd")
-
-    ! initialize the background mean/spread output files
-    IF (pe_isroot) PRINT '(/,X,A)', "Writing background mean/spread..."
-    CALL timing_start("io_init", TIMER_SYNC)
-    IF (letkf_mpi_nextio() == pe_rank)&
-         CALL stateio_class%write_init(mode, mode_mean)
-    IF (letkf_mpi_nextio() == pe_rank)&
-         CALL stateio_class%write_init(mode, mode_sprd)
-    CALL timing_stop("io_init")
-    CALL letkf_mpi_barrier()
+    ! determine who does the IO for which ensemble member
+    pe_mean = letkf_mpi_nextio()
+    pe_sprd = letkf_mpi_nextio()
 
 
-    ! initialize all the sends
     ALLOCATE(sends(grid_ns*2))
     sends_num=0
-    dest=letkf_mpi_nextio(0)
-    DO j=1,2 ! one loop for "mean", one for "sprd"
-       s=0
-       dest = letkf_mpi_nextio()
-       DO i=1,SIZE(statevars) ! for each state variable
-          DO k=1,statevars(i)%levels
-             s=s+1
-             tag=k-1+statevars(i)%grid_s_idx + (j-1)*grid_ns
-             sends_num = sends_num + 1
-             IF (j==1) THEN
-                CALL MPI_ISend(state_mean_ij(s,1), ij_count, mpitype_grid_ns, &
-                     dest, tag, letkf_mpi_comm, sends(sends_num), ierr)
-             ELSE
-                CALL MPI_ISend(state_sprd_ij(s,1), ij_count, mpitype_grid_ns, &
-                     dest, tag, letkf_mpi_comm, sends(sends_num), ierr)
-             END IF
-          END DO
-       END DO
+
+    ! initialize the mean sends
+    DO k=1,grid_ns
+       sends_num = sends_num + 1
+       CALL mpi_isend(state_mean_ij(k,1), ij_count, mpitype_grid_ns, &
+            pe_mean, k-1, letkf_mpi_comm, sends(sends_num), ierr)
+       sends_num = sends_num + 1
+       CALL mpi_isend(state_sprd_ij(k,1), ij_count, mpitype_grid_ns, &
+            pe_sprd, k-1+grid_ns, letkf_mpi_comm, sends(sends_num), ierr)
     END DO
 
+
+    ! init these timers once, if they aren't done otherwise
+    CALL timing_start("io_write")
+    CALL timing_stop("io_write")
+    CALL timing_start("mpi_gather")
+    CALL timing_stop("mpi_gather")
 
     ! initialize all the receives
     ALLOCATE(recvs(grid_ns*pe_size))
-    dest = letkf_mpi_nextio(0)
     DO j=1,2 ! one loop for "mean", one for "sprd"
-       dest = letkf_mpi_nextio()
-       DO i=1,SIZE(statevars) ! for each state variable
+       dest = MERGE(pe_mean, pe_sprd, j==1)
+       mode2 = MERGE(mode_mean, mode_sprd, j==1)
 
-          CALL timing_start("io_write")
-          CALL timing_stop("io_write")
-          CALL timing_start("mpi_recv")
-          CALL timing_stop("mpi_recv")
+       IF (dest == pe_rank) THEN
 
-          IF (dest == pe_rank) THEN
-             IF(ALLOCATED(tmp_r_3d)) DEALLOCATE(tmp_r_3d)
-             ALLOCATE(tmp_r_3d(grid_nx,grid_ny,statevars(i)%levels))
+          ! allocate space for state
+          IF(.NOT. ALLOCATED(tmp_r_3d)) &
+               ALLOCATE(tmp_r_3d(grid_nx, grid_ny, grid_ns))
 
-             ! initialize the receives
-             CALL timing_start("mpi_recv")
-             recvs_num=0
-             DO p=0,pe_size-1
-                DO k=1,statevars(i)%levels
-                   recvs_num = recvs_num + 1
-                   tag=k-1+statevars(i)%grid_s_idx + (j-1)*grid_ns
-                   CALL mpi_Irecv(tmp_r_3d(p+1,1,k), ij_count_pe(p),&
-                        mpitype_grid_nxy_real, p, tag, letkf_mpi_comm,&
-                        recvs(recvs_num),ierr)
-                END DO
+          ! start the receives
+          CALL timing_start("mpi_gather")
+          recvs_num =0
+          DO i=1,grid_ns
+             DO p=0, pe_size-1
+                recvs_num = recvs_num +1
+                tag=i-1 + (j-1)*grid_ns
+                CALL mpi_irecv(tmp_r_3d(p+1,1,i), ij_count_pe(p), &
+                     mpitype_grid_nxy_real, p, tag, letkf_mpi_comm, &
+                     recvs(recvs_num), ierr)
              END DO
+          END DO
 
-             ! wait for the receives to finish
-             CALL mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
-             CALL timing_stop("mpi_recv")
+          ! wait for the receives to finish
+          CALL mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
+          CALL timing_stop("mpi_gather")
 
-             ! write out to file
-             CALL timing_start("io_write")
-             CALL stateio_class%write_state(mode, &
-                  MERGE(ENS_BKG_MEAN, ENS_BKG_SPRD,j==1),&
-                  TRIM(statevars(i)%name), tmp_r_3d(:,:,:))
-             CALL timing_stop("io_write")
+          ! write out to file
+          CALL timing_start("io_write")
+          CALL stateio_class%write_state(mode2, tmp_r_3d)
+          CALL timing_stop("io_write")
 
-          END IF
-       END DO
+       END IF
+
     END DO
+    IF (ALLOCATED(tmp_r_3d)) DEALLOCATE(tmp_r_3d)
 
     ! wait for the sends to finish
     CALL mpi_waitall(sends_num, sends, MPI_STATUSES_IGNORE, ierr)
@@ -770,86 +747,80 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_write_ens()
     INTEGER :: i, j, k, p, s, tag, sends_num, recvs_num, ierr
-    INTEGER, ALLOCATABLE :: recvs(:), sends(:)
     REAL, ALLOCATABLE :: tmp_r_3d(:,:,:)
     INTEGER :: pe_ens_io(ens_size)
+    INTEGER :: recvs(grid_ns*pe_size)
+    INTEGER :: sends(grid_ns*ens_size)
 
     IF(pe_isroot) PRINT '(/,X,A)', "Writing analysis ensemble members..."
     CALL timing_start("write_ens", TIMER_SYNC)
 
-
-    ! determine who does the IO
+    ! determine who does the IO for which ensemble member
     DO i=1,ens_size
        pe_ens_io(i) = letkf_mpi_nextio()
     END DO
 
-    !initialize output files
-    DO i=1,ens_size
-       IF (pe_ens_io(i) == pe_rank) &
-            CALL stateio_class%write_init('ana', i)
-    END DO
-
-
     ! initialize all the sends
-    ALLOCATE(sends(grid_ns*ens_size))
+    ! TODO, do this correctly with an MPI derrived type, instead of a loop over grid_ns
     sends_num=0
     DO j=1,ens_size
-       s=0
-       DO i=1,SIZE(statevars)
-          DO k=1,statevars(i)%levels
-             s = s + 1
-             tag = k-1+statevars(i)%grid_s_idx + (j-1)*grid_ns
-             sends_num = sends_num + 1
-             CALL mpi_isend(state_ij(j,s,1), ij_count, mpitype_grid_nk_ns, &
-                  pe_ens_io(j), tag, letkf_mpi_comm, sends(sends_num), ierr)
-          END DO
+       DO k=1,grid_ns
+          tag = k-1 + (j-1)*grid_ns
+          sends_num = sends_num + 1
+          CALL mpi_isend(state_ij(j,k,1), ij_count, mpitype_grid_nk_ns, &
+               pe_ens_io(j), tag, letkf_mpi_comm, sends(sends_num), ierr)
        END DO
     END DO
 
-    ! initialize all the receives
-    ALLOCATE(recvs(grid_ns*pe_size))
+
+    ! init these timers once, if they aren't done otherwise
+    CALL timing_start("io_write")
+    CALL timing_stop("io_write")
+    CALL timing_start("mpi_gather")
+    CALL timing_stop("mpi_gather")
+
+    ! for each ensemble member:
     DO j=1,ens_size
-       DO i=1,SIZE(statevars)
-          CALL timing_start("io_write")
-          CALL timing_stop("io_write")
+
+       IF (pe_ens_io(j) == pe_rank) THEN
+
+          ! allocate space for state
+          IF ( .NOT. ALLOCATED(tmp_r_3d)) &
+               ALLOCATE(tmp_r_3d(grid_nx, grid_ny, grid_ns))
+
+          ! start the receives
           CALL timing_start("mpi_gather")
+          recvs_num =0
+          DO i=1,grid_ns
+             DO p=0, pe_size-1
+                recvs_num = recvs_num +1
+                tag=i-1 + (j-1)*grid_ns
+                CALL mpi_irecv(tmp_r_3d(p+1,1,i), ij_count_pe(p), &
+                     mpitype_grid_nxy_real, p, tag, letkf_mpi_comm, &
+                     recvs(recvs_num), ierr)
+             END DO
+          END DO
+
+          ! wait for the receives to finish
+          CALL mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
           CALL timing_stop("mpi_gather")
 
-          IF (pe_ens_io(j) == pe_rank) THEN
-             CALL timing_start("mpi_gather")
-             IF (ALLOCATED(tmp_r_3d)) DEALLOCATE(tmp_r_3d)
-             ALLOCATE(tmp_r_3d(grid_nx, grid_ny, statevars(i)%levels))
-             recvs_num =0
+          ! write out to file
+          ! TODO add verbose output
+          CALL timing_start("io_write")
+          CALL stateio_class%write_state(j, tmp_r_3d)
+          CALL timing_stop("io_write")
 
-             ! initialize the receives for this variable
-             DO p=0, pe_size-1
-                DO k=1, statevars(i)%levels
-                   recvs_num = recvs_num +1
-                   tag=k-1+statevars(i)%grid_s_idx + (j-1)*grid_ns
-                   CALL mpi_irecv(tmp_r_3d(p+1,1,k), ij_count_pe(p), &
-                        mpitype_grid_nxy_real, p, tag, letkf_mpi_comm, &
-                        recvs(recvs_num), ierr)
-                END DO
-             END DO
+       END IF
 
-             ! wait for the receives to finish
-             CALL mpi_waitall(recvs_num, recvs, MPI_STATUSES_IGNORE, ierr)
-             CALL timing_stop("mpi_gather")
-
-
-             ! write out to file
-             CALL timing_start("io_write")
-             ! TODO add verbose output
-             CALL stateio_class%write_state(&
-                  'ana', j, TRIM(statevars(i)%name), tmp_r_3d)
-             CALL timing_stop("io_write")
-
-          END IF
-       END DO
     END DO
+    IF (ALLOCATED(tmp_r_3d)) DEALLOCATE(tmp_r_3d)
 
     ! wait for the sends to finish
+    CALL timing_start("mpi_gather")
     CALL mpi_waitall(sends_num, sends, MPI_STATUSES_IGNORE, ierr)
+    CALL timing_stop("mpi_gather")
+
     CALL timing_stop("write_ens")
 
   END SUBROUTINE letkf_state_write_ens

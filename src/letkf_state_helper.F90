@@ -352,5 +352,80 @@ CONTAINS
     END DO
 
   END SUBROUTINE parse_statedef
+  !================================================================================
+
+
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  FUNCTION parse_ens_filename(str_in, ensmem) RESULT(str_out)
+    CHARACTER(*), INTENT(in) :: str_in
+    INTEGER, INTENT(in) :: ensmem
+    CHARACTER(:), ALLOCATABLE :: str_out
+
+    CHARACTER(:), ALLOCATABLE :: str, str2
+    INTEGER :: i, n
+    CHARACTER(len=6)  :: pattern
+    CHARACTER(len=10) :: fmt
+
+    ! handle ensemble number (or mean / sprd)
+    ALLOCATE(CHARACTER(len=20) :: str2)
+    str = str_in
+    DO n=1,9
+       WRITE (pattern, "(A,I0,A)") "#ENS",n,"#"
+       i = INDEX(str, pattern)
+       IF(i > 0) THEN
+          IF (ensmem >= 0) THEN
+             WRITE (fmt, '(A,I0,A)') '(I0.',n,')'
+             WRITE (str2, fmt) ensmem
+          ELSE IF ( ensmem == ENS_BKG_MEAN .OR. ensmem == ENS_ANA_MEAN) THEN
+             str2 = "mean"
+          ELSE IF ( ensmem == ENS_BKG_SPRD .OR. ensmem == ENS_ANA_SPRD) THEN
+             str2 = "sprd"
+          ELSE
+             CALL letkf_mpi_abort("Illegal 'ensmem' given to str_ens_pattern")
+          END IF
+          str = replace_str(str, pattern, str2)
+          EXIT
+       END IF
+    END DO
+
+    ! handle file type (ana / bkg)
+    IF(ensmem >= 0 .OR. ensmem == ENS_ANA_MEAN .OR. ensmem == ENS_ANA_SPRD) THEN
+       str = replace_str(str, "#TYPE#", "ana")
+    ELSE IF(ensmem == ENS_BKG_MEAN .OR. ensmem == ENS_BKG_SPRD) THEN
+       str = replace_str(str, "#TYPE#", "bkg")
+    ELSE
+       CALL letkf_mpi_abort("illegal ensmem given to write_state")
+    END IF
+
+    str_out=TRIM(str)
+
+
+  CONTAINS
+
+
+    FUNCTION replace_str(str_in, key, val) RESULT(str_out)
+      CHARACTER(*), INTENT(in) :: str_in
+      CHARACTER(*), INTENT(in) :: key
+      CHARACTER(*), INTENT(in) :: val
+      CHARACTER(:), ALLOCATABLE :: str_out
+      INTEGER :: i
+
+      ALLOCATE(CHARACTER(len=LEN(str_in)+LEN(val)) :: str_out)
+      i = INDEX(str_in, key)
+
+      IF(i>0) THEN
+         str_out = str_in(1:i-1) // TRIM(val) // str_in(i+LEN(key):LEN(str_in))
+      ELSE
+         str_out = str_in
+      END IF
+
+    END FUNCTION replace_str
+
+  END FUNCTION parse_ens_filename
+  !================================================================================
+
 
 END MODULE letkf_state_helper
