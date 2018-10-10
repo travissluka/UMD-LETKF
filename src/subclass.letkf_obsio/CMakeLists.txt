@@ -1,5 +1,6 @@
 set(srcs
   letkf_obs_nc.F90
+  letkf_obs_dat.F90
   letkf_obs_test.F90
   )
 
