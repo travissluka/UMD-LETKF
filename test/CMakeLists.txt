@@ -7,7 +7,7 @@ function(letkf_data localdir remotefile)
       ${CMAKE_CURRENT_BINARY_DIR}/${localdir}.tgz )
     execute_process(
       COMMAND ${CMAKE_COMMAND} -E tar zxf ${localdir}.tgz
-      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})      
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
   endif()
 endfunction()
 
@@ -36,4 +36,5 @@ add_subdirectory(check_norm_nc)
 
 # test cases
 add_subdirectory(simple3d)
-add_subdirectory(mom6_1deg)
+add_subdirectory(ocean)
+add_subdirectory(wave)

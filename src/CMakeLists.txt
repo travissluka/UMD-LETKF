@@ -3,6 +3,7 @@
 #--------------------------------------------------------------------------------
 include(letkf_pluginloader.cmake)
 
+
 # the core source files
 set( letkf_lib_srcs
   getmem.F90
@@ -29,6 +30,7 @@ target_link_libraries(letkf
     ${MPI_Fortran_LIBRARIES}
     ${NETCDF_LIBRARIES}
     ${LAPACK_LIBRARIES}
+    ${GRIB_LIBRARIES}
   )
 
 

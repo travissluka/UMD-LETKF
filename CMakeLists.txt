@@ -51,6 +51,20 @@ include_directories(${NETCDF_INCLUDE_DIRS})
 # so that blas and lapack are REQUIRED.
 find_package(LAPACK)
 
+# grib2
+option( LETKF_ENABLE_GRIB "enable grib2 support for state I/O" OFF)
+IF(LETKF_ENABLE_GRIB)
+  # TODO this is temporary for working with grib API, need to clean up
+  set(GRIB_INC_DIR  /home/tsluka/proj/UMD-LETKF/grib2/lib)
+  set(GRIB_LIBRARIES
+    /home/tsluka/proj/UMD-LETKF/grib2/lib/libwgrib2.a
+    /home/tsluka/proj/UMD-LETKF/grib2/lib/libwgrib2_api.a
+  )
+  include_directories(${GRIB_INC_DIR})
+  find_package(OpenMP REQUIRED)
+  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
+ENDIF()
+
 
 # subdirectories
 #------------------------------------------------------------

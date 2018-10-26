@@ -21,7 +21,7 @@ MODULE letkf_state_helper
      CHARACTER(LEN=MAX_FILE_LEN) :: file
   END TYPE var_file
   !============================================================
-  
+
 
 
   !============================================================
@@ -37,7 +37,7 @@ MODULE letkf_state_helper
   !============================================================
 
 
-  
+
   !============================================================
   !>
   !------------------------------------------------------------
@@ -46,7 +46,7 @@ MODULE letkf_state_helper
   END TYPE vtgrid_files
   !============================================================
 
-  
+
 
   !============================================================
   !>
@@ -56,7 +56,7 @@ MODULE letkf_state_helper
      TYPE(var_file) :: output
   END TYPE statevar_files
   !============================================================
-  
+
 
 CONTAINS
 
@@ -73,8 +73,10 @@ CONTAINS
     INTEGER :: cnt, i
     CHARACTER(len=:), ALLOCATABLE :: str
 
-    PRINT *, ""
-    PRINT *, "Parsing horizontal grid specs..."
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "Parsing horizontal grid specs..."
+    END IF
 
     ! make sure our section of the config file exists
     IF (.NOT. config%found("hzgrid")) THEN
@@ -86,7 +88,7 @@ CONTAINS
     cnt = hz_config%COUNT()
     ALLOCATE(hzgrids(cnt))
     ALLOCATE(hzgrids_files(cnt))
-    PRINT *, " Found ",cnt," horizontal grid definition(s)."
+    IF(pe_isroot) PRINT *, " Found ",cnt," horizontal grid definition(s)."
 
     ! for each horizontal grid
     DO i=1,cnt
@@ -94,7 +96,7 @@ CONTAINS
        ! grid name
        CALL hz_config%get(i, config2)
        CALL config2%name(str)
-       PRINT *, ' Horizontal grid: "', str,'"'
+       IF(pe_isroot) PRINT *, ' Horizontal grid: "', str,'"'
        hzgrids(i)%name = str
 
        ! latitude
@@ -108,9 +110,9 @@ CONTAINS
           hzgrids_files(i)%lat%var = str
           CALL config3%get(2, str)
           hzgrids_files(i)%lat%file = str
-          PRINT *,'   lat2d: ("', &
-               trim(hzgrids_files(i)%lat%var), '", "', &
-               trim(hzgrids_files(i)%lat%file),'")'
+          IF(pe_isroot) PRINT *,'   lat2d: ("', &
+               TRIM(hzgrids_files(i)%lat%var), '", "', &
+               TRIM(hzgrids_files(i)%lat%file),'")'
 
        END IF
        IF(config2%found("lat1d")) THEN
@@ -119,9 +121,9 @@ CONTAINS
           hzgrids_files(i)%nomlat%var = str
           CALL config3%get(2, str)
           hzgrids_files(i)%nomlat%file = str
-          PRINT *,'   lat1d: ("', &
-               trim(hzgrids_files(i)%nomlat%var), '", "', &
-               trim(hzgrids_files(i)%nomlat%file),'")'
+          IF(pe_isroot) PRINT *,'   lat1d: ("', &
+               TRIM(hzgrids_files(i)%nomlat%var), '", "', &
+               TRIM(hzgrids_files(i)%nomlat%file),'")'
        END IF
 
        ! Longitude
@@ -135,9 +137,9 @@ CONTAINS
           hzgrids_files(i)%lon%var = str
           CALL config3%get(2, str)
           hzgrids_files(i)%lon%file = str
-          PRINT *,'   lon2d: ("', &
-               trim(hzgrids_files(i)%lon%var), '", "', &
-               trim(hzgrids_files(i)%lon%file),'")'
+          IF(pe_isroot) PRINT *,'   lon2d: ("', &
+               TRIM(hzgrids_files(i)%lon%var), '", "', &
+               TRIM(hzgrids_files(i)%lon%file),'")'
        END IF
        IF(config2%found("lon1d")) THEN
           CALL config2%get("lon1d", config3)
@@ -145,9 +147,9 @@ CONTAINS
           hzgrids_files(i)%nomlon%var = str
           CALL config3%get(2, str)
           hzgrids_files(i)%nomlon%file = str
-          PRINT *,'   lon1d: ("', &
-               trim(hzgrids_files(i)%nomlon%var), '", "', &
-               trim(hzgrids_files(i)%nomlon%file),'")'
+          IF(pe_isroot) PRINT *,'   lon1d: ("', &
+               TRIM(hzgrids_files(i)%nomlon%var), '", "', &
+               TRIM(hzgrids_files(i)%nomlon%file),'")'
        END IF
 
        ! mask
@@ -159,9 +161,9 @@ CONTAINS
           hzgrids_files(i)%mask%var = str
           CALL config3%get(2, str)
           hzgrids_files(i)%mask%file = str
-          PRINT *,'   mask:  ("', &
-               trim(hzgrids_files(i)%mask%var), '", "', &
-               trim(hzgrids_files(i)%mask%file), '")'
+          IF(pe_isroot) PRINT *,'   mask:  ("', &
+               TRIM(hzgrids_files(i)%mask%var), '", "', &
+               TRIM(hzgrids_files(i)%mask%file), '")'
        END IF
 
     END DO
@@ -208,11 +210,13 @@ CONTAINS
 
     ! if we need to generate the 1d nominal lat/lon from the 2d lat/lon
     IF (.NOT. ALLOCATED(hzgrid%lat_nom) .OR. .NOT. ALLOCATED(hzgrid%lon_nom)) THEN
-       PRINT *, ""
-       PRINT *, "WARNING: a 2D lat/lon grid was specified, but a nominal ",&
-            "1D lat/lon was not. Estimating a viable nominal 1D lat/lon, but ",&
-            "cordinates of resulting files might not be ideal."
-       PRINT *, ""
+       IF(pe_isroot) THEN
+          PRINT *, ""
+          PRINT *, "WARNING: a 2D lat/lon grid was specified, but a nominal ",&
+               "1D lat/lon was not. Estimating a viable nominal 1D lat/lon, but ",&
+               "cordinates of resulting files might not be ideal."
+          PRINT *, ""
+       END IF
        hzgrid%lat_nom = SUM(hzgrid%lat, dim=1)/nx
        hzgrid%lon_nom = SUM(hzgrid%lon, dim=2)/ny
     END IF
@@ -233,8 +237,10 @@ CONTAINS
     INTEGER :: cnt, i
     CHARACTER(len=:), ALLOCATABLE :: str, filename, varname
 
-    PRINT *, ""
-    PRINT *, "Parsing vertical grid specs..."
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "Parsing vertical grid specs..."
+    END IF
 
     ! make sure our section of the config file exists
     IF (.NOT. config%found("vtgrid")) THEN
@@ -246,16 +252,15 @@ CONTAINS
     cnt = vt_config%COUNT()
     ALLOCATE(vtgrids(cnt))
     ALLOCATE(vtgrids_files(cnt))
-    PRINT *, " Found ",cnt," vertical grid definition(s)."
+    IF(pe_isroot) PRINT *, " Found ",cnt," vertical grid definition(s)."
 
     ! for each vertical grid
     DO i=1,cnt
 
-
        ! grid name
        CALL vt_config%get(i, config2)
        CALL config2%name(str)
-       PRINT *, ' Vertical grid: "', str,'"'
+       IF(pe_isroot) PRINT *, ' Vertical grid: "', str,'"'
        vtgrids(i)%name = str
 
        ! read in 1D vertical coordinate
@@ -265,7 +270,7 @@ CONTAINS
           CALL config2%get("vert1d", config3)
           CALL config3%get(1, varname)
           CALL config3%get(2, filename)
-          PRINT *,'   vert1d: ("', varname, '", "',filename,'")'
+          IF(pe_isroot) PRINT *,'   vert1d: ("', varname, '", "',filename,'")'
           vtgrids(i)%dims=1
           vtgrids_files(i)%vt1d%var = varname
           vtgrids_files(i)%vt1d%file = filename
@@ -315,8 +320,10 @@ CONTAINS
     CHARACTER(len=:), ALLOCATABLE :: str
     INTEGER :: cnt, i
 
-    PRINT *, ""
-    PRINT *, "Parsing model state specs..."
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "Parsing model state specs..."
+    END IF
 
     ! make sure our section of the config file exists
     IF (.NOT. config%found("statedef")) THEN
@@ -328,7 +335,7 @@ CONTAINS
     cnt = state_config%COUNT()
     ALLOCATE(statevars(cnt))
     ALLOCATE(statevars_files(cnt))
-    PRINT *, " Found ",cnt," state variable definition(s)."
+    IF(pe_isroot) PRINT *, " Found ",cnt," state variable definition(s)."
 
     ! for each state variable
     DO i=1, cnt
@@ -336,7 +343,7 @@ CONTAINS
 
        ! variable name
        CALL config2%name(str)
-       PRINT *, ' State variable: "', str,'"'
+       IF(pe_isroot)  PRINT *, ' State variable: "', str,'"'
        statevars(i)%name = str
 
        ! get grids
@@ -346,7 +353,7 @@ CONTAINS
 
        CALL config2%get("hzgrid", str)
        statevars(i)%hzgrid = str
-       PRINT *, '   hzgrid: "',str,'"'
+       IF(pe_isroot) PRINT *, '   hzgrid: "',str,'"'
 
        IF (.NOT. config2%found("vtgrid")) &
             CALL letkf_mpi_abort('"vtgrid" is not defined for state variable "' &
@@ -354,20 +361,20 @@ CONTAINS
 
        CALL config2%get("vtgrid", str)
        statevars(i)%vtgrid = str
-       PRINT *, '   vtgrid: "',str,'"'
+       IF(pe_isroot) PRINT *, '   vtgrid: "',str,'"'
 
        ! optional analysis bounds checking
        IF(config2%found("ana_bounds")) THEN
           CALL config2%get("ana_bounds", config3)
           CALL config3%get(1, statevars(i)%ana_bounds(1))
           CALL config3%get(2, statevars(i)%ana_bounds(2))
-          PRINT *, "   ana_bounds: (",statevars(i)%ana_bounds,")"
+          IF(pe_isroot) PRINT *, "   ana_bounds: (",statevars(i)%ana_bounds,")"
        END IF
 
        ! optional analysis increment bounds checking
        IF(config2%found("ana_inc_max")) THEN
           CALL config2%get("ana_inc_max", statevars(i)%ana_inc_max)
-          PRINT *, "   ana_inc_max:  ",statevars(i)%ana_inc_max
+          IF(pe_isroot) PRINT *, "   ana_inc_max:  ",statevars(i)%ana_inc_max
        END IF
 
        ! load input filename
@@ -380,9 +387,9 @@ CONTAINS
        statevars_files(i)%input%var = str
        CALL config3%get(2, str)
        statevars_files(i)%input%file = str
-       PRINT *, '   input:  ("', &
-            trim(statevars_files(i)%input%var), '", "', &
-            trim(statevars_files(i)%input%file), '")'
+       IF(pe_isroot) PRINT *, '   input:  ("', &
+            TRIM(statevars_files(i)%input%var), '", "', &
+            TRIM(statevars_files(i)%input%file), '")'
 
        ! load output filename
        IF(.NOT. config2%found("output")) THEN
@@ -394,9 +401,9 @@ CONTAINS
        statevars_files(i)%output%var = str
        CALL config3%get(2, str)
        statevars_files(i)%output%file = str
-       PRINT *, '   output: ("', &
-            trim(statevars_files(i)%output%var), '", "', &
-            trim(statevars_files(i)%output%file), '")'
+       IF(pe_isroot) PRINT *, '   output: ("', &
+            TRIM(statevars_files(i)%output%var), '", "', &
+            TRIM(statevars_files(i)%output%file), '")'
 
     END DO
 

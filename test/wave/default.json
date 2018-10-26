@@ -1,0 +1,51 @@
+{
+  "mpi": {
+    "ens_size": 3,
+    "ppn": 1
+  },
+
+  "solver":{
+  },
+
+  "observation":{
+    "obsdef": [
+      ["h", 1, "wave height"],
+    ],
+    "platdef":[
+      ["p1", 1, "platform1"],
+    ],
+    "ioclass":"obsio_test",
+    "obsio_test":[
+      ["h", "p1", "state1", 0, 0, 1.0, 0.0, 1.0, 1.0],
+    ],
+  },
+
+  "state": {
+    "ioclass" : "stateio_grib",
+    "hzgrid": {
+      "hz1": {
+        "lat2d": ["lat", "file.grib2"],
+        "lon2d": ["lon", "file.grib2"],
+      },
+    },
+    "vtgrid": {
+      "vt1": {
+        "vert1d": ["depth", "file.grib"],
+      },
+    },
+    "statedef": {
+      "state1": {
+        "hzgrid": "hz1",
+        "vtgrid": "vt1",
+        "input": ["var1", "bkg.#ENS4#.grib"],
+        "output":["var1", "#TYPE#.#ENS4#.grib"],
+      },
+    }
+  },
+
+  "localization": {
+    "class": "loc_novrt",
+  }
+
+
+}
