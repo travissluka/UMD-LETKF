@@ -1,7 +1,7 @@
 !================================================================================
 !>
 !================================================================================
-MODULE letkf_obs_test
+MODULE letkf_obsio_test_mod
   USE kdtree
   USE mpi
   USE letkf_config
@@ -21,7 +21,7 @@ MODULE letkf_obs_test
   !================================================================================
   !> observation file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
-  TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_test
+  TYPE, EXTENDS(letkf_obsio), PUBLIC :: letkf_obsio_test
      TYPE(letkf_observation), ALLOCATABLE :: obs(:)
      REAL, ALLOCATABLE :: hx(:,:)
    CONTAINS
@@ -30,7 +30,7 @@ MODULE letkf_obs_test
      PROCEDURE         :: init => obsio_test_init
      PROCEDURE         :: read_obs => obsio_test_read_obs
      PROCEDURE         :: read_hx  => obsio_test_read_hx
-  END TYPE obsio_test
+  END TYPE letkf_obsio_test
   !================================================================================
 
 
@@ -65,7 +65,7 @@ CONTAINS
   !> initialize the test observation generation class
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_init(self, config)
-    CLASS(obsio_test) :: self
+    CLASS(letkf_obsio_test) :: self
     TYPE(configuration), INTENT(in) :: config
     TYPE(configuration) :: config_ob
 
@@ -203,7 +203,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_read_obs(self, obs)
-    CLASS(obsio_test) :: self
+    CLASS(letkf_obsio_test) :: self
     TYPE(letkf_observation), ALLOCATABLE, INTENT(out) :: obs(:)
 
     ALLOCATE(obs(SIZE(self%obs)))
@@ -218,7 +218,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_test_read_hx(self, ensmem, hx)
-    CLASS(obsio_test) :: self
+    CLASS(letkf_obsio_test) :: self
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(out) :: hx(:)
 
@@ -229,4 +229,4 @@ CONTAINS
   !================================================================================
 
 
-END MODULE letkf_obs_test
+END MODULE letkf_obsio_test_mod

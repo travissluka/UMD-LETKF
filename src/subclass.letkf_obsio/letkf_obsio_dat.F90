@@ -1,7 +1,7 @@
 !================================================================================
 !>
 !================================================================================
-MODULE letkf_obs_dat
+MODULE letkf_obsio_dat_mod
   USE letkf_config
   USE letkf_obs
   USE letkf_mpi
@@ -18,7 +18,7 @@ MODULE letkf_obs_dat
   !================================================================================
   !> observation file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
-  TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_dat
+  TYPE, EXTENDS(letkf_obsio), PUBLIC :: letkf_obsio_dat
      LOGICAL :: read_inc
    CONTAINS
      PROCEDURE, NOPASS :: name => obsio_dat_get_name
@@ -26,7 +26,7 @@ MODULE letkf_obs_dat
      PROCEDURE         :: init => obsio_dat_init
      PROCEDURE         :: read_obs => obsio_dat_read_obs
      PROCEDURE         :: read_hx  => obsio_dat_read_hx
-  END TYPE obsio_dat
+  END TYPE letkf_obsio_dat
   !================================================================================
 
 
@@ -80,7 +80,7 @@ CONTAINS
   !! @param nml_filename path to the namelist we are to open
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_dat_init(self, config)
-    CLASS(obsio_dat) :: self
+    CLASS(letkf_obsio_dat) :: self
     TYPE(configuration), INTENT(in) :: config
 
     IF (pe_isroot) THEN
@@ -110,7 +110,7 @@ CONTAINS
   !! @param obs the list of observations as they are loaded in.
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_dat_read_obs(self, obs)
-    CLASS(obsio_dat) :: self
+    CLASS(letkf_obsio_dat) :: self
     TYPE(letkf_observation), ALLOCATABLE, INTENT(out) :: obs(:)
 
     ! LOGICAL :: ex
@@ -215,7 +215,7 @@ CONTAINS
   !! @param hx the ensemble member state mapped to observation space
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_dat_read_hx(self, ensmem, hx)
-    CLASS(obsio_dat) :: self
+    CLASS(letkf_obsio_dat) :: self
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(out) :: hx(:)
     REAL, ALLOCATABLE :: val(:)
@@ -282,4 +282,4 @@ CONTAINS
 
 
 
-END MODULE letkf_obs_dat
+END MODULE letkf_obsio_dat_mod

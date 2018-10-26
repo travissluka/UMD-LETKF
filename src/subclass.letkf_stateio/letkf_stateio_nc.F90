@@ -1,7 +1,7 @@
 !================================================================================
 !> NetCDF based state I/O
 !================================================================================
-MODULE letkf_state_nc
+MODULE letkf_stateio_nc_mod
   USE netcdf
   USE letkf_config
   USE letkf_state
@@ -24,7 +24,7 @@ MODULE letkf_state_nc
   !================================================================================
   !> state file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
-  TYPE, PUBLIC, EXTENDS(letkf_stateio) :: stateio_nc
+  TYPE, PUBLIC, EXTENDS(letkf_stateio) :: letkf_stateio_nc
      INTEGER :: compression !< nc4 compression (0-9)
 
      TYPE(statevar_files), ALLOCATABLE :: statevars_files(:)
@@ -36,7 +36,7 @@ MODULE letkf_state_nc
      PROCEDURE         :: init => stateio_nc_init
      PROCEDURE         :: read_state  => stateio_nc_read_state
      PROCEDURE         :: write_state => stateio_nc_write_state
-  END TYPE stateio_nc
+  END TYPE letkf_stateio_nc
   !================================================================================
 
 
@@ -73,26 +73,26 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_init(self, config, hzgrids, vtgrids, statevars)
-    CLASS(stateio_nc) :: self
+    CLASS(letkf_stateio_nc) :: self
     TYPE(configuration), INTENT(in) :: config
     TYPE(letkf_hzgrid_spec),   ALLOCATABLE, INTENT(out) :: hzgrids(:)
     TYPE(letkf_vtgrid_spec),   ALLOCATABLE, INTENT(out) :: vtgrids(:)
     TYPE(letkf_statevar_spec), ALLOCATABLE, INTENT(out) :: statevars(:)
-    
+
     TYPE(hzgrid_files),        ALLOCATABLE :: hzgrids_files(:)
     TYPE(vtgrid_files),        ALLOCATABLE :: vtgrids_files(:)
 
     REAL, ALLOCATABLE :: tmp_r_2d(:,:)
     INTEGER :: nx, ny, i
 
-    
+
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
        PRINT *, " letkf_stateio_nc_init() : "
        PRINT *, "------------------------------------------------------------"
     END IF
 
-    
+
     ! load in our section of the configuration
     CALL config%get("compression", self%compression)
     IF (pe_isroot) PRINT *, " state.compression=", self%compression
@@ -112,7 +112,7 @@ CONTAINS
           IF (hzgrids_files(i)%nomlat%var /= "") CALL read_nc_d1( &
                hzgrids_files(i)%nomlat%var, hzgrids_files(i)%nomlat%file, &
                hzgrids(i)%lat_nom)
-          
+
           ! load lons
           IF (hzgrids_files(i)%lon%var /= "") CALL read_nc_d2( &
                hzgrids_files(i)%lon%var, hzgrids_files(i)%lon%file, &
@@ -120,12 +120,12 @@ CONTAINS
           IF (hzgrids_files(i)%nomlon%var /= "") CALL read_nc_d1( &
                hzgrids_files(i)%nomlon%var, hzgrids_files(i)%nomlon%file, &
                hzgrids(i)%lon_nom)
-          
+
           ! generate nominal 1D lat/lon, or fill in 2D lat/lon from 1D lat/lon
           CALL check_hzgrid(hzgrids(i))
           nx = SIZE(hzgrids(i)%lon_nom)
           ny = SIZE(hzgrids(i)%lat_nom)
-          
+
           ! read in mask
           ALLOCATE(hzgrids(i)%mask(nx,ny))
           hzgrids(i)%mask = .FALSE.
@@ -138,7 +138,7 @@ CONTAINS
           END IF
        END DO
     END IF
-    
+
 
     ! read vertical grid configuration
     CALL parse_vtgrids(config, vtgrids, vtgrids_files)
@@ -151,19 +151,19 @@ CONTAINS
           CALL read_nc_d1( &
                vtgrids_files(i)%vt1d%var, vtgrids_files(i)%vt1d%file, &
                vtgrids(i)%vert_nom)
-          
+
           ! generate a 3d vertical coordinate field from the 1D field
           CALL check_vtgrid(vtgrids(i))
        END DO
     END IF
 
-    
+
     ! Read state variable config
     ! The actual values are read by other subroutines in this module
     ! statevars_files needs to be explicitly saved by this module because
-    ! it is used later by the ens read/write subroutines 
+    ! it is used later by the ens read/write subroutines
     CALL parse_statedef(config, statevars, self%statevars_files)
-    
+
   END SUBROUTINE stateio_nc_init
   !================================================================================
 
@@ -176,7 +176,7 @@ CONTAINS
   !! at a time in order to reduce the peak memory per compute node
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_read_state(self, ensmem, state_var, state_val)
-    CLASS(stateio_nc) :: self
+    CLASS(letkf_stateio_nc) :: self
     INTEGER,      INTENT(in)  :: ensmem     !< ensemble member number
     CHARACTER(*), INTENT(in)  :: state_var  !< name of the state variable
     REAL, ALLOCATABLE, INTENT(out) :: state_val(:,:,:)
@@ -228,7 +228,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_nc_write_state(self, ensmem, state_vals)
-    CLASS(stateio_nc) :: self
+    CLASS(letkf_stateio_nc) :: self
     INTEGER,        INTENT(in) :: ensmem
     REAL,           INTENT(in) :: state_vals(:,:,:)
 
@@ -406,4 +406,4 @@ CONTAINS
   !================================================================================
 
 
-END MODULE letkf_state_nc
+END MODULE letkf_stateio_nc_mod

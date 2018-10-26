@@ -1,10 +1,8 @@
-set(srcs
-  letkf_obs_nc.F90
-  letkf_obs_dat.F90
-  letkf_obs_test.F90
-  )
+# stateio plugins that are always built
+set(LETKF_PLUGINS
+ letkf_obsio_nc
+ letkf_obsio_dat
+ letkf_obsio_test
+)
 
-
-foreach(s ${srcs})
-  target_sources(letkf PRIVATE ${CMAKE_CURRENT_LIST_DIR}/${s})
-endforeach()
+add_letkf_plugins("letkf_obsio" "letkf_obs" "${LETKF_PLUGINS}")

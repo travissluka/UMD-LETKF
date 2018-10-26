@@ -1,6 +1,7 @@
 #--------------------------------------------------------------------------------
 # LETKF library
 #--------------------------------------------------------------------------------
+include(letkf_pluginloader.cmake)
 
 # the core source files
 set( letkf_lib_srcs
@@ -9,8 +10,6 @@ set( letkf_lib_srcs
   running_stats.F90
   ${JSON_SRC_FILES}
   ${KDTREE_SRC_FILES}
-
-  letkf.F90
   letkf_config.F90
   letkf_core.F90
   letkf_loc.F90
@@ -19,6 +18,7 @@ set( letkf_lib_srcs
   letkf_solver.F90
   letkf_state.F90
   letkf_state_helper.F90
+  letkf.F90
   )
 
 

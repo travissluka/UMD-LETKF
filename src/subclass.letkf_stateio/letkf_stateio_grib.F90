@@ -1,7 +1,7 @@
 !================================================================================
 !> grib based state I/O
 !================================================================================
-MODULE letkf_state_grib
+MODULE letkf_stateio_grib_mod
   USE letkf_config
   USE letkf_state
   USE letkf_state_helper
@@ -23,7 +23,7 @@ MODULE letkf_state_grib
   !================================================================================
   !> state file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
-  TYPE, PUBLIC, EXTENDS(letkf_stateio) :: stateio_grib
+  TYPE, PUBLIC, EXTENDS(letkf_stateio) :: letkf_stateio_grib
 
    CONTAINS
 
@@ -32,7 +32,7 @@ MODULE letkf_state_grib
      PROCEDURE         :: init => stateio_grib_init
      PROCEDURE         :: read_state  => stateio_grib_read_state
      PROCEDURE         :: write_state => stateio_grib_write_state
-  END TYPE stateio_grib
+  END TYPE letkf_stateio_grib
   !================================================================================
 
 
@@ -69,7 +69,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_grib_init(self, config, hzgrids, vtgrids, statevars)
-    CLASS(stateio_grib) :: self
+    CLASS(letkf_stateio_grib) :: self
     TYPE(configuration), INTENT(in) :: config
     TYPE(letkf_hzgrid_spec),   ALLOCATABLE, INTENT(out) :: hzgrids(:)
     TYPE(letkf_vtgrid_spec),   ALLOCATABLE, INTENT(out) :: vtgrids(:)
@@ -87,14 +87,14 @@ CONTAINS
 
 
 
-  
+
   !================================================================================
   !>
   !! TODO, modify so that we can read/scatter the state 1 variable and/or 1 level
   !! at a time in order to reduce the peak memory per compute node
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_grib_read_state(self, ensmem, state_var, state_val)
-    CLASS(stateio_grib) :: self
+    CLASS(letkf_stateio_grib) :: self
     INTEGER,      INTENT(in)  :: ensmem     !< ensemble member number
     CHARACTER(*), INTENT(in)  :: state_var  !< name of the state variable
     REAL, ALLOCATABLE, INTENT(out) :: state_val(:,:,:)
@@ -123,7 +123,7 @@ CONTAINS
 
     ! ! load field
     ! ! TODO Load the state variable  "invar" from file "filename"
- 
+
   END SUBROUTINE stateio_grib_read_state
   !================================================================================
 
@@ -133,7 +133,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE stateio_grib_write_state(self, ensmem, state_vals)
-    CLASS(stateio_grib) :: self
+    CLASS(letkf_stateio_grib) :: self
     INTEGER,        INTENT(in) :: ensmem
     REAL,           INTENT(in) :: state_vals(:,:,:)
 
@@ -151,4 +151,4 @@ CONTAINS
   END SUBROUTINE stateio_grib_write_state
   !================================================================================
 
-END MODULE letkf_state_grib
+END MODULE letkf_stateio_grib_mod

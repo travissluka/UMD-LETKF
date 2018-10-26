@@ -1,7 +1,7 @@
 !================================================================================
 !>
 !================================================================================
-MODULE letkf_loc_ocean
+MODULE letkf_loc_ocean_mod
   USE netcdf
   USE letkf_config
   USE letkf_mpi
@@ -15,7 +15,7 @@ MODULE letkf_loc_ocean
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  TYPE, EXTENDS(letkf_localizer), PUBLIC :: loc_ocean
+  TYPE, EXTENDS(letkf_localizer), PUBLIC :: letkf_loc_ocean
      LOGICAL :: save_diag = .FALSE.
 
      ! horizontal and temporal localization
@@ -43,7 +43,7 @@ MODULE letkf_loc_ocean
      PROCEDURE         :: groups => loc_ocean_groups
      PROCEDURE         :: localize => loc_ocean_localize
      PROCEDURE         :: maxhz => loc_ocean_maxhz
-  END TYPE loc_ocean
+  END TYPE letkf_loc_ocean
   !================================================================================
 
 
@@ -89,7 +89,7 @@ CONTAINS
   !> Initialize this class, reading in settings from the namelist mostly
   !--------------------------------------------------------------------------------
   SUBROUTINE loc_ocean_init(self, config)
-    CLASS(loc_ocean), INTENT(inout) :: self
+    CLASS(letkf_loc_ocean), INTENT(inout) :: self
     TYPE(configuration), INTENT(in) :: config
 
     CHARACTER(:), ALLOCATABLE :: str
@@ -191,7 +191,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE loc_ocean_final(self)
-    CLASS(loc_ocean), INTENT(inout) :: self
+    CLASS(letkf_loc_ocean), INTENT(inout) :: self
 
     INTEGER :: ncid, vid
     INTEGER :: d_x, d_y, d_t
@@ -273,7 +273,7 @@ CONTAINS
   !! (horizontal search radius and level/variable localization groups)
   !--------------------------------------------------------------------------------
   SUBROUTINE loc_ocean_groups(self, ij, groups)
-    CLASS(loc_ocean), INTENT(inout) :: self
+    CLASS(letkf_loc_ocean), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     TYPE(letkf_localizer_group), ALLOCATABLE, INTENT(inout) :: groups(:)
 
@@ -350,7 +350,7 @@ CONTAINS
   !> Calculates the vertical localization depth based on the background temperature
   !--------------------------------------------------------------------------------
   FUNCTION calc_mldlvl_bkgt(self, ij) RESULT(mldlvl)
-    CLASS(loc_ocean), INTENT(inout) :: self
+    CLASS(letkf_loc_ocean), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     INTEGER :: mldlvl
     INTEGER :: i
@@ -377,7 +377,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   FUNCTION loc_ocean_maxhz(self, ij) RESULT(dist)
-    CLASS(loc_ocean), INTENT(inout) :: self
+    CLASS(letkf_loc_ocean), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     REAL :: dist
 
@@ -393,7 +393,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   FUNCTION loc_ocean_localize(self, ij, group, obs, dist) RESULT(loc)
-    CLASS(loc_ocean), INTENT(inout) :: self
+    CLASS(letkf_loc_ocean), INTENT(inout) :: self
     INTEGER, INTENT(in) :: ij
     TYPE(letkf_localizer_group), INTENT(in) :: group
     TYPE(letkf_observation), INTENT(in) :: obs
@@ -449,4 +449,4 @@ CONTAINS
   !================================================================================
 
 
-END MODULE letkf_loc_ocean
+END MODULE letkf_loc_ocean_mod

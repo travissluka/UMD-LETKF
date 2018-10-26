@@ -5,17 +5,15 @@ MODULE letkf
 
   USE letkf_config
   USE letkf_loc
-  USE letkf_loc_novrt
-  USE letkf_loc_ocean
   USE letkf_mpi
   USE letkf_obs
-  USE letkf_obs_nc
-  USE letkf_obs_dat
-  USE letkf_obs_test
   USE letkf_solver
   USE letkf_state
-  USE letkf_state_nc
-  USE letkf_state_grib
+
+  USE pluginloader_letkf_stateio
+  USE pluginloader_letkf_obsio
+  USE pluginloader_letkf_localizer
+
   USE timing
   USE getmem
 
@@ -99,25 +97,10 @@ CONTAINS
     CALL letkf_config_loadfile(config_filename, config)
 
 
-    ! setup the default observation I/O classes
-    ALLOCATE(obsio_nc :: obsio_ptr)
-    CALL letkf_obs_register(obsio_ptr)
-    ALLOCATE(obsio_dat :: obsio_ptr)
-    CALL letkf_obs_register(obsio_ptr)
-    ALLOCATE(obsio_test :: obsio_ptr)
-    CALL letkf_obs_register(obsio_ptr)
-
-    ! setup the default state I/O classes
-    ALLOCATE(stateio_nc :: stateio_ptr)
-    CALL letkf_state_register(stateio_ptr)
-    ALLOCATE(stateio_grib :: stateio_ptr)
-    CALL letkf_state_register(stateio_ptr)
-
-    ! setup the default localizer classes
-    ALLOCATE(loc_novrt :: localizer_ptr)
-    CALL letkf_loc_register(localizer_ptr)
-    ALLOCATE(loc_ocean :: localizer_ptr)
-    CALL letkf_loc_register(localizer_ptr)
+    ! setup the default plugin classes
+    CALL register_plugins_letkf_obsio()
+    CALL register_plugins_letkf_stateio()
+    CALL register_plugins_letkf_localizer()
 
     CALL timing_stop("pre-init")
 

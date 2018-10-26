@@ -1,0 +1,17 @@
+MODULE pluginloader_${PLUGIN_TYPE}
+  USE ${PLUGIN_MOD}
+  ${PLUGIN_MODS}
+
+  IMPLICIT NONE
+  PRIVATE
+
+  PUBLIC :: register_plugins_${PLUGIN_TYPE}
+
+CONTAINS
+
+  SUBROUTINE register_plugins_${PLUGIN_TYPE}()
+    CLASS(${PLUGIN_TYPE}), POINTER :: ptr
+    ${PLUGIN_ALLOCS}
+  END SUBROUTINE register_plugins_${PLUGIN_TYPE}
+
+END MODULE pluginloader_${PLUGIN_TYPE}

@@ -1,7 +1,7 @@
 !================================================================================
 !> default, simple, horizontal only  localization
 !================================================================================
-MODULE letkf_loc_novrt
+MODULE letkf_loc_novrt_mod
   USE letkf_config
   USE letkf_mpi
   USE letkf_loc
@@ -23,7 +23,7 @@ MODULE letkf_loc_novrt
   !================================================================================
   !> localizer class for simple horizontal only localization
   !--------------------------------------------------------------------------------
-  TYPE, EXTENDS(letkf_localizer), PUBLIC :: loc_novrt
+  TYPE, EXTENDS(letkf_localizer), PUBLIC :: letkf_loc_novrt
      REAL :: hzloc(2) !< horizontal localization distance(meters)
      !! at the equator, and pole
    CONTAINS
@@ -34,7 +34,7 @@ MODULE letkf_loc_novrt
      PROCEDURE         :: groups => loc_novrt_groups
      PROCEDURE         :: localize => loc_novrt_localize
      PROCEDURE         :: maxhz => loc_novrt_maxhz
-  END TYPE loc_novrt
+  END TYPE letkf_loc_novrt
   !================================================================================
 
 
@@ -68,7 +68,7 @@ CONTAINS
   !> Initialize this class, reading in settings from the namelist mostly
   !--------------------------------------------------------------------------------
   SUBROUTINE loc_novrt_init(self, config)
-    CLASS(loc_novrt), INTENT(inout) :: self
+    CLASS(letkf_loc_novrt), INTENT(inout) :: self
     TYPE(configuration), INTENT(in) :: config
 
     IF (pe_isroot) THEN
@@ -87,7 +87,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   SUBROUTINE loc_novrt_final(self)
-    CLASS(loc_novrt), INTENT(inout) :: self
+    CLASS(letkf_loc_novrt), INTENT(inout) :: self
 
     ! ... nothing to do here
   END SUBROUTINE loc_novrt_final
@@ -99,7 +99,7 @@ CONTAINS
   !! (horizontal search radius and level/variable localization groups)
   !--------------------------------------------------------------------------------
   SUBROUTINE loc_novrt_groups(self, ij, groups)
-    CLASS(loc_novrt), INTENT(inout) :: self
+    CLASS(letkf_loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     TYPE(letkf_localizer_group), ALLOCATABLE, INTENT(inout) :: groups(:)
 
@@ -121,7 +121,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   FUNCTION loc_novrt_maxhz(self, ij) RESULT(dist)
-    CLASS(loc_novrt), INTENT(inout) :: self
+    CLASS(letkf_loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in)  :: ij
     REAL :: dist
 
@@ -138,7 +138,7 @@ CONTAINS
   !>
   !--------------------------------------------------------------------------------
   FUNCTION loc_novrt_localize(self, ij, group, obs, dist) RESULT(loc)
-    CLASS(loc_novrt), INTENT(inout) :: self
+    CLASS(letkf_loc_novrt), INTENT(inout) :: self
     INTEGER, INTENT(in) :: ij
     TYPE(letkf_localizer_group), INTENT(in) :: group
     TYPE(letkf_observation), INTENT(in) :: obs
@@ -156,4 +156,4 @@ CONTAINS
   !================================================================================
 
 
-END MODULE letkf_loc_novrt
+END MODULE letkf_loc_novrt_mod

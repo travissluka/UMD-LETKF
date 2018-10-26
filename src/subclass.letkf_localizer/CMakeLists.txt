@@ -1,8 +1,6 @@
-set(srcs
-  letkf_loc_novrt.F90
-  letkf_loc_ocean.F90
+set(LETKF_PLUGINS
+  letkf_loc_novrt
+  letkf_loc_ocean
   )
 
-foreach(s ${srcs})
-  target_sources(letkf PRIVATE ${CMAKE_CURRENT_LIST_DIR}/${s})
-endforeach()
+add_letkf_plugins("letkf_localizer" "letkf_loc" "${LETKF_PLUGINS}")

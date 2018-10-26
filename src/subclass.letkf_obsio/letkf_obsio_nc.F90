@@ -1,7 +1,7 @@
 !================================================================================
 !>
 !================================================================================
-MODULE letkf_obs_nc
+MODULE letkf_obsio_nc_mod
   USE netcdf
   USE letkf_config
   USE letkf_obs
@@ -17,11 +17,11 @@ MODULE letkf_obs_nc
   !================================================================================
 
   INTEGER, PARAMETER :: MAX_FILENAME_LEN = 1024
-  
+
   !================================================================================
   !> observation file I/O class for handling NetCDF files
   !--------------------------------------------------------------------------------
-  TYPE, EXTENDS(letkf_obsio), PUBLIC :: obsio_nc
+  TYPE, EXTENDS(letkf_obsio), PUBLIC :: letkf_obsio_nc
      LOGICAL :: read_inc
 
      !> filename from which the observation files are read
@@ -36,7 +36,7 @@ MODULE letkf_obs_nc
      PROCEDURE         :: init => obsio_nc_init
      PROCEDURE         :: read_obs => obsio_nc_read_obs
      PROCEDURE         :: read_hx  => obsio_nc_read_hx
-  END TYPE obsio_nc
+  END TYPE letkf_obsio_nc
   !================================================================================
 
 
@@ -78,7 +78,7 @@ CONTAINS
   !! @param nml_filename path to the namelist we are to open
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_init(self, config)
-    CLASS(obsio_nc) :: self
+    CLASS(letkf_obsio_nc) :: self
     TYPE(configuration), INTENT(in) :: config
 
     CHARACTER(len=:), ALLOCATABLE :: str
@@ -112,7 +112,7 @@ CONTAINS
   !! @param obs the list of observations as they are loaded in.
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_read_obs(self, obs)
-    CLASS(obsio_nc) :: self
+    CLASS(letkf_obsio_nc) :: self
     TYPE(letkf_observation), ALLOCATABLE, INTENT(out) :: obs(:)
 
     LOGICAL :: ex
@@ -218,7 +218,7 @@ CONTAINS
   !! @param hx the ensemble member state mapped to observation space
   !--------------------------------------------------------------------------------
   SUBROUTINE obsio_nc_read_hx(self, ensmem, hx)
-    CLASS(obsio_nc) :: self
+    CLASS(letkf_obsio_nc) :: self
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(out) :: hx(:)
     REAL, ALLOCATABLE :: val(:)
@@ -304,4 +304,4 @@ CONTAINS
   !================================================================================
 
 
-END MODULE letkf_obs_nc
+END MODULE letkf_obsio_nc_mod
