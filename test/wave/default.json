@@ -1,10 +1,11 @@
 {
   "mpi": {
-    "ens_size": 3,
+    "ens_size": 4,
     "ppn": 1
   },
 
   "solver":{
+    "inflation": {},
   },
 
   "observation":{
@@ -16,29 +17,36 @@
     ],
     "ioclass":"obsio_test",
     "obsio_test":[
-      ["h", "p1", "state1", 0, 0, 1.0, 0.0, 1.0, 1.0],
+      ["h", "p1", "HTSGW", 40.5, 220.5, 1.0, 0.0, 0.2, 0.1],
     ],
   },
 
   "state": {
+    "verbose" : 1,
     "ioclass" : "stateio_grib",
     "hzgrid": {
       "hz1": {
-        "lat2d": ["lat", "file.grib2"],
-        "lon2d": ["lon", "file.grib2"],
+        "lat2d": ["lat", "bkg/gwes01.glo_30m.t12z.grib2"],
+        "lon2d": ["lon", "bkg/gwes01.glo_30m.t12z.grib2"],
       },
     },
     "vtgrid": {
       "vt1": {
-        "vert1d": ["depth", "file.grib"],
+        "vert1d": ["depth", "file.grib2"],
       },
     },
     "statedef": {
-      "state1": {
+      "UGRD": {
         "hzgrid": "hz1",
         "vtgrid": "vt1",
-        "input": ["var1", "bkg.#ENS4#.grib"],
-        "output":["var1", "#TYPE#.#ENS4#.grib"],
+        "input": ["UGRD", "bkg/gwes#ENS2#.glo_30m.t12z.grib2"],
+        "output":["UGRD", "#TYPE#.#ENS4#.grib2"],
+      },
+      "HTSGW": {
+        "hzgrid": "hz1",
+        "vtgrid": "vt1",
+        "input": ["HTSGW", "bkg/gwes#ENS2#.glo_30m.t12z.grib2"],
+        "output":["HTSGW", "#TYPE#.#ENS4#.grib2"],
       },
     }
   },
