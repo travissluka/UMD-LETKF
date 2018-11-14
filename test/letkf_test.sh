@@ -34,9 +34,26 @@ mpirun $letkf_exe $json_file
 
 # compare the results with the reference solution files
 echo ""
-for f1 in ref_solution/*.nc; do    
-    f2=${f1##*/}
-    echo "Checking difference in $f2"
-    $check_exe $f1 $f2 1e-9
-done
+echo "---------------------------------------------------"
+echo " Checking output files against reference solutions"
+echo "---------------------------------------------------"
+echo ""
 
+# do conversions from grib to netcdf if necessary
+for f1 in ref_solution/*.nc; do
+    f2=${f1##*/}
+    f3=${f2%%.nc}.grib2
+    if [[ ! -f $f2 ]] && [[ -f $f3 ]]; then
+      echo "Converting grib file $f3 to netcdf"
+      wgrib2 $f3 -netcdf $f2 > wgrib2.log
+    fi
+done
+echo ""
+
+# check the files
+for f1 in ref_solution/*.nc; do
+    f2=${f1##*/}
+
+    echo "Checking difference in $f2"
+    $check_exe $f1 $f2 1e-14
+done

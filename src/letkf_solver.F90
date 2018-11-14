@@ -111,7 +111,7 @@ CONTAINS
        ALLOCATE(diag_lg_obsloc(ij_count, localizer_class%maxgroups))
        diag_lg_obsloc = 0
     END IF
-    
+
   END SUBROUTINE letkf_solver_init
   !================================================================================
 
@@ -213,12 +213,12 @@ CONTAINS
              idx=obs_ij_idx(i)
              r = localizer_class%localize(ij, loc_groups(lg), &
                   obs_def(idx), obs_ij_dist(i))
-             obs_cnt_loc = obs_cnt_loc + r
 
-             IF (r > 0.0) THEN
+             IF (r > 1.0e-4) THEN               
                 ! this observation will be kept
                 ! TODO, check the QC flag too? or have I implemented
                 ! removal of bad obs higher up in the code somewhere
+                obs_cnt_loc = obs_cnt_loc + r
                 obs_lg_cnt = obs_lg_cnt + 1
                 obs_lg_rloc(obs_lg_cnt) = r
                 obs_lg_dep(obs_lg_cnt) = obs_ij_dep(i)
@@ -233,7 +233,7 @@ CONTAINS
              diag_lg_obsloc(ij,lg) = obs_cnt_loc
           END IF
 
-          
+
           ! if there are still good quality obs to assimilate, do so
           IF (obs_lg_cnt > 0) THEN
 
@@ -351,7 +351,7 @@ CONTAINS
 
     IF (pe_isroot) PRINT *, "LETKF solver completed."
     CALL timing_stop('solver')
-    
+
   END SUBROUTINE letkf_solver_run
   !================================================================================
 
@@ -371,7 +371,7 @@ CONTAINS
 
     CALL timing_start("diag_write")
     IF (save_diag ) THEN
-       
+
        ! setup output netCDF file
        IF (pe_isroot) THEN
           PRINT *, ""
@@ -470,7 +470,7 @@ CONTAINS
        DEALLOCATE(diag_obscount)
        DEALLOCATE(diag_lg_obsloc)
        DEALLOCATE(diag_lg_obscount)
-       
+
     END IF
     CALL timing_stop("diag_write")
 

@@ -301,7 +301,6 @@ CONTAINS
     CLASS(linearinterp_lat), INTENT(in) :: self
     REAL, INTENT(in) :: lat
     REAL :: dist
-
     INTEGER :: i
 
     i=1
@@ -352,24 +351,31 @@ CONTAINS
     REAL, INTENT(in) :: z  !< value to localize
     REAL, INTENT(in) :: L  !< the equivalent to the Gaussian standard deviation
     REAL :: res
-    REAL :: c
-    REAL :: abs_z, z_c
+    REAL(8) :: c
+    REAL(8) :: abs_z, z_c
 
-    c = L / SQRT(0.3)
+    c = L / SQRT(0.3d0)
     abs_z = ABS(z)
     z_c = abs_z / c
 
     IF (abs_z >= 2*c) THEN
        res = 0.0
-    ELSEIF (abs_z < 2*c .AND. abs_z > c) THEN
+    ELSEIF (abs_z > c) THEN
        res = &
-            (1.0/12.0)*z_c**5 - 0.5*z_c**4 + &
-            (5.0/8.0)*z_c**3 + (5.0/3.0)*z_c**2 &
-            - 5.0*z_c + 4 - (2.0/3.0)*c/abs_z
+              0.08333d0 * z_c**5 &
+            - 0.50000d0 * z_c**4 &
+            + 0.62500d0 * z_c**3 &
+            + 1.66667d0 * z_c**2 &
+            - 5.00000d0 * z_c &
+            + 4d0 &
+            - 0.66667d0 * c/abs_z
     ELSE
        res = &
-            -0.25*z_c**5 + 0.5*z_c**4 + &
-            (5.0/8.0)*z_c**3 - (5.0/3.0)*z_c**2 + 1
+             -0.25000d0 * z_c**5 &
+            + 0.50000d0 * z_c**4 &
+            + 0.62500d0 * z_c**3 &
+            - 1.66667d0 * z_c**2 &
+            + 1d0
     END IF
   END FUNCTION letkf_loc_gc
   !================================================================================

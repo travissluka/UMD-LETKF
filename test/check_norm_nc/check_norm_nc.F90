@@ -73,7 +73,8 @@ PROGRAM check_norm_nc
      ALLOCATE(tmpr2(s(1),s(2),s(3),s(4)))
      CALL check(nf90_get_var(nc1,i, tmpr1))
      CALL check(nf90_get_var(nc2,i, tmpr2))
-     n = MAXVAL((tmpr1-tmpr2)*(tmpr1-tmpr2))
+     n = SQRT(SUM((tmpr1-tmpr2)*(tmpr1-tmpr2)))
+     !n = MAXVAL((tmpr1-tmpr2)*(tmpr1-tmpr2))
      IF(n>max_norm) THEN
         PRINT *, "max difference of ",n
         STOP 1
