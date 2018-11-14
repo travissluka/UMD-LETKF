@@ -11,7 +11,7 @@ MODULE letkf_state_helper
   !PRIVATE
 
 
-  INTEGER, PARAMETER :: MAX_VAR_LEN = 60
+  INTEGER, PARAMETER :: MAX_VAR_LEN = 1024
   INTEGER, PARAMETER :: MAX_FILE_LEN = 1024
   !============================================================
   !>

@@ -1,5 +1,6 @@
 !================================================================================
 !> grib based state I/O
+!!
 !================================================================================
 MODULE letkf_stateio_grib_mod
   USE letkf_config
@@ -26,8 +27,8 @@ MODULE letkf_stateio_grib_mod
   !--------------------------------------------------------------------------------
   TYPE, PUBLIC, EXTENDS(letkf_stateio) :: letkf_stateio_grib
      TYPE(statevar_files), ALLOCATABLE :: statevars_files(:)
+     INTEGER :: grib2_regex
    CONTAINS
-
      PROCEDURE, NOPASS :: name => stateio_grib_get_name
      PROCEDURE, NOPASS :: desc => stateio_grib_get_desc
      PROCEDURE         :: init => stateio_grib_init
@@ -38,7 +39,7 @@ MODULE letkf_stateio_grib_mod
 
 
   CHARACTER(len=1024) :: grib2_inv ='@mem:'
-  INTEGER(kind=8), PARAMETER :: GRIB2_BUFFER_SIZE = 1024*1024*10
+  INTEGER(kind=8), PARAMETER :: GRIB2_BUFFER_SIZE = 1024*1024*10 ! 10Mb is enough, right?
   CHARACTER(len=GRIB2_BUFFER_SIZE) :: grib2_buffer
 
 CONTAINS
@@ -62,7 +63,7 @@ CONTAINS
   !--------------------------------------------------------------------------------
   FUNCTION stateio_grib_get_desc() RESULT(desc)
     CHARACTER(:), ALLOCATABLE :: desc
-    desc = "grib formatted model state I/O"
+    desc = "grib2 formatted model state I/O"
   END FUNCTION stateio_grib_get_desc
   !================================================================================
 
@@ -89,37 +90,38 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
-    ! create memory files for later use
+    ! load in our section of the configuration
+    CALL config%get("grib_regex", self%grib2_regex, 0)
+
+    ! create memory files in wgrib api for later use
     ret = wgrib2_set_mem_buffer(grib2_buffer, GRIB2_BUFFER_SIZE, 1)
     WRITE (grib2_inv, '(A,I0)') '@mem:', 1
-
 
     ! read the horizontal configuration
     CALL parse_hzgrids(config, hzgrids, hzgrids_files)
 
-    ! onlyt the root PE needs to read in the actual horizontal grid
+    ! only the root PE needs to read in the actual horizontal grid
     ! letkf_state will handle scattering across the PEs
     IF (pe_isroot) THEN
       DO i = 1, SIZE(hzgrids)
-
-          ! TODO, clean this up, use the correct lat/lon/mask files
-          ! TODO, use the correct mask file
 
           ! load lats, lons
           ret = grb2_mk_inv(hzgrids_files(i)%lat%file, grib2_inv)
           if (ret/=0) call letkf_mpi_abort(&
             "Cannot make grib2 inventory for "//hzgrids_files(i)%lat%file)
 
-          ret = grb2_inq(hzgrids_files(i)%lat%file, grib2_inv, "HTSGW", lat=&
-            hzgrids(i)%lat, lon=hzgrids(i)%lon)
-          if (ret == 0) call letkf_mpi_abort(&
+          ret = grb2_inq(hzgrids_files(i)%lat%file, grib2_inv, &
+            hzgrids_files(i)%lat%var, lat=hzgrids(i)%lat, lon=hzgrids(i)%lon, &
+            regex=self%grib2_regex)
+          if (ret <= 0) call letkf_mpi_abort(&
             "Cannot find variable in grib file")
 
+          ! check the grids
           CALL check_hzgrid(hzgrids(i))
           nx = SIZE(hzgrids(i)%lon_nom)
           ny = SIZE(hzgrids(i)%lat_nom)
 
-          ! TODO read in mask
+          ! TODO read in a mask
           ALLOCATE(hzgrids(i)%mask(nx,ny))
           hzgrids(i)%mask = .FALSE.
 
@@ -183,7 +185,7 @@ CONTAINS
     ! determine the filename to load in. Subsituting #ENSx# with the ensemble num
     ! TODO replace "var name" with list of match strings
     filename=parse_ens_filename(self%statevars_files(idx)%input%file, ensmem)
-    invar = self%statevars_files(idx)%input%var
+    invar = trim(self%statevars_files(idx)%input%var)
 
     ! TODO make sure this file exists
     IF (self%verbose) &
@@ -201,8 +203,14 @@ CONTAINS
     IF (ret /= 0) CALL letkf_mpi_abort(&
       "unable to create grib2 inventory for file "//filename)
 
-    ret = grb2_inq(filename, grib2_inv, invar, nx=nx, ny=ny, data2=tmp2d)
-    IF (ret == 0) CALL letkf_mpi_abort(&
+    ret = grb2_inq(filename, grib2_inv, invar, nx=nx, ny=ny, &
+      regex=self%grib2_regex)
+    IF (ret <= 0) CALL letkf_mpi_abort(&
+      " variable does not exist "//invar)
+
+    ret = grb2_inq(filename, grib2_inv, invar, nx=nx, ny=ny, data2=tmp2d, &
+      regex=self%grib2_regex)
+    IF (ret <= 0) CALL letkf_mpi_abort(&
       "unable to read data from file "//filename)
 
     ALLOCATE(state_val(nx,ny,1))
@@ -210,6 +218,8 @@ CONTAINS
     DEALLOCATE(tmp2d)
 
     ret = grb2_free_file(filename)
+    IF (ret /= 0) CALL letkf_mpi_abort( &
+      "unable to release file "//filename)
 
   END SUBROUTINE stateio_grib_read_state
   !================================================================================
@@ -224,61 +234,60 @@ CONTAINS
     INTEGER,        INTENT(in) :: ensmem
     REAL,           INTENT(in) :: state_vals(:,:,:)
 
-    CHARACTER(:), ALLOCATABLE :: filename
+    CHARACTER(:), ALLOCATABLE :: filename_out, filename_prev
     CHARACTER(:), ALLOCATABLE :: filename_tmpl
+    CHARACTER(:), ALLOCATABLE :: meta_str
 
     REAL, ALLOCATABLE :: tmp2d(:,:)
-    INTEGER :: ret, idx1, idx2, i, z, c
+    INTEGER :: ret, idx1, idx2, i, z
 
-    ! determine the filename to save
-    ! TODO use the correct file template
-    filename = parse_ens_filename("#TYPE#.#ENS4#.grib2", ensmem)
-    IF (self%verbose) &
-         PRINT '(X,A,I0.3,2A)', " PE ", pe_rank,' writing output for "'//filename//'"'
-
-    ! TODO write the state to file
-    ! write out the state variables
-    filename_tmpl = 'bkg/gwes01.glo_30m.t12z.grib2'
     ALLOCATE(tmp2d(grid_nx, grid_ny))
+    filename_prev = ""
+
+    ! For each state variable
     DO i = 1, SIZE(statevars)
        idx1 = statevars(i)%grid_s_idx
        idx2 = idx1 + statevars(i)%levels - 1
 
+       ! determine the filename to use as a template (from the input file for now)
+       ! TODO, add option for specifying a different template file
+       filename_tmpl = parse_ens_filename(self%statevars_files(i)%input%file, 1)
+
+       ! determine the output filename
+       filename_out = parse_ens_filename(self%statevars_files(i)%output%file, ensmem)
+       IF (self%verbose .AND. filename_out /= filename_prev) THEN
+         ! If this is a different filename than the one for the previous variable,
+         ! print out the filename
+         PRINT '(X,A,I0.3,2A)', " PE ", pe_rank,' writing output for "'//filename_out//'"'
+         filename_prev = filename_out
+       END if
+
+       ! determine the meta data string of the output variable, based on the template
+       ret = grb2_mk_inv(filename_tmpl, grib2_inv)
+       IF (ret/=0) CALL letkf_mpi_abort(&
+         "Cannot make grib2 inventory for "//filename_tmpl)
+       ALLOCATE(CHARACTER(1024) :: meta_str)
+       ret = grb2_inq(filename_tmpl, grib2_inv, &
+         self%statevars_files(i)%output%var, desc=meta_str, &
+         regex=self%grib2_regex)
+       IF (ret <= 0) CALL letkf_mpi_abort( &
+         "Cannot get metadata for "//TRIM(self%statevars_files(i)%output%var))
+
+       ! write out the levels of this variable
+       ! TODO make sure this works for 3d variables
        DO z=1,statevars(i)%levels
          tmp2d = state_vals(:,:,idx1+z-1)
-         ret = grb2_wrt(filename, filename_tmpl, z, &
-                        var=self%statevars_files(i)%output%var, &
+         ret = grb2_wrt(filename_out, filename_tmpl, z, &
+                        meta=meta_str, &
                         data2=tmp2d)
+         IF (ret /= 0) call letkf_mpi_abort( &
+            "unable to write to file "//filename_out)
        END DO
+
     END DO
     DEALLOCATE(tmp2d)
 
-    ret = grb2_free_file(filename)
-
-
   END SUBROUTINE stateio_grib_write_state
-  !================================================================================
-
-
-
-  !================================================================================
-  !> @brief Subroutine checking the return status from the grb2_mk_inv
-  !! and grb2_inq.
-  !! @param[in] iret return status
-  !<
-  SUBROUTINE check (iret)
-    INTEGER, INTENT(in) :: iret
-    CHARACTER (len=25),PARAMETER ::myname='check_iret'
-    IF (iret/=1) THEN
-       IF (iret<=0) THEN
-          PRINT*,TRIM(myname),': No match! Check input to grb2'
-       ELSE IF (iret>1)THEN
-          PRINT*,TRIM(myname),'There are ', iret,' messages that matched'
-       END IF
-       PRINT*, 'Instant Termination!'
-       STOP
-    END IF
-  END SUBROUTINE check
   !================================================================================
 
 
