@@ -24,8 +24,9 @@ MODULE letkf_loc_novrt_mod
   !> localizer class for simple horizontal only localization
   !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_localizer), PUBLIC :: letkf_loc_novrt
-     REAL :: hzloc(2) !< horizontal localization distance(meters)
-     !! at the equator, and pole
+     ! horizontal localization
+     TYPE(linearinterp_lat) :: hzdist
+
    CONTAINS
      PROCEDURE, NOPASS :: name => loc_novrt_name
      PROCEDURE, NOPASS :: desc => loc_novrt_desc
@@ -71,12 +72,18 @@ CONTAINS
     CLASS(letkf_loc_novrt), INTENT(inout) :: self
     TYPE(configuration), INTENT(in) :: config
 
+    CHARACTER(:), ALLOCATABLE :: str
+
     IF (pe_isroot) THEN
        PRINT *, ""
        PRINT *, "LOC_NOVRT initialization"
        PRINT *, "------------------------------------------------------------"
     END IF
-    self%hzloc = (/500.0e3, 50.0e3/)
+
+    CALL config%get("hzloc", str, "0.0 500.0e3 / 90.0 50.0e3")
+    self%hzdist = linearinterp_lat(str)
+    IF (pe_isroot) PRINT *, "hzloc=",self%hzdist%string()
+
     self%maxgroups=1
 
   END SUBROUTINE loc_novrt_init
@@ -125,9 +132,7 @@ CONTAINS
     INTEGER, INTENT(in)  :: ij
     REAL :: dist
 
-    dist=ABS(lat_ij(ij))/90.0
-    dist=dist*self%hzloc(2) + (1.0-dist)*self%hzloc(1)
-
+    dist = self%hzdist%get_dist(lat_ij(ij))
   END FUNCTION loc_novrt_maxhz
   !================================================================================
 
@@ -148,9 +153,7 @@ CONTAINS
     ! TODO temporal localization
 
     ! horizontal localization
-    r = ABS(lat_ij(ij))/90.0
-    r = r*self%hzloc(2)+(1.0-r)*self%hzloc(1)
-    loc = letkf_loc_gc(dist, r)
+    loc = letkf_loc_gc(dist, self%hzdist%get_dist(lat_ij(ij)))
 
   END FUNCTION loc_novrt_localize
   !================================================================================

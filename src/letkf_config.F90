@@ -273,11 +273,17 @@ CONTAINS
   END FUNCTION get_found
 
 
-  SUBROUTINE get_integer_name(self, key, val)
+  SUBROUTINE get_integer_name(self, key, val, default)
     CLASS(configuration),INTENT(in) :: self
     CHARACTER(len=*), INTENT(in) :: key
     INTEGER,INTENT(out) :: val
-    CALL fson_get(self%node, key, val)
+    INTEGER, OPTIONAL, INTENT(in) :: default
+
+    IF(PRESENT(default) .AND. .NOT. get_found(self,key)) then
+      val = default
+    ELSE
+      CALL fson_get(self%node, key, val)
+    END IF
   END SUBROUTINE get_integer_name
 
   SUBROUTINE get_integer_idx(self, idx, val)
@@ -336,14 +342,19 @@ CONTAINS
 
 
 
-  SUBROUTINE get_string_name(self, key, val)
+  SUBROUTINE get_string_name(self, key, val, default)
     CLASS(configuration),INTENT(in) :: self
     CHARACTER(len=*), INTENT(in) :: key
     CHARACTER(len=:), ALLOCATABLE, INTENT(out) :: val
+    CHARACTER(len=*), OPTIONAL, INTENT(in) :: default
 
-    ALLOCATE(CHARACTER(1024) :: val) !err..
-    CALL fson_get(self%node,key,val)
-    val = TRIM(val)
+    IF(PRESENT(default) .AND. .NOT. get_found(self,key)) THEN
+       val = default
+    ELSE
+      ALLOCATE(CHARACTER(1024) :: val) !err..
+      CALL fson_get(self%node,key,val)
+      val = TRIM(val)
+    END IF
   END SUBROUTINE get_string_name
 
   SUBROUTINE get_string_idx(self, idx, val)

@@ -123,6 +123,7 @@ MODULE letkf_loc
      REAL, ALLOCATABLE :: dist(:)
    CONTAINS
      PROCEDURE :: get_dist => linearinterp_lat_get_dist
+     PROCEDURE :: string => linearinterp_lat_string
   END TYPE linearinterp_lat
   INTERFACE linearinterp_lat
      MODULE PROCEDURE linearinterp_lat_init
@@ -307,17 +308,37 @@ CONTAINS
     DO WHILE(ABS(lat) > self%lat(i))
        i = i+1
     END DO
-    !dist = self%dist(i-1)
-    !RETURN
 
     IF(i == 1) THEN
        dist = self%dist(i)
     ELSE
-       dist=self%dist(i-1) + (ABS(lat)-self%lat(i-1)) * &
-            (self%dist(i)-self%dist(i-1))/(self%lat(i)-self%lat(i-1))
+       dist = (ABS(lat)-self%lat(i-1)) / (self%lat(i)-self%lat(i-1))
+       dist = dist*self%dist(i) + (1.0-dist)*self%dist(i-1)
     END IF
 
   END FUNCTION linearinterp_lat_get_dist
+  !================================================================================
+
+
+
+  !================================================================================
+  FUNCTION linearinterp_lat_string(self) RESULT(str)
+    CLASS(linearinterp_lat), INTENT(in) :: self
+    CHARACTER(:), ALLOCATABLE :: str
+
+    CHARACTER(:), ALLOCATABLE :: str2
+    INTEGER :: i
+
+    str = ""
+    DO i = 1,self%npoints
+      str2 = REPEAT(' ', 1024)
+      WRITE (str2, '(F4.1,A,EN9.1E1,A)') self%lat(i), 'N ', self%dist(i),' m'
+      str = str // trim(str2)
+      IF (i/=self%npoints) str = str//"  /  "
+    END DO
+
+
+  END FUNCTION linearinterp_lat_string
   !================================================================================
 
 

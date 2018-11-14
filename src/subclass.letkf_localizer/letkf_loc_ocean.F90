@@ -116,8 +116,8 @@ CONTAINS
        PRINT *, "save_diag  = ", self%save_diag
        PRINT *, "tloc_prof  = ", self%tloc_prof
        PRINT *, "tloc_sat   = ", self%tloc_sat
-       PRINT *, "hzloc_prof = ", "??"
-       PRINT *, "hzloc_sat  = ", "??"
+       PRINT *, "hzloc_prof = ", self%hzdist_prof%string()
+       PRINT *, "hzloc_sat  = ", self%hzdist_sat%string()
     END IF
 
     ! get type of vertical localization used for SST obs
