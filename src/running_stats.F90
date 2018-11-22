@@ -14,7 +14,7 @@ MODULE running_stats_mod
      REAL :: vmin(2) = HUGE(0.0)
      REAL :: vmax(2) = -HUGE(0.0)
      REAL :: M(2) = 0.0
-     REAL :: S = 1.0
+     REAL :: S = 0.0
 
    CONTAINS
 
