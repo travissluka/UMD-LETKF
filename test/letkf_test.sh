@@ -5,12 +5,13 @@
 
 set -e
 
-check_exe=$1
-letkf_exe=$2
-name=$3
-config=$4
-bin_dir=$5
-src_dir=$6
+check_nc_exe=$1
+check_grib_exe=$2
+letkf_exe=$3
+name=$4
+config=$5
+bin_dir=$6
+src_dir=$7
 
 # determine file locations
 bkg_data=$bin_dir/$name.testdata
@@ -39,21 +40,18 @@ echo " Checking output files against reference solutions"
 echo "---------------------------------------------------"
 echo ""
 
-# do conversions from grib to netcdf if necessary
-for f1 in ref_solution/*.nc; do
-    f2=${f1##*/}
-    f3=${f2%%.nc}.grib2
-    if [[ ! -f $f2 ]] && [[ -f $f3 ]]; then
-      echo "Converting grib file $f3 to netcdf"
-      wgrib2 $f3 -netcdf $f2 > wgrib2.log
-    fi
-done
-echo ""
+shopt -s nullglob
 
-# check the files
-for f1 in ref_solution/*.nc; do
+# check the grib files
+for f1 in ref_solution/*.{grib,grib2}; do
     f2=${f1##*/}
-
     echo "Checking difference in $f2"
-    $check_exe $f1 $f2 1e-14
+    $check_grib_exe $f1 $f2 1e-14
+done
+
+# check the NetCDF files
+for f1 in ref_solution/*.nc; do
+    f2=${f1##*/}
+    echo "Checking difference in $f2"
+    $check_nc_exe $f1 $f2 1e-14
 done

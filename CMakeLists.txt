@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
-
+cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 project(letkf Fortran)
 
 
+#------------------------------------------------------------
 # determine the repository version
 #------------------------------------------------------------
 execute_process(COMMAND git describe --dirty --tags --always
@@ -18,6 +18,8 @@ add_definitions(-DCVERSION=\"${GIT_VERSION}\")
 message(STATUS "Git repository version: ${GIT_VERSION}")
 
 
+
+#------------------------------------------------------------
 # Testing and code coverage
 #------------------------------------------------------------
 option( LETKF_ENABLE_CODECOVERAGE "enable code coverage testing support")
@@ -33,18 +35,18 @@ if(LETKF_ENABLE_TESTS)
 endif()
 
 
-# external dependencies
+
+#------------------------------------------------------------
+#  dependencies
 #------------------------------------------------------------
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # MPI
 find_package(MPI REQUIRED)
-include_directories(${MPI_Fortran_INCLUDE_PATH})
 
 # NetCDF
 set(NETCDF_F90 "YES")
 find_package(NetCDF REQUIRED)
-include_directories(${NETCDF_INCLUDE_DIRS})
 
 # LAPACK / BLAS
 #TODO, cmake not finding lapack with intel's MKL, but still compiles fine. fix this at some point
@@ -53,23 +55,37 @@ find_package(LAPACK)
 
 # grib2
 option( LETKF_ENABLE_GRIB "enable grib2 support for state I/O" OFF)
+option( LETKF_BUILD_GRIB "If the wgrib2 api is not found, it is downloaded and built" OFF)
 IF(LETKF_ENABLE_GRIB)
-  # TODO this is temporary for working with grib API, need to clean up
-  set(GRIB_INC_DIR  /home/tsluka/proj/UMD-LETKF/grib2/lib)
-  set(GRIB_LIBRARIES
-    /home/tsluka/proj/UMD-LETKF/grib2/lib/libwgrib2.a
-    /home/tsluka/proj/UMD-LETKF/grib2/lib/libwgrib2_api.a
-  )
-  include_directories(${GRIB_INC_DIR})
+  # need OpenMP
   find_package(OpenMP REQUIRED)
-  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
+
+  IF(LETKF_BUILD_GRIB)
+    # If we are going to build grib2 api ourselves in cmake
+    set(GRIB2_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/dep/wgrib2-prefix/src/wgrib2/lib)
+    set(GRIB2_INC_DIR ${GRIB2_BUILD_DIR})
+    set(GRIB2_LIBRARY ${GRIB2_BUILD_DIR}/libwgrib2.a)
+    set(GRIB2_API_LIBRARY ${GRIB2_BUILD_DIR}/libwgrib2_api.a)
+  ELSE()
+    # otherwise find the library
+    find_path(GRIB2_INC_DIR wgrib2api.mod)
+    find_library(GRIB2_API_LIBRARY libwgrib2_api.a)
+    find_library(GRIB2_LIBRARY libwgrib2.a)
+    IF(NOT GRIB2_INC_DIR OR NOT GRIB2_API_LIBRARY OR NOT GRIB2_LIBRARY)
+      MESSAGE(FATAL_ERROR "cannot find wgrib2 API")
+    ENDIF()
+  ENDIF()
+  mark_as_advanced(GRIB2_API_LIBRARY GRIB2_LIBRARY GRIB2_INC_DIR)
+  set(GRIB2_LIBRARIES   ${GRIB2_API_LIBRARY} ${GRIB2_LIBRARY})
 ENDIF()
 
 
+
+#------------------------------------------------------------
 # subdirectories
 #------------------------------------------------------------
 
-# external dependency source
+# included source of external dependencies
 add_subdirectory(dep)
 
 # main source code for library and default driver

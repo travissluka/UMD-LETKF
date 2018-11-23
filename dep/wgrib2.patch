@@ -1,0 +1,19 @@
+diff -ru grib2.old/makefile grib2/makefile
+--- grib2.old/makefile	2017-12-29 08:14:43.000000000 -0700
++++ grib2/makefile	2018-11-23 08:58:40.240652586 -0700
+@@ -107,12 +107,12 @@
+ 
+ 
+ # Warning do not set both USE_NETCDF3 and USE_NETCDF4 to one
+-USE_NETCDF3=1
++USE_NETCDF3=0
+ USE_NETCDF4=0
+ USE_REGEX=1
+-USE_TIGGE=1
++USE_TIGGE=0
+ USE_MYSQL=0
+-USE_IPOLATES=1
++USE_IPOLATES=0
+ USE_UDF=0
+ USE_OPENMP=1
+ USE_PROJ4=0

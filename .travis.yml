@@ -1,24 +1,20 @@
 language: c
-dist: trusty
-sudo: false
+dist: xenial
 
 addons:
-  apt:
-    sources:
-    - ubuntu-toolchain-r-test
-    packages:
+ apt:
+   packages:
     - gfortran
     - openmpi-bin libopenmpi-dev
     - libblas-dev liblapack-dev
-    - netcdf-bin libnetcdf-dev 
+    - netcdf-bin libnetcdf-dev libnetcdff-dev
 
 
 before_script:
-  - cd test; ./getTestData.sh; cd ../
 
 
 script:
-  - mkdir build; cd build; FC=mpif90 cmake ../ -DLETKF_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DLETKF_ENABLE_CODECOVERAGE=ON -DLETKF_ENABLE_GRIB=OFF;
+  - mkdir build; cd build; FC=mpif90 cmake ../ -DLETKF_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DLETKF_ENABLE_CODECOVERAGE=ON -DLETKF_ENABLE_GRIB=ON -DLETKF_BUILD_GRIB=ON;
   - make
   - ctest -VV
 

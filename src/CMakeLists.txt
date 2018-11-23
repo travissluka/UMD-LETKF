@@ -9,8 +9,6 @@ set( letkf_lib_srcs
   getmem.F90
   timing.F90
   running_stats.F90
-  ${JSON_SRC_FILES}
-  ${KDTREE_SRC_FILES}
   letkf_config.F90
   letkf_core.F90
   letkf_loc.F90
@@ -20,29 +18,43 @@ set( letkf_lib_srcs
   letkf_state.F90
   letkf_state_helper.F90
   letkf.F90
+  ${JSON_SRC_FILES}
+  ${KDTREE_SRC_FILES}
   )
-
-
-# define the LETKF static linked library
 add_library( letkf STATIC ${letkf_lib_srcs} )
-target_link_libraries(letkf
-  PRIVATE
-    ${MPI_Fortran_LIBRARIES}
-    ${NETCDF_LIBRARIES}
-    ${LAPACK_LIBRARIES}
-    ${GRIB_LIBRARIES}
-  )
 
 
-# installation directory for the library
-install(TARGETS letkf ARCHIVE DESTINATION lib)
-
-
-# add the default localization, state, observation classes source code to the library
+# add the default plugins source code to the library
+# (localization, state, observation classes)
 add_subdirectory(subclass.letkf_localizer)
 add_subdirectory(subclass.letkf_stateio)
 add_subdirectory(subclass.letkf_obsio)
 
+
+# external dependencies
+#-------------------------------------------------------------------------------
+# MPI
+include_directories(${MPI_Fortran_INCLUDE_PATH})
+target_link_libraries(letkf  PRIVATE  ${MPI_Fortran_LIBRARIES})
+
+#NetCDF
+include_directories(${NETCDF_INCLUDE_DIRS})
+target_link_libraries(letkf  PRIVATE  ${NETCDF_LIBRARIES})
+
+# LAPACK
+target_link_libraries(letkf  PRIVATE ${LAPACK_LIBRARIES})
+
+# GRIB2
+IF(LETKF_ENABLE_GRIB)
+  include_directories(${GRIB2_INC_DIR})
+  target_link_libraries(letkf  PRIVATE  ${GRIB2_LIBRARIES})
+  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
+ENDIF()
+
+
+# installation directory for the library
+#-------------------------------------------------------------------------------
+install(TARGETS letkf ARCHIVE DESTINATION lib)
 
 # The modules that should be exported to the install directory
 set( letkf_export_mods

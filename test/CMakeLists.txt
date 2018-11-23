@@ -20,6 +20,7 @@ function(letkf_test name config)
     NAME ${name}.${config}
     COMMAND ${LETKF_TEST_SH}
       $<TARGET_FILE:check_norm_nc>
+      $<TARGET_FILE:check_norm_grib>
       $<TARGET_FILE:letkfdriver>
       ${name}
       ${config}
@@ -31,6 +32,9 @@ endfunction()
 
 # support executables for the tests
 add_subdirectory(check_norm_nc)
+IF(LETKF_ENABLE_GRIB)
+  add_subdirectory(check_norm_grib)
+ENDIF()
 
 #--------------------------------------------------------------------------------
 
