@@ -1,5 +1,9 @@
 [![Build Status](https://travis-ci.org/travissluka/UMD-LETKF.svg?branch=develop)](https://travis-ci.org/travissluka/UMD-LETKF)
 [![codecov](https://codecov.io/gh/travissluka/UMD-LETKF/branch/develop/graph/badge.svg)](https://codecov.io/gh/travissluka/UMD-LETKF)
+[![docs](https://readthedocs.org/projects/umd-letkf/badge/?version=latest)](http://umd-letkf.readthedocs.io)
+
+For complete set of documentation, visit [umd-letkf.readthedocs.io](http://umd-letkf.readthedocs.io/).
+
 
 ```diff
 -NOTE: This library is still under active development

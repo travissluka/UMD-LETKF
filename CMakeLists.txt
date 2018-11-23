@@ -92,12 +92,6 @@ add_subdirectory(dep)
 # main source code for library and default driver
 add_subdirectory(src)
 
-# documentation
-option ( LETKF_ENABLE_DOCS "Generate documentation")
-if(LETKF_ENABLE_DOCS)
-  add_subdirectory(doc)
-endif()
-
 # tests
 if(LETKF_ENABLE_TESTS)
   add_subdirectory(test)

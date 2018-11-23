@@ -1,6 +1,10 @@
 language: c
 dist: xenial
 
+branches:
+  except:
+    - docs
+    
 addons:
  apt:
    packages:
