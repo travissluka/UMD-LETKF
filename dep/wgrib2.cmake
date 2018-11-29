@@ -10,15 +10,19 @@ IF(LETKF_BUILD_GRIB)
     FILE (DOWNLOAD ${WGRIB2_URL} ${WGRIB2_TGZ})
   ENDIF()
 
+  # which compiler are we using
+  IF (CMAKE_C_COMPILER_ID MATCHES "Intel")
+     SET(COMP_SYS "intel_linux")
+  ENDIF()	  
+
   # details for compiling the wgrib2 library
   ExternalProject_Add(wgrib2
     URL ${WGRIB2_TGZ}
     URL_MD5 fd08ac8b988c310c125b50550aebd9f2
     CONFIGURE_COMMAND ""
-    PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/wgrib2.patch
-    BUILD_COMMAND make lib FC=gfortran CC=gcc
+    PATCH_COMMAND patch -p0 < ${CMAKE_CURRENT_SOURCE_DIR}/wgrib2.patch
+    BUILD_COMMAND make lib FC=${CMAKE_Fortran_COMPILER} CC=${CMAKE_C_COMPILER} COMP_SYS=${COMP_SYS}
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND ""
   )
-
 ENDIF()

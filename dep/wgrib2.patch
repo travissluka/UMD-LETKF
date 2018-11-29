@@ -1,6 +1,5 @@
-diff -ru grib2.old/makefile grib2/makefile
---- grib2.old/makefile	2017-12-29 08:14:43.000000000 -0700
-+++ grib2/makefile	2018-11-23 08:58:40.240652586 -0700
+--- makefile	2017-12-29 10:14:43.000000000 -0500
++++ makefile.new	2018-11-29 12:53:19.000000000 -0500
 @@ -107,12 +107,12 @@
  
  
@@ -17,3 +16,12 @@ diff -ru grib2.old/makefile grib2/makefile
  USE_UDF=0
  USE_OPENMP=1
  USE_PROJ4=0
+@@ -124,7 +124,7 @@
+ USE_G2CLIB=0
+ USE_PNG=1
+ USE_JASPER=1
+-USE_AEC=1
++USE_AEC=0
+ 
+ # Add any customization comments, appears in help and config pages
+ BUILD_COMMENTS=stock build
