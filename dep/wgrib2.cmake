@@ -12,9 +12,13 @@ IF(LETKF_BUILD_GRIB)
 
   # which compiler are we using
   IF (CMAKE_C_COMPILER_ID MATCHES "Intel")
-     SET(COMP_SYS "intel_linux")
+    SET(COMP_SYS "intel_linux")
+  ELSEIF(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    SET(COMP_SYS "gnu_linux")    
   ENDIF()	  
 
+  message(STATUS "building wgrib2 with ${COMP_SYS}")
+  
   # details for compiling the wgrib2 library
   ExternalProject_Add(wgrib2
     URL ${WGRIB2_TGZ}
