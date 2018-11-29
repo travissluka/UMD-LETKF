@@ -217,6 +217,8 @@ CONTAINS
                "cordinates of resulting files might not be ideal."
           PRINT *, ""
        END IF
+       ALLOCATE(hzgrid%lat_nom(ny))
+       ALLOCATE(hzgrid%lon_nom(nx))
        hzgrid%lat_nom = SUM(hzgrid%lat, dim=1)/nx
        hzgrid%lon_nom = SUM(hzgrid%lon, dim=2)/ny
     END IF
