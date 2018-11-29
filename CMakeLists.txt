@@ -49,9 +49,10 @@ set(NETCDF_F90 "YES")
 find_package(NetCDF REQUIRED)
 
 # LAPACK / BLAS
-#TODO, cmake not finding lapack with intel's MKL, but still compiles fine. fix this at some point
-# so that blas and lapack are REQUIRED.
-find_package(LAPACK)
+# If Intel, assume the mkl library is used 
+IF(NOT CMAKE_C_COMPILER_ID MATCHES Intel)
+  find_package(LAPACK REQUIRED)
+ENDIF()
 
 # grib2
 option( LETKF_ENABLE_GRIB "enable grib2 support for state I/O" OFF)
