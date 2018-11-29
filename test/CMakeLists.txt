@@ -16,16 +16,23 @@ set(LETKF_TEST_SH ${CMAKE_CURRENT_SOURCE_DIR}/letkf_test.sh)
 
 # function that actually generates the tests
 function(letkf_test name config)
+  
+  IF(TARGET check_norm_grib)
+    SET(CHECK_GRIB_FILE $<TARGET_FILE:check_norm_grib>)
+  ELSE()
+    SET(CHECK_GRIB_FILE none)
+  ENDIF()
+    
   add_test(
     NAME ${name}.${config}
     COMMAND ${LETKF_TEST_SH}
-      $<TARGET_FILE:check_norm_nc>
-      $<TARGET_FILE:check_norm_grib>
-      $<TARGET_FILE:letkfdriver>
-      ${name}
-      ${config}
-      ${CMAKE_CURRENT_BINARY_DIR}
-      ${CMAKE_CURRENT_SOURCE_DIR}
+    $<TARGET_FILE:check_norm_nc>
+    ${CHECK_GRIB_FILE}
+    $<TARGET_FILE:letkfdriver>
+    ${name}
+    ${config}
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endfunction()
 
