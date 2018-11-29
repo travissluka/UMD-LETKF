@@ -13,6 +13,11 @@ config=$5
 bin_dir=$6
 src_dir=$7
 
+#determine the command used to run jobs (mpirun, aprun, neither...)
+run_cmd=""
+command -v mpirun && run_cmd="mpirun -n 2"
+command -v aprun && run_cmd="aprun -n 2" 
+
 # determine file locations
 bkg_data=$bin_dir/$name.testdata
 ref_data=$bin_dir/$name.ref_solutions/$config
@@ -31,7 +36,7 @@ mkdir -p ref_solution
 ln -sf $ref_data/* ./ref_solution/
 
 # run the LETKF
-mpirun $letkf_exe $json_file
+$run_cmd $letkf_exe $json_file
 
 # compare the results with the reference solution files
 echo ""
@@ -40,18 +45,17 @@ echo " Checking output files against reference solutions"
 echo "---------------------------------------------------"
 echo ""
 
-shopt -s nullglob
+# check each file listed against the desired norm
+for l in $(cat ref_solution/norms); do
+    f=${l%%;*}
+    n=${l##*;}
+    e=${f##*.}
 
-# check the grib files
-for f1 in ref_solution/*.{grib,grib2}; do
-    f2=${f1##*/}
-    echo "Checking difference in $f2"
-    $check_grib_exe $f1 $f2 1e-14
-done
-
-# check the NetCDF files
-for f1 in ref_solution/*.nc; do
-    f2=${f1##*/}
-    echo "Checking difference in $f2"
-    $check_nc_exe $f1 $f2 1e-14
+    echo "Checking difference in $f"
+    
+    if [[ ${e::4} == 'grib' ]]; then
+	$check_grib_exe ref_solution/$f $f $n
+    else
+	$check_nc_exe ref_solution/$f $f $n
+    fi
 done
