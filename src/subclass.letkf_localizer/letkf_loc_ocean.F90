@@ -109,7 +109,7 @@ CONTAINS
     self%hzdist_prof = linearinterp_lat(str)
     CALL config%get("hzloc_sat",  str)
     self%hzdist_sat = linearinterp_lat(str)
-    CALL config%get("tloc_prdiag_surf_depthof", self%tloc_prof, default=-1.0)
+    CALL config%get("tloc_prof", self%tloc_prof, default=-1.0)
     CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
 
     IF(pe_isroot) THEN
@@ -153,26 +153,44 @@ CONTAINS
           ! ERROR, unknown given type
           CALL letkf_mpi_abort("illegal vtloc_surf 'type' given: "//str)
        END IF
+    END IF
 
-       ! determine the list of observations or platform ids that are considered
-       ! surface observations that need to be localized. Convert from a specified
-       ! string on the config file to the associated integer id.
-       CALL config2%get("surf_obs", config3)
+
+    ! TODO clean up this code, this was causing problems with hybrid-godas
+    ! so i applied a quick fix
+
+
+    ! determine the list of observations or platform ids that are considered
+    ! surface observations that need to be localized. Convert from a specified
+    ! string on the config file to the associated integer id.
+    IF(config%found("surf_obs")) THEN
+       IF(pe_isroot) PRINT *, " satellite observation types:"
+          
+       CALL config%get("surf_obs", config3)
        ALLOCATE(self%surf_obs(config3%COUNT()))
        DO i = 1, SIZE(self%surf_obs)
           CALL config3%get(i,str)
+          IF (pe_isroot) PRINT *, "  * ", TRIM(str)
           obsplat_def = letkf_obs_getdef('O',str)
           self%surf_obs(i) = obsplat_def%id
        END DO
+    ELSE
+       ALLOCATE(self%surf_obs(0))
+    END IF
 
-       CALL config2%get("surf_plats", config3)
+    IF(config%found("surf_plats")) THEN
+       IF(pe_isroot) PRINT *, " satellite platform types:"
+
+       CALL config%get("surf_plats", config3)
        ALLOCATE(self%surf_plats(config3%COUNT()))
        DO i = 1, SIZE(self%surf_plats)
           CALL config3%get(i,str)
+          IF (pe_isroot) PRINT *, "  * ", TRIM(str)
           obsplat_def = letkf_obs_getdef('P',str)
           self%surf_plats(i) = obsplat_def%id
        END DO
-
+    ELSE
+       ALLOCATE(self%surf_plats(0))
     END IF
 
     ! setup optional diagnostics
@@ -402,6 +420,9 @@ CONTAINS
     INTEGER :: i
     LOGICAL :: surf
 
+    ! TODO, this logic has caused problems with hybrid-godas.... need to clean it up
+
+
     ! Is this a surface/satellite observation?
     ! test by comparing observation and platform ids against a user
     ! defined list.
@@ -433,15 +454,14 @@ CONTAINS
                loc = loc * letkf_loc_gc(obs%time, self%tloc_sat)
        END IF
 
-    ELSE IF(obs%platid == 1) THEN
+    ELSE
        ! If this is a T/S profile observation, apply no vertical localization
        loc = letkf_loc_gc(dist, self%hzdist_prof%get_dist( lat_ij(ij)))
        IF(self%tloc_prof > 0) &
             loc = loc * letkf_loc_gc(obs%time, self%tloc_prof)
-
-    ELSE
-       PRINT *, "PLATID: ", obs%platid
-       CALL letkf_mpi_abort("unhandled platid in loc_ocean_localize")
+    ! ELSE
+    !    PRINT *, "PLATID: ", obs%platid
+    !    CALL letkf_mpi_abort("unhandled platid in loc_ocean_localize")
 
     ENDIF
 
