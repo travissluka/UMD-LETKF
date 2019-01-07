@@ -64,10 +64,9 @@
     "save_diag": 1,
     "hzloc_prof": "0.0 720.0e3 / 90.0 200.0e3",
     "hzloc_sat": "0.0 500.0e3 / 90.0 50.0e3",
+    "surf_plats":["ocn_sat"],
     "vtloc_surf":{
-      "type": "bkg_t",
-      "surf_obs":[],
-      "surf_plats":["ocn_sat"],
+      "type": "bkg_t",      
       "bkg_t_delta": 0.2,
       "bkg_t_var": "ocn_t",
     }
