@@ -95,7 +95,7 @@ CONTAINS
 
        ! grid name
        CALL hz_config%get(i, config2)
-       CALL config2%name(str)
+       call config2%get("name", str)
        IF(pe_isroot) PRINT *, ' Horizontal grid: "', str,'"'
        hzgrids(i)%name = str
 
@@ -261,7 +261,7 @@ CONTAINS
 
        ! grid name
        CALL vt_config%get(i, config2)
-       CALL config2%name(str)
+       call config2%get("name",str)
        IF(pe_isroot) PRINT *, ' Vertical grid: "', str,'"'
        vtgrids(i)%name = str
 
@@ -344,7 +344,7 @@ CONTAINS
        CALL state_config%get(i, config2)
 
        ! variable name
-       CALL config2%name(str)
+       call config2%get("name", str)
        IF(pe_isroot)  PRINT *, ' State variable: "', str,'"'
        statevars(i)%name = str
 

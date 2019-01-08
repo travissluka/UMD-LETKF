@@ -1,9 +1,0 @@
-{
-  "#import": "inflation.json",
-
-  "solver": {
-    "inflation": {
-      "rtps" : 0.8,
-    }
-  }
-}

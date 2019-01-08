@@ -10,6 +10,7 @@ set( letkf_lib_srcs
   timing.F90
   running_stats.F90
   letkf_config.F90
+  letkf_config_c.cpp
   letkf_core.F90
   letkf_loc.F90
   letkf_mpi.F90
@@ -18,7 +19,6 @@ set( letkf_lib_srcs
   letkf_state.F90
   letkf_state_helper.F90
   letkf.F90
-  ${JSON_SRC_FILES}
   ${KDTREE_SRC_FILES}
   )
 add_library( letkf STATIC ${letkf_lib_srcs} )
@@ -49,7 +49,12 @@ IF(LETKF_ENABLE_GRIB)
   include_directories(${GRIB2_INC_DIR})
   target_link_libraries(letkf  PRIVATE  ${GRIB2_LIBRARIES})
   set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_Fortran_FLAGS}")
 ENDIF()
+
+# yaml, TODO: set the include directory correctly
+include_directories(${CMAKE_SOURCE_DIR}/dep/libyaml/include)
+target_link_libraries(letkf PRIVATE yaml)
 
 
 # installation directory for the library

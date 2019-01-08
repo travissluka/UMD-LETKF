@@ -1,0 +1,56 @@
+#---
+# "#import": "inflation.yaml"
+---
+mpi:
+  ens_size: 50
+  ppn: 1
+
+observation:
+  obsdef:
+  - ["obs1", 1, "observation type 1"]
+  - ["obs2", 2, "observation type 2"]
+  platdef:
+  - ["plat1", 1, "platform type 1"]
+  - ["plat2", 2, "platform type 2"]
+  class: obsio_test
+  obsio_test:
+  - ["obs1", "plat1", "state1", 40.5, 220.5, 1.0, 0.0,  1.0, 1.0]
+  - ["obs2", "plat1", "state2", -1.5, 220.5, 1.0, 0.0, -1.0, 1.0]
+
+state:
+  class: stateio_nc
+  hzgrid:
+  - name: hz1
+    lat1d: ["lat", "bkg/bkg.0001.nc"]
+    lon1d: ["lon", "bkg/bkg.0001.nc"]
+
+  vtgrid:
+  - name: vt1
+    vert1d: ["depth", "bkg/bkg.0001.nc"]
+
+  statedef:
+  - name: state1
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["var1", "bkg/bkg.#ENS4#.nc"]
+    output: ["var1", "#TYPE#.#ENS4#.nc"]
+
+  - name: state2
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["var2", "bkg/bkg.#ENS4#.nc"]
+    output: ["var2", "#TYPE#.#ENS4#.nc"]
+
+  - name: state3
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["var3", "bkg/bkg.#ENS4#.nc"]
+    output: ["var3", "#TYPE#.#ENS4#.nc"]
+
+localization:
+  class: loc_novrt
+
+
+solver:
+  inflation:
+    mul: 1.05

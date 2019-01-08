@@ -1,9 +1,0 @@
-{
-  "#import": "inflation.json",
-
-  "solver": {
-    "inflation": {
-      "mul" : 1.05,
-    }
-  }
-}

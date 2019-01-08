@@ -1,6 +1,6 @@
 [submodule "dep/geoKdTree"]
 	path = dep/geoKdTree
 	url = https://github.com/travissluka/geoKdTree.git
-[submodule "dep/fson"]
-	path = dep/fson
-	url = https://github.com/josephalevin/fson.git
+[submodule "dep/libyaml"]
+	path = dep/libyaml
+	url = https://github.com/yaml/libyaml.git

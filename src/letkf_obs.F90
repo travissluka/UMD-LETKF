@@ -286,9 +286,9 @@ CONTAINS
 
 
     ! determine which io class to use
-    CALL config%get("ioclass", ioclass)
+    CALL config%get("class", ioclass)
     ioclass = tolower(ioclass)
-    IF (pe_isroot) PRINT *, "observation.ioclass= "//ioclass
+    IF (pe_isroot) PRINT *, "observation.class= "//ioclass
     NULLIFY(obsio_class)
     DO i=1,obsio_reg_num
        IF (tolower(obsio_reg(i)%p%name()) == ioclass) THEN
@@ -300,7 +300,7 @@ CONTAINS
        CALL letkf_mpi_abort("obsio class "//ioclass// " not found.")
     END IF
 
-    
+
     ! initialize MPI object for later sending/receving obsservations
     CALL init_mpi_observation()
 

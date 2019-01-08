@@ -277,9 +277,9 @@ CONTAINS
     IF (pe_isroot) PRINT *, "state.verbose=",verbose
 
     ! determine the stateio class to use
-    CALL config%get("ioclass", ioclass)
+    CALL config%get("class", ioclass)
     ioclass = tolower(ioclass)
-    IF (pe_isroot) PRINT '(A,A)',  " state.ioclass= ",ioclass
+    IF (pe_isroot) PRINT '(A,A)',  " state.class= ",ioclass
     NULLIFY(stateio_class)
     DO i=1, stateio_reg_num
        IF (tolower(stateio_reg(i)%p%name()) == ioclass) THEN
@@ -729,7 +729,7 @@ CONTAINS
       CALL mpi_bcast(str, i, mpi_character, pe_root, letkf_mpi_comm, ierr)
     END SUBROUTINE bcast_str
 
-  END SUBROUTINE letkf_state_init_class  
+  END SUBROUTINE letkf_state_init_class
   !> \endcond
   !================================================================================
 

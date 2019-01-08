@@ -22,7 +22,7 @@ command -v aprun && run_cmd="aprun -n 2"
 bkg_data=$bin_dir/$name.testdata
 ref_data=$bin_dir/$name.ref_solutions/$config
 wrk_dir=$bin_dir/$config
-json_file=$config.json
+json_file=$config.yaml
 
 # setup the working directory
 if [ -d $wrk_dir ]; then

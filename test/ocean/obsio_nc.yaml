@@ -1,0 +1,74 @@
+---
+mpi:
+  ens_size: 10
+  ppn: 1
+
+
+solver:
+  inflation:
+    rtps: 0.0
+    rtpp: 0.0
+    mul: 1.0
+
+
+state:
+  verbose: false
+  class: stateio_nc
+  compression: 0
+
+  hzgrid:
+  - name: hz1
+    lat2d: ["geolat", "grid/ocean.hgrid.nc"]
+    lon2d: ["geolon", "grid/ocean.hgrid.nc"]
+    lat1d: ["lath", "grid/ocean.hgrid.nc"]
+    lon1d: ["lonh", "grid/ocean.hgrid.nc"]
+    mask:  ["wet", "grid/ocean.hgrid.nc"]
+
+  vtgrid:
+  - name: vt1
+    vert1d: ["Layer", "grid/ocean.vgrid.nc"]
+
+  statedef:
+  - name: ocn_t
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["Temp", "bkg/bkg.#ENS4#.nc"]
+    output: ["Temp", "#TYPE#.#ENS4#.nc"]
+
+  - name: ocn_s
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["Salt", "bkg/bkg.#ENS4#.nc"]
+    output: ["Salt", "#TYPE#.#ENS4#.nc"]
+
+  - name: ocn_u
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["u", "bkg/bkg.#ENS4#.nc"]
+    output: ["u", "#TYPE#.#ENS4#.nc"]
+
+  - name: ocn_v
+    hzgrid: hz1
+    vtgrid: vt1
+    input:  ["v", "bkg/bkg.#ENS4#.nc"]
+    output: ["v", "#TYPE#.#ENS4#.nc"]
+
+
+localization:
+  class: loc_novrt
+
+
+observation:
+  class: obsio_nc
+  obsio_nc:
+    filename_obs: obs/obs.nc
+    filename_obshx: "obs/obs.#ENS4#.nc"
+    read_inc: false
+
+  obsdef:
+  - ["ocn_t", 2210, "ocean insitu temperature (C)"]
+  - ["ocn_s", 2220, "ocean salinity (PSU)"]
+
+  platdef:
+  - ["ocn_prf", 1, "all insitu obs"]
+  - ["ocn_sat", 1000, "all satellite based obs"]

@@ -94,7 +94,7 @@ CONTAINS
 
 
     ! load in our section of the configuration
-    CALL config%get("compression", self%compression)
+    CALL config%get("compression", self%compression, 0)
     IF (pe_isroot) PRINT *, " state.compression=", self%compression
 
 
