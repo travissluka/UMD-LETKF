@@ -70,27 +70,22 @@ MODULE letkf_config
 
    CONTAINS
 
-     GENERIC, PUBLIC :: get => get_child_name, get_child_idx, &
+     GENERIC, PUBLIC :: get => &
+          get_child_name,   get_child_idx, &
           get_integer_name, get_integer_idx, &
           get_real4_name,   get_real4_idx, &
-          get_real8_name,   get_real8_idx, &
           get_string_name,  get_string_idx, &
           get_logical_name
-     GENERIC,   PUBLIC :: get_child => get_child_name_f, get_child_idx_f
      PROCEDURE, PUBLIC :: count => get_array_count
      PROCEDURE, PUBLIC :: found => get_found
      PROCEDURE, PUBLIC :: full_name =>get_fullname
 
      PROCEDURE :: get_child_name
-     PROCEDURE :: get_child_name_f
      PROCEDURE :: get_child_idx
-     PROCEDURE :: get_child_idx_f
      PROCEDURE :: get_integer_name
      PROCEDURE :: get_integer_idx
      PROCEDURE :: get_real4_name
      PROCEDURE :: get_real4_idx
-     PROCEDURE :: get_real8_name
-     PROCEDURE :: get_real8_idx
      PROCEDURE :: get_string_name
      PROCEDURE :: get_string_idx
      PROCEDURE :: get_logical_name
@@ -260,42 +255,26 @@ CONTAINS
 
 
 
-  SUBROUTINE get_child_name(self, key, p)
-    CLASS(configuration),INTENT(in) :: self
+  FUNCTION get_found(self, key) RESULT(res)
+    CLASS(configuration), INTENT(in) :: self
     CHARACTER(len=*), INTENT(in) :: key
-    TYPE(configuration), INTENT(out) :: p
-    p = self%get_child_name_f(key)
-  END SUBROUTINE get_child_name
+    LOGICAL :: res
+    TYPE(c_ptr) :: res_node
+
+    res_node = letkf_yaml_get_child_name(&
+         self%yaml_doc, self%yaml_node, key//c_null_char)
+    res = c_ASSOCIATED(res_node)
+  END FUNCTION get_found
 
 
 
-  SUBROUTINE get_child_idx(self, idx, p)
-    CLASS(configuration),INTENT(in) :: self
-    INTEGER, INTENT(in) :: idx
-    TYPE(configuration), INTENT(out) :: p
-    CHARACTER(:), ALLOCATABLE :: str
-
-    p = self%get_child_idx_f(idx)
-  END SUBROUTINE get_child_idx
-
-
-  SUBROUTINE get_name(self, name)
-    CLASS(configuration), INTENT(in) :: self
-    CHARACTER(:), INTENT(out), ALLOCATABLE :: name
-    INTEGER :: l
-
-    STOP 43
-    ! l=fson_string_length(self%node%name)
-    ! ALLOCATE(CHARACTER(l) :: name)
-    ! CALL fson_string_copy(self%node%name, name)
-  END SUBROUTINE get_name
-
-
-
-  FUNCTION get_child_name_f(self, key) RESULT(res)
-    CLASS(configuration), INTENT(in) :: self
-    CHARACTER(len=*),     INTENT(in) :: key
-    TYPE(configuration) :: res
+  !-------------------------------------------------------------------------------
+  ! child node accessor
+  !-------------------------------------------------------------------------------
+  SUBROUTINE get_child_name(self, key, res)
+    CLASS(configuration), INTENT(in)  :: self
+    CHARACTER(len=*),     INTENT(in)  :: key
+    TYPE(configuration),  INTENT(out) :: res
 
     res%yaml_doc = self%yaml_doc
     res%yaml_node = letkf_yaml_get_child_name(self%yaml_doc, &
@@ -311,20 +290,21 @@ CONTAINS
             //'" section of config file.'
        STOP 1
     END IF
-  END FUNCTION get_child_name_f
+  END  SUBROUTINE get_child_name
 
 
 
-  FUNCTION get_child_idx_f(self, idx) RESULT(res)
-    CLASS(configuration), INTENT(in) :: self
-    INTEGER, INTENT(in) :: idx
-    TYPE(configuration) :: res
+  SUBROUTINE get_child_idx(self, idx, res)
+    CLASS(configuration), INTENT(in)  :: self
+    INTEGER,              INTENT(in)  :: idx
+    TYPE(configuration),  INTENT(out) :: res
+
     CHARACTER(len=1024) :: name
     INTEGER(c_int) :: name_len
 
     res%yaml_doc = self%yaml_doc
-    res%yaml_node = letkf_yaml_get_child_idx(self%yaml_doc, self%yaml_node, idx, &
-         name, name_len)
+    res%yaml_node = letkf_yaml_get_child_idx(self%yaml_doc, self%yaml_node, &
+         idx, name, name_len)
     IF (.NOT. c_ASSOCIATED(res%yaml_node)) THEN
        PRINT *, 'index ',idx,' not found in "'//self%full_name()&
             //'" section of config file.'
@@ -340,22 +320,10 @@ CONTAINS
     IF(self%parent == "") THEN
        res%parent = TRIM(self%name)
     ELSE
-       res%parent=TRIM(self%parent)//"."//TRIM(self%name)
+       res%parent = TRIM(self%parent)//"."//TRIM(self%name)
     ENDIF
-  END FUNCTION get_child_idx_f
+  END SUBROUTINE get_child_idx
 
-
-
-  FUNCTION get_found(self, key) RESULT(res)
-    CLASS(configuration), INTENT(in) :: self
-    CHARACTER(len=*), INTENT(in) :: key
-    LOGICAL :: res
-    TYPE(c_ptr) :: res_node
-
-    res_node = letkf_yaml_get_child_name(&
-         self%yaml_doc, self%yaml_node, key//c_null_char)
-    res = c_ASSOCIATED(res_node)
-  END FUNCTION get_found
 
 
   !-------------------------------------------------------------------------------
@@ -466,34 +434,9 @@ CONTAINS
 
 
 
-  SUBROUTINE get_real8_name(self, key, val, default)
-    CLASS(configuration),INTENT(in) :: self
-    CHARACTER(len=*), INTENT(in) :: key
-    REAL(8), INTENT(out) :: val
-    REAL(8), OPTIONAL, INTENT(in) :: default
-
-    STOP 51
-    ! IF(PRESENT(default) .AND. .NOT. get_found(self,key)) THEN
-    !    val = default
-    ! ELSE
-    !    CALL fson_get(self%node, key, val)
-    ! END IF
-  END SUBROUTINE get_real8_name
-
-
-
-  SUBROUTINE get_real8_idx(self, idx, val)
-    CLASS(configuration), INTENT(in) :: self
-    INTEGER, INTENT(in) :: idx
-    REAL(8), INTENT(out) :: val
-    TYPE(configuration) :: child
-    STOP 52
-    ! CALL get_child_idx(self,idx,child)
-    ! CALL fson_get(child%node, VALUE=val)
-  END SUBROUTINE get_real8_idx
-
-
-
+  !-------------------------------------------------------------------------------
+  ! string accessor
+  !-------------------------------------------------------------------------------
   SUBROUTINE get_string_name(self, key, val, default)
     CLASS(configuration),INTENT(in) :: self
     CHARACTER(len=*), INTENT(in) :: key
@@ -545,6 +488,9 @@ CONTAINS
 
 
 
+  !-------------------------------------------------------------------------------
+  ! logical accessor
+  !-------------------------------------------------------------------------------
   SUBROUTINE get_logical_name(self, key, val, default)
     CLASS(configuration),INTENT(in) :: self
     CHARACTER(len=*), INTENT(in) :: key
@@ -567,7 +513,7 @@ CONTAINS
           val = .FALSE.
        CASE default
           PRINT *, 'Illegal non-boolean value "'//str(:str_len)//'" in "'//&
-          self%full_name()//"."//key//'"'
+               self%full_name()//"."//key//'"'
           STOP 55
        END SELECT
     ELSE

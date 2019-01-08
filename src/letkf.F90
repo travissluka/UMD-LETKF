@@ -113,6 +113,7 @@ CONTAINS
   !> Does all the fun stuff of actually running the LETKF
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_run()
+    TYPE(configuration) :: config2
 
     ! LETKF initialization
     ! module initialization order is somewhat important
@@ -121,22 +122,27 @@ CONTAINS
     ! before "obs_read" is called.
     CALL timing_start("init", TIMER_SYNC)
 
-    CALL letkf_mpi_init(config%get_child("mpi"))
+    CALL config%get("mpi", config2)
+    CALL letkf_mpi_init(config2)
     CALL letkf_mpi_barrier()
 
-    CALL letkf_state_init(config%get_child("state"))
+    CALL config%get("state", config2)
+    CALL letkf_state_init(config2)
     CALL letkf_mpi_barrier()
 
-    CALL letkf_obs_init(config%get_child("observation"))
+    CALL config%get("observation", config2)
+    CALL letkf_obs_init(config2)
     CALL letkf_mpi_barrier()
 
     CALL letkf_obs_read()
     CALL letkf_mpi_barrier()
 
-    CALL letkf_loc_init(config%get_child("localization"))
+    CALL config%get("localization", config2)
+    CALL letkf_loc_init(config2)
     CALL letkf_mpi_barrier()
 
-    CALL letkf_solver_init(config%get_child("solver"))
+    CALL config%get("solver", config2)
+    CALL letkf_solver_init(config2)
     CALL letkf_mpi_barrier()
 
     CALL timing_stop("init")
