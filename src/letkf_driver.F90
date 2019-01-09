@@ -16,7 +16,7 @@ PROGRAM letkf_driver
      CALL get_command_ARGUMENT(1, config_filename)
      config_filename=TRIM(config_filename)
   ELSE
-     config_filename="letkf.json"
+     config_filename="letkf.yaml"
   END IF
 
   ! initialize and run
