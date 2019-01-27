@@ -658,6 +658,11 @@ CONTAINS
        IF (.NOT. ALLOCATED(statevars)) &
             CALL letkf_mpi_abort('"statevars" not allocated by stateio_class')
 
+       ! make sure there is at least 1 state variables
+       IF (SIZE(statevars) == 0) THEN
+          CALL letkf_mpi_abort("There are no defined state variables... *hand wave*... "//&
+               "these are not the configurations you are looking for.")
+       END IF
 
        ! TODO make sure all the names are uppercase
 
@@ -996,9 +1001,21 @@ CONTAINS
              CALL stateio_class%read_state(j, statevars(i)%name, tmp_r_3d)
              IF(.NOT. ALLOCATED(tmp_r_3d)) &
                   CALL letkf_mpi_abort("no data returned from stateio_class%read_state()")
+
+             ! make sure that this is the size we are expecting
+             IF ( SIZE(tmp_r_3d, 1) /= grid_nx  .OR. &
+                  SIZE(tmp_r_3d, 2) /= grid_ny .OR. &
+                  SIZE(tmp_r_3d, 3) /= statevars(i)%levels) THEN
+                PRINT *, ""
+                PRINT *, "state variable: ", TRIM(statevars(i)%name)
+                PRINT *, "expected size: ",grid_nx, grid_ny, statevars(i)%levels
+                PRINT *, "received size: ", SHAPE(tmp_r_3d)
+                CALL letkf_mpi_abort("Size of state variable and the size of its defined grid do not match")
+             END IF
           END IF
           CALL timing_stop("io_read")
 
+          
           ! scatter the variable
           CALL timing_start("mpi_send")
           sends_cnt=0

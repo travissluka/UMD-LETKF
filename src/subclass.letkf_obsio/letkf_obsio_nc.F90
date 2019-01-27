@@ -96,8 +96,8 @@ CONTAINS
     self%filename_obs_hx = str
     CALL config%get("read_inc", self%read_inc)
     IF(pe_isroot) THEN
-       PRINT '(A,A)', " filename_obs=", self%filename_obs
-       PRINT '(A,A)', " filename_obshx=", self%filename_obs_hx
+       PRINT '(A,A)', " filename_obs=", TRIM(self%filename_obs)
+       PRINT '(A,A)', " filename_obshx=", TRIM(self%filename_obs_hx)
        PRINT *, "read_inc=",self%read_inc
     END IF
   END SUBROUTINE obsio_nc_init
@@ -121,7 +121,7 @@ CONTAINS
     INTEGER, ALLOCATABLE :: tmp_i(:)
     REAL(4), ALLOCATABLE :: tmp_r(:)
 
-    PRINT *, "Reading observations from file: ", self%filename_obs
+    PRINT *, "Reading observations from file: ", TRIM(self%filename_obs)
 
     ! make sure the file exists
     INQUIRE(file=self%filename_obs, exist=ex)

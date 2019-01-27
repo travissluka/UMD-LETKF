@@ -208,8 +208,10 @@ CONTAINS
     ! load field
     ! TODO, handle 2D vars
     ! TODO, handle empty time variables
-    CALL check(nf90_open(filename, nf90_nowrite, ncid))
-    CALL check(nf90_inq_varid(ncid, invar, varid))
+    CALL check(nf90_open(filename, nf90_nowrite, ncid), &
+         TRIM(filename))
+    CALL check(nf90_inq_varid(ncid, invar, varid), &
+         TRIM(filename)//" "//TRIM(invar))
     CALL check(nf90_inquire_variable(ncid, varid, ndims=i))
     CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))
     CALL check(nf90_inquire_dimension(ncid, dimids(1), len=nx))
@@ -337,9 +339,13 @@ CONTAINS
 
     ! open file, find dimensions
     ! TODO, handle a time dimension if stored that way
-    CALL check(nf90_open(filename, nf90_nowrite, ncid))
-    CALL check(nf90_inq_varid(ncid, varname, varid))
-    CALL check(nf90_inquire_variable(ncid, varid, ndims=i))
+    CALL check(nf90_open(filename, nf90_nowrite, ncid), &
+         '"'//TRIM(filename)//'"')
+    
+    CALL check(nf90_inq_varid(ncid, varname, varid), &
+         '"'//TRIM(varname)//'" in "'//TRIM(filename)//'"')
+    
+    CALL check(nf90_inquire_variable(ncid, varid, ndims=i))    
     IF ( i /= 2) CALL letkf_mpi_abort("variable dimensions /= 2")
     CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))
     CALL check(nf90_inquire_dimension(ncid, dimids(1), len=nx))
@@ -369,8 +375,12 @@ CONTAINS
 
     ! open file, find dimensions
     ! TODO, handle a time dimension if stored that way
-    CALL check(nf90_open(filename, nf90_nowrite, ncid))
-    CALL check(nf90_inq_varid(ncid, varname, varid))
+    CALL check(nf90_open(filename, nf90_nowrite, ncid), &
+         '"'//TRIM(filename)//'"')
+
+    CALL check(nf90_inq_varid(ncid, varname, varid), &
+         '"'//TRIM(varname)//'" in "'//TRIM(filename)//'"')
+
     CALL check(nf90_inquire_variable(ncid, varid, ndims=i))
     IF ( i /= 1) CALL letkf_mpi_abort("variable dimensions /= 1")
     CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))
@@ -394,13 +404,16 @@ CONTAINS
     INTEGER, INTENT(in) :: status
     CHARACTER(*), OPTIONAL, INTENT(in) :: str
 
+    CHARACTER(:), ALLOCATABLE :: str2
+    
     IF(status /= nf90_noerr) THEN
+       str2=TRIM(nf90_strerror(status))
+       
        IF(PRESENT(str)) THEN
-          WRITE (*,*) TRIM(nf90_strerror(status)), ": ", str
-       ELSE
-          WRITE (*,*) TRIM(nf90_strerror(status))
+          str2=str2//": "//TRIM(str)
        END IF
-       CALL letkf_mpi_abort("NetCDF error")
+       
+       CALL letkf_mpi_abort(str2)
     END IF
   END SUBROUTINE check
   !================================================================================

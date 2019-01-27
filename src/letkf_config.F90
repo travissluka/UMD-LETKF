@@ -286,7 +286,7 @@ CONTAINS
     ENDIF
     res%name = key
     IF (.NOT. c_ASSOCIATED(res%yaml_node)) THEN
-       PRINT *, '"'//key//'" not found in "'//self%full_name()&
+       PRINT *, '"'//TRIM(key)//'" not found in "'//TRIM(self%full_name())&
             //'" section of config file.'
        STOP 1
     END IF

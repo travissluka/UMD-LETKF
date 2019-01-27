@@ -148,7 +148,11 @@ CONTAINS
     CHARACTER(*), INTENT(in) :: str
     INTEGER :: ierr
 
+    PRINT *, ""
+    PRINT *, "============================================================"
     PRINT *, "FATAL ERROR: ", str
+    PRINT *, "============================================================"
+    print *, ""
     CALL mpi_abort(letkf_mpi_comm, 1, ierr)
   END SUBROUTINE letkf_mpi_abort
   !================================================================================
