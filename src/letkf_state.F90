@@ -441,6 +441,61 @@ CONTAINS
 
 
 
+
+  SUBROUTINE crop_data_2d_r(data, x1, x2, y1, y2)
+    REAL, ALLOCATABLE, INTENT(INOUT) :: data(:,:)
+    INTEGER, INTENT(IN) :: x1, x2, y1, y2
+
+    INTEGER :: x2b, y2b
+    REAL, ALLOCATABLE :: temp(:,:)
+
+    x2b=MERGE(SIZE(data,1),x2,x2<=0)
+    y2b=MERGE(SIZE(data,2),y2,y2<=0)
+
+    ALLOCATE(temp(x2b-x1+1, y2b-y1+1))
+    temp = data(x1:x2b, y1:y2b)
+    DEALLOCATE(data)
+    ALLOCATE(data(x2b-x1+1, y2b-y1+1))
+    data=temp
+    DEALLOCATE(temp)
+  END SUBROUTINE crop_data_2d_r
+
+  SUBROUTINE crop_data_2d_l(data, x1, x2, y1, y2)
+    LOGICAL, ALLOCATABLE, INTENT(INOUT) :: data(:,:)
+    INTEGER, INTENT(IN) :: x1, x2, y1, y2
+
+    INTEGER :: x2b, y2b
+    LOGICAL, ALLOCATABLE :: temp(:,:)
+
+    x2b=MERGE(SIZE(data,1),x2,x2<=0)
+    y2b=MERGE(SIZE(data,2),y2,y2<=0)
+
+    ALLOCATE(temp(x2b-x1+1, y2b-y1+1))
+    temp = data(x1:x2b, y1:y2b)
+    DEALLOCATE(data)
+    ALLOCATE(data(x2b-x1+1, y2b-y1+1))
+    data=temp
+    DEALLOCATE(temp)
+  END SUBROUTINE crop_data_2d_l
+
+  SUBROUTINE crop_data_1d_r(data, x1, x2)
+    REAL, ALLOCATABLE, INTENT(INOUT) :: data(:)
+    INTEGER, INTENT(IN) :: x1, x2
+    INTEGER :: x2b
+    
+    REAL, ALLOCATABLE :: temp(:)
+
+    x2b=MERGE(SIZE(data), x2, x2<=0)
+
+    ALLOCATE(temp(x2b-x1+1))
+    temp = data(x1:x2b)
+    DEALLOCATE(data)
+    ALLOCATE(data(x2b-x1+1))
+    data=temp
+    DEALLOCATE(temp)
+  END SUBROUTINE crop_data_1d_r
+
+  
   !================================================================================
   !> \cond INTERNAL
   !> Reads in the grid specification (horizontal and vertical grids) and the
@@ -448,8 +503,10 @@ CONTAINS
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_init_class(config)
     TYPE(configuration), INTENT(in) :: config
-    INTEGER :: i, j, ierr
-
+    INTEGER :: i, j, k, l, ierr
+    TYPE(configuration) :: config2, config3, config4
+    CHARACTER(:), ALLOCATABLE :: str
+    
     CALL timing_start("read_state_specs")
 
     ! call the class initialization routine
@@ -463,18 +520,78 @@ CONTAINS
     IF (pe_isroot) THEN
 
 
-       ! Check the horizontal grid, print summary of grid stats
-       !------------------------------------------------------------------------
+       ! make sure there is at least ONE horizontal grid specified
        IF (.NOT. ALLOCATED(hzgrids) )&
             CALL letkf_mpi_abort('"HZGRIDS" was not allocated by state_io class.')
+       IF( SIZE(hzgrids) == 0) THEN
+          CALL letkf_mpi_abort("No horizontal grids are specified. There needs to be at least 1.")
+       END IF
+       IF( SIZE(hzgrids) > 1) THEN
+          CALL letkf_mpi_abort("Current LETKF code allows only 1 horizontal grids to be specified.")
+       END IF
 
+
+       ! Check the horizontal grids for their validity
+       !------------------------------------------------------------------------
        DO i=1,SIZE(hzgrids)
+          
+          ! make sure the required variables are initialized
           IF (.NOT. ALLOCATED(hzgrids(i)%lat) ) &
                CALL letkf_mpi_abort("LAT uninitiallized from stateio_class%read_specs()")
           IF (.NOT. ALLOCATED(hzgrids(i)%lon) ) &
                CALL letkf_mpi_abort("LON uninitiallized from stateio_class%read_specs()")
           IF (.NOT. ALLOCATED(hzgrids(i)%mask) ) &
                CALL letkf_mpi_abort("MASK uninitiallized from stateio_class%read_specs()")
+
+
+          ! make sure the nominal lat/lon are given
+          IF (.NOT. ALLOCATED(hzgrids(i)%lat_nom)) &
+               CALL letkf_mpi_abort("LAT_NOM uninitialized from stateio_class%read_specs()")
+          IF (.NOT. ALLOCATED(hzgrids(i)%lon_nom)) &
+               CALL letkf_mpi_abort("LON_NOM uninitialized from stateio_class%read_specs()")
+          
+          !TODO, create nominal lat/lon if not already given
+
+          
+          ! perform subsetting of the grid, if required
+          !TODO save this configuration info somewhere else tied to the grid
+          !  so that we don't have to search through again
+          CALL config%get("hzgrid", config2)
+          DO j=1,config2%count()
+             CALL config2%get(i, config3)
+             CALL config3%get("name", str)
+             IF(str == hzgrids(i)%name) THEN
+                IF(config3%found("subsetX")) THEN
+                   CALL config3%get("subsetX", config4)
+                   CALL config4%get(1, k)
+                   CALL config4%get(2, l)
+                   CALL crop_data_2d_r(hzgrids(i)%lat, k, l, 1, -1)
+                   CALL crop_data_2d_r(hzgrids(i)%lon, k, l, 1, -1)
+                   CALL crop_data_2d_l(hzgrids(i)%mask, k, l, 1, -1)                                      
+                   CALL crop_data_1d_r(hzgrids(i)%lon_nom, k, l)
+                   PRINT *,""
+                   PRINT *, "Cropping X dim of horizontal grids to: ", k,l
+                END IF
+                IF(config3%found("subsetY")) THEN
+                   CALL config3%get("subsetY", config4)
+                   CALL config4%get(1, k)
+                   CALL config4%get(2, l)
+                   CALL crop_data_2d_r(hzgrids(i)%lat, 1, -1, k, l)
+                   CALL crop_data_2d_r(hzgrids(i)%lon, 1, -1, k, l)
+                   CALL crop_data_2d_l(hzgrids(i)%mask, 1, -1, k, l)
+                   CALL crop_data_1d_r(hzgrids(i)%lat_nom, k, l)
+                   PRINT *,""
+                   PRINT *, "Cropping Y dim of horizontal grids to: ", k,l
+                END IF
+                
+                EXIT
+             END IF
+          END DO
+          IF(j>config2%count()) THEN
+             CALL letkf_mpi_abort("Weird error in letkf_state_init_class that should never occur")
+          END IF
+
+          ! make sure the dimensions match among the variables
           DO j=1,2
              IF ((SIZE(hzgrids(i)%lat, dim=j)/=SIZE(hzgrids(i)%lon,dim=j)) .OR. &
                   (SIZE(hzgrids(i)%lat,dim=j)/=SIZE(hzgrids(i)%mask,dim=j)))  THEN
@@ -482,13 +599,12 @@ CONTAINS
                      "from stateio_class%read_specs()")
              END IF
           END DO
-          IF (.NOT. ALLOCATED(hzgrids(i)%lat_nom)) &
-               CALL letkf_mpi_abort("LAT_NOM uninitialized from stateio_class%read_specs()")
-          IF (.NOT. ALLOCATED(hzgrids(i)%lon_nom)) &
-               CALL letkf_mpi_abort("LON_NOM uninitialized from stateio_class%read_specs()")
-          !TODO, create nominal lat/lon if not already given
+
        END DO
 
+       
+       ! the grids have been deemed valid, print out a summary of the grids
+       !----------------------------------------------------------------------
        PRINT *, ""
        PRINT *, ""
        PRINT *, "Horizontal grids summary"
