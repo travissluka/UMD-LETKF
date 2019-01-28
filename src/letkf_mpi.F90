@@ -120,7 +120,7 @@ CONTAINS
 
     ! read in our section of the configuration
     CALL config%get("ens_size", ens_size)
-    CALL config%get("ppn", ppn)
+    CALL config%get("ppn", ppn, 1)
 
     ! output basic MPI info
     IF(pe_isroot) THEN
