@@ -235,92 +235,119 @@ CONTAINS
     REAL,           INTENT(in) :: state_vals(:,:,:)
 
     INTEGER :: i, j, idx1, idx2
-    CHARACTER(:), ALLOCATABLE :: filename, str
+    CHARACTER(:), ALLOCATABLE :: str
     INTEGER :: ncid, d_t, d_x, d_y, d_z(100), varid
+    
+    LOGICAL :: var_unsaved(SIZE(statevars))
+    LOGICAL :: var_tosave(SIZE(statevars))
+    CHARACTER(:), ALLOCATABLE :: curr_filename, var_filename
+    
 
+    var_unsaved=.true.
+    ! while there are variables that have not been saved yet
+    !------------------------------------------------------------
+    DO WHILE(ANY(var_unsaved))
+       var_tosave=.false.
+       curr_filename = ""
+       
+       ! look at all the variables, and determine the next batch to save
+       ! (i.e. variables with the same output filename)
+       DO i=1, SIZE(statevars)
+          ! skip this variable if already saved
+          IF(.NOT. var_unsaved(i)) CYCLE
 
-    ! determine the filename to save
-    ! TODO use the correct file template
-    filename = parse_ens_filename("#TYPE#.#ENS4#.nc", ensmem)
-    IF (self%verbose) &
-         PRINT '(X,A,I0.3,2A)', " PE ", pe_rank,' writing output for "'//filename//'"'
+          ! determine the filename for thie variable
+          var_filename=parse_ens_filename(self%statevars_files(i)%output%file, ensmem)
 
-    ! start creating output file
-    CALL check(nf90_create(filename, nf90_hdf5, ncid))
-
-    ! time variable
-    CALL check(nf90_def_dim(ncid, "time", 0, d_t))
-    CALL check(nf90_def_var(ncid, "time", nf90_real, (/d_t/), varid))
-    CALL check(nf90_put_att(ncid, varid, "axis", "T"))
-
-    ! horizontal grid lat/lons
-    ! TODO: add support for multiple horizontal grids
-    CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))
-    CALL check(nf90_def_var(ncid, "lon", nf90_real, (/d_x/), varid))
-    CALL check(nf90_put_att(ncid, varid, "long_name", "longitude"))
-    CALL check(nf90_put_att(ncid, varid, "units", "degrees_east"))
-    CALL check(nf90_put_att(ncid, varid, "axis", "X"))
-    CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
-    CALL check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), varid))
-    CALL check(nf90_put_att(ncid, varid, "long_name", "latitude"))
-    CALL check(nf90_put_att(ncid, varid, "units", "degrees_north"))
-    CALL check(nf90_put_att(ncid, varid, "axis", "Y"))
-
-    ! vertical grids
-    !TODO, handle 2D, 3D, and constant vertical grids
-    DO i=1,SIZE(vtgrids)
-       IF (vtgrids(i)%dims > 1)&
-            CALL letkf_mpi_abort ("LETKF_STATE_NC: 2D/3D vertical grids not yet supported.")
-       CALL check(nf90_def_dim(ncid, vtgrids(i)%name, SIZE(vtgrids(i)%vert, 1), d_z(i)))
-       CALL check(nf90_def_var(ncid, vtgrids(i)%name, nf90_real, (/d_z(i)/), varid))
-       CALL check(nf90_put_att(ncid, varid, "axis", "Z"))
-    END DO
-
-    ! state variables
-    DO i =1, SIZE(statevars)
-       ! determine which vertical coordinate is the matching one
-       str = statevars(i)%vtgrid
-       DO j=1, SIZE(vtgrids)
-          IF (vtgrids(j)%name == str) EXIT
+          ! if current filename empty, init
+          IF(curr_filename=="") curr_filename = var_filename
+          
+          ! if this variable's filename does equals current filename, add to list to save
+          IF(curr_filename == var_filename) var_tosave(i) = .true.
        END DO
-       ! create variable
-       IF(j > SIZE(vtgrids))&
-            CALL letkf_mpi_abort("cannot find vertical grid in stateio_nc_write_init")
-       CALL check(nf90_def_var(ncid, self%statevars_files(i)%output%var,&
-            nf90_real, (/d_x,d_y,d_z(j),d_t/),varid))
-       CALL check(nf90_def_var_deflate(ncid, varid, 1, 1, self%compression))
+
+       
+       ! initialize the file
+       ! TODO: add support for multiple horizontal grids
+       ! TODO handle 2D, 3D, and constant vertical grids
+       IF (self%verbose) &
+         PRINT '(X,A,I0.3,2A)', " PE ", pe_rank,' writing output for "'//curr_filename//'"'
+       CALL check(nf90_create(curr_filename, nf90_hdf5, ncid))
+       CALL check(nf90_def_dim(ncid, "time", 0, d_t))
+       CALL check(nf90_def_var(ncid, "time", nf90_real, (/d_t/), varid))
+       CALL check(nf90_put_att(ncid, varid, "axis", "T"))
+       CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))
+       CALL check(nf90_def_var(ncid, "lon", nf90_real, (/d_x/), varid))
+       CALL check(nf90_put_att(ncid, varid, "long_name", "longitude"))
+       CALL check(nf90_put_att(ncid, varid, "units", "degrees_east"))
+       CALL check(nf90_put_att(ncid, varid, "axis", "X"))
+       CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
+       CALL check(nf90_def_var(ncid, "lat", nf90_real, (/d_y/), varid))
+       CALL check(nf90_put_att(ncid, varid, "long_name", "latitude"))
+       CALL check(nf90_put_att(ncid, varid, "units", "degrees_north"))
+       CALL check(nf90_put_att(ncid, varid, "axis", "Y"))
+       DO i=1,SIZE(vtgrids)
+          IF (vtgrids(i)%dims > 1)&
+            CALL letkf_mpi_abort ("LETKF_STATE_NC: 2D/3D vertical grids not yet supported.")
+          CALL check(nf90_def_dim(ncid, vtgrids(i)%name, SIZE(vtgrids(i)%vert, 1), d_z(i)))
+          CALL check(nf90_def_var(ncid, vtgrids(i)%name, nf90_real, (/d_z(i)/), varid))
+          CALL check(nf90_put_att(ncid, varid, "axis", "Z"))
+       END DO
+
+
+       ! for each variable to save in this file, add its definition to file
+       DO i=1, SIZE(statevars)
+          ! skip if not being saved in this file
+          IF( .NOT. var_tosave(i)) CYCLE
+          
+          ! determine which vertical coordinate is the matching one
+          str = statevars(i)%vtgrid
+          DO j=1, SIZE(vtgrids)
+             IF (vtgrids(j)%name == str) EXIT
+          END DO
+          
+          ! create variable
+          IF(j > SIZE(vtgrids))&
+               CALL letkf_mpi_abort("cannot find vertical grid in stateio_nc_write_init")
+          CALL check(nf90_def_var(ncid, self%statevars_files(i)%output%var,&
+               nf90_real, (/d_x,d_y,d_z(j),d_t/),varid))
+          CALL check(nf90_def_var_deflate(ncid, varid, 1, 1, self%compression))
+       END DO
+
+       ! done with file definitions
+       CALL check(nf90_enddef(ncid))
+
+       ! write out horizontal/vertical grids
+       CALL check(nf90_inq_varid(ncid, "lon", varid))
+       CALL check(nf90_put_var(ncid, varid, hzgrids(1)%lon_nom))
+       CALL check(nf90_inq_varid(ncid, "lat", varid))
+       CALL check(nf90_put_var(ncid, varid, hzgrids(1)%lat_nom))
+       DO i =1, SIZE(vtgrids)
+          CALL check(nf90_inq_varid(ncid, vtgrids(i)%name, varid))
+          CALL check(nf90_put_var(ncid, varid, vtgrids(i)%vert_nom))
+       END DO
+
+       !TODO fill in the time variable
+
+       ! write actual values of the variables, mark variable as saved
+       DO i=1, SIZE(statevars)
+          IF(.NOT. var_tosave(i)) CYCLE
+          
+          idx1 = statevars(i)%grid_s_idx
+          idx2 = idx1 + statevars(i)%levels - 1
+
+          ! TODO, check to make sure strings are valid
+          CALL check(nf90_inq_varid(ncid, self%statevars_files(i)%output%var, varid))
+          CALL check(nf90_put_var(ncid, varid, state_vals(:,:,idx1:idx2)))
+
+          var_unsaved(i)=.false.
+       END DO
+
+       ! close the file
+       CALL check(nf90_close(ncid))
+
     END DO
-
-    ! all done creating netcdf header
-    CALL check(nf90_enddef(ncid))
-
-    ! write out horizontal grids
-    CALL check(nf90_inq_varid(ncid, "lon", varid))
-    CALL check(nf90_put_var(ncid, varid, hzgrids(1)%lon_nom))
-    CALL check(nf90_inq_varid(ncid, "lat", varid))
-    CALL check(nf90_put_var(ncid, varid, hzgrids(1)%lat_nom))
-
-    ! write out vertical grids
-    DO i =1, SIZE(vtgrids)
-       CALL check(nf90_inq_varid(ncid, vtgrids(i)%name, varid))
-       CALL check(nf90_put_var(ncid, varid, vtgrids(i)%vert_nom))
-    END DO
-
-    !TODO fill in the time variable
-
-    ! write out the state variables
-    DO i = 1, SIZE(statevars)
-       idx1 = statevars(i)%grid_s_idx
-       idx2 = idx1 + statevars(i)%levels - 1
-
-       ! TODO, check to make sure strings are valid
-       CALL check(nf90_inq_varid(ncid, self%statevars_files(i)%output%var, varid))
-       CALL check(nf90_put_var(ncid, varid, state_vals(:,:,idx1:idx2)))
-
-    END DO
-
-    ! all done
-    CALL check(nf90_close(ncid))
+    
 
   END SUBROUTINE stateio_nc_write_state
   !================================================================================
