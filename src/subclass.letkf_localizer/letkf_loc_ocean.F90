@@ -17,6 +17,7 @@ MODULE letkf_loc_ocean_mod
   !--------------------------------------------------------------------------------
   TYPE, EXTENDS(letkf_localizer), PUBLIC :: letkf_loc_ocean
      LOGICAL :: save_diag = .FALSE.
+     CHARACTER(:), ALLOCATABLE :: diag_file
 
      ! horizontal and temporal localization
      TYPE(linearinterp_lat) :: hzdist_prof
@@ -104,7 +105,8 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
-    CALL config%get("save_diag", self%save_diag, .FALSE.)
+    CALL config%get("save_diag", self%save_diag, .true.)
+    CALL config%get("diag_file", self%diag_file, "diag.loc_ocean.nc" )
     CALL config%get("hzloc_prof", str)
     self%hzdist_prof = linearinterp_lat(str)
     CALL config%get("hzloc_sat",  str)
@@ -113,11 +115,12 @@ CONTAINS
     CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
 
     IF(pe_isroot) THEN
-       PRINT *, "save_diag  = ", self%save_diag
-       PRINT *, "tloc_prof  = ", self%tloc_prof
-       PRINT *, "tloc_sat   = ", self%tloc_sat
-       PRINT *, "hzloc_prof = ", self%hzdist_prof%string()
-       PRINT *, "hzloc_sat  = ", self%hzdist_sat%string()
+       PRINT *, "localization.save_diag  = ", self%save_diag
+       IF(self%save_diag) PRINT *, "localization.diag_file = ", self%diag_file
+       PRINT *, "localization.tloc_prof  = ", self%tloc_prof
+       PRINT *, "localization.tloc_sat   = ", self%tloc_sat
+       PRINT *, "localization.hzloc_prof = ", self%hzdist_prof%string()
+       PRINT *, "localization.hzloc_sat  = ", self%hzdist_sat%string()
     END IF
 
     ! get type of vertical localization used for SST obs
@@ -219,8 +222,8 @@ CONTAINS
        !setup oiutput netcdf file
        IF(pe_isroot) THEN
           PRINT *, ""
-          PRINT *, 'Saving localization diagnostics to "diag.loc_ocean.nc"...'
-          CALL check(nf90_create("diag.loc_ocean.nc", NF90_CLOBBER, ncid))
+          PRINT *, 'Saving localization diagnostics to "'//self%diag_file//'"...'
+          CALL check(nf90_create(self%diag_file, NF90_CLOBBER, ncid))
           CALL check(nf90_def_dim(ncid, "time", 1, d_t))
           CALL check(nf90_def_dim(ncid, "lat", grid_ny, d_y))
           CALL check(nf90_def_dim(ncid, "lon", grid_nx, d_x))

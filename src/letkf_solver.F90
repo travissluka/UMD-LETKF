@@ -34,6 +34,8 @@ MODULE letkf_solver
 
   REAL, PARAMETER :: stdev2max = SQRT(40.0/3.0)
 
+  CHARACTER(:), ALLOCATABLE :: diag_file
+  
   ! inflation values
   !--------------------------------------------------------------------------------
   REAL :: infl_rtps
@@ -47,6 +49,8 @@ MODULE letkf_solver
   REAL, ALLOCATABLE :: diag_lg_obscount(:,:)
   REAL, ALLOCATABLE :: diag_lg_obsloc(:,:)
 
+
+  
 CONTAINS
 
 
@@ -66,10 +70,10 @@ CONTAINS
        PRINT *, "======================================================================"
     END IF
 
-    IF(config%found("save_diag")) THEN
-       CALL config%get("save_diag", save_diag)
-    END IF
-
+    ! get solver parameters
+    CALL config%get("save_diag", save_diag, .true.)
+    CALL config%get("diag_file", diag_file, "diag.solver.nc")
+    
     ! get the inflation parameters
     CALL config%get("inflation", infl_config)
     CALL infl_config%get("mul", infl_mul, default=1.0)
@@ -78,11 +82,13 @@ CONTAINS
 
     IF(pe_isroot) THEN
        PRINT *, "solver.save_diag=",save_diag
+       IF(save_diag) PRINT *, "solver.diag_file=",diag_file
        PRINT *, "solver.inflation.rtps=",infl_rtps
        PRINT *, "solver.inflation.rtpp=",infl_rtpp
        PRINT *, "solver.inflation.mul= ",infl_mul
     END IF
 
+    
     ! make sure the inflation parameters are correct
     IF(pe_isroot) THEN
        IF(infl_rtps > 1.0 .OR. infl_rtps < 0.0) &
@@ -375,9 +381,9 @@ CONTAINS
        ! setup output netCDF file
        IF (pe_isroot) THEN
           PRINT *, ""
-          PRINT *, 'Saving LETKF solver diagnostics to "diag.solver.nc"...'
+          PRINT *, 'Saving LETKF solver diagnostics to "'//diag_file//'"...'
 
-          CALL check(nf90_create("diag.solver.nc", NF90_CLOBBER, ncid))
+          CALL check(nf90_create(diag_file, NF90_CLOBBER, ncid))
 
           ! TODO, handle more than hz/vt grid
           ! TODO, fill in time

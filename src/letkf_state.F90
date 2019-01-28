@@ -859,6 +859,7 @@ CONTAINS
   !================================================================================
   !> \cond INTERNAL
   !> Writes the state ensemble in parallel
+  !> TODO rework this so that all MPI comm is done BEFORE disk output.
   !--------------------------------------------------------------------------------
   SUBROUTINE letkf_state_write_ens()
     INTEGER :: i, j, k, p, tag, sends_num, recvs_num, ierr
