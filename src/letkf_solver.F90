@@ -170,6 +170,13 @@ CONTAINS
        PRINT *, "Performing LETKF solver..."
     END IF
 
+    ! start and stop some timers... just in case some PEs have no gridpoints with obs
+    CALL timing_start("obs_search")
+    CALL timing_stop("obs_search")
+    CALL timing_start("letkf_core")
+    CALL timing_stop("letkf_core")
+    CALL timing_start("letkf_trans")
+    CALL timing_stop("letkf_trans")
 
     ! perform analysis at each grid point
     ij_loop: DO ij=1,ij_count
