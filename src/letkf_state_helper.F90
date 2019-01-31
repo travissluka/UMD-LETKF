@@ -472,14 +472,14 @@ CONTAINS
       INTEGER :: i
 
       ALLOCATE(CHARACTER(len=LEN(str_in)+LEN(val)) :: str_out)
-      i = INDEX(str_in, key)
+      str_out=str_in
 
-      IF(i>0) THEN
-         str_out = str_in(1:i-1) // TRIM(val) // str_in(i+LEN(key):LEN(str_in))
-      ELSE
-         str_out = str_in
-      END IF
-
+      i = INDEX(str_out, key)
+      DO WHILE(i>0)
+         str_out = str_out(1:i-1) // TRIM(val) // str_out(i+LEN(key):LEN(str_out))
+         i = INDEX(str_out, key)               
+      END DO
+      
     END FUNCTION replace_str
 
   END FUNCTION parse_ens_filename
