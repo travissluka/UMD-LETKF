@@ -108,7 +108,7 @@ CONTAINS
        CALL config_ob%get(8, self%obs(i)%val)
        CALL config_ob%get(9, self%obs(i)%err)
 
-       self%obs(nobs)%qc = 0
+       self%obs(i)%qc = 0
     END DO
 
 

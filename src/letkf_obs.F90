@@ -414,8 +414,10 @@ CONTAINS
 
     !> \todo make sure nobs agrees for all files
 
-    !> \todo make sure bad obs are removed, do extra QC checks
+    
+    !> \todo do extra QC checks
 
+    
     ! calculate hx_mean
     ALLOCATE(obs_hx_mean(nobs))
     obs_hx_mean = SUM(obs_hx, 1)/ens_size
@@ -426,13 +428,30 @@ CONTAINS
     END DO
 
 
+    ! print out observation statistics
+    IF (pe_isroot) THEN
+       IF (nobs > 0) THEN
+          CALL obs_print_stats(obs_def)
+       ELSE
+          IF (pe_isroot) PRINT *, "WARNING: there are NO observations to assimilate"
+       END IF
+    END IF
+
+    
+    ! remove all bad observations, by shifting good obs down in the list, and decrementing "nobs"
+    nobs=0
+    DO i=1,size(obs_def)
+       IF (obs_def(i)%qc > 0) CYCLE
+       nobs = nobs +1
+       IF(nobs == i) CYCLE
+       obs_def(nobs)=obs_def(i)
+       obs_hx(:,nobs)=obs_hx(:,i)
+       obs_hx_mean(nobs)=obs_hx_mean(i)
+    END DO
+
+    
+    ! add obs to KD tree    
     IF (nobs > 0) THEN
-       ! print out observation statistics
-       IF (pe_isroot) CALL obs_print_stats(obs_def)
-
-       !> \todo, make sure no bad qc obs go into the tree
-
-       ! add obs to KD tree
        ALLOCATE(obs_lons(nobs))
        ALLOCATE(obs_lats(nobs))
        DO i=1,nobs
@@ -443,7 +462,6 @@ CONTAINS
        DEALLOCATE(obs_lons)
        DEALLOCATE(obs_lats)
     ELSE
-       IF (pe_isroot) PRINT *, "WARNING: there are NO observations to assimilate"
     END IF
 
     CALL timing_stop('read_obs')
