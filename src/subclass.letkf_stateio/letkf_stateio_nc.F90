@@ -147,10 +147,16 @@ CONTAINS
     ! letkf_state will handle broadcasting to the other PEs
     IF (pe_isroot) THEN
        DO i = 1, SIZE(vtgrids)
-          ! read in a 1 dimensional vertical coordinate
-          CALL read_nc_d1( &
+          IF (vtgrids_files(i)%vt1d%file == "#CONST#") THEN
+             ! special case: if a 1 level constant vertical coord is desired
+             ALLOCATE(vtgrids(i)%vert_nom(1))
+             READ(vtgrids_files(i)%vt1d%var, *) vtgrids(i)%vert_nom(1)
+          ELSE
+             ! read in a 1 dimensional vertical coordinate
+             CALL read_nc_d1( &
                vtgrids_files(i)%vt1d%var, vtgrids_files(i)%vt1d%file, &
                vtgrids(i)%vert_nom)
+          END IF
 
           ! generate a 3d vertical coordinate field from the 1D field
           CALL check_vtgrid(vtgrids(i))
