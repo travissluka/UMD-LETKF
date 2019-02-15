@@ -1,4 +1,4 @@
-set(WGRIB2_URL http://www.ftp.cpc.ncep.noaa.gov/wd51we/wgrib2/wgrib2.tgz)
+set(WGRIB2_URL http://www.ftp.cpc.ncep.noaa.gov/wd51we/wgrib2/wgrib2.tgz.v2.0.7)
 set(WGRIB2_TGZ ${CMAKE_CURRENT_BINARY_DIR}/wgrib2.tgz)
 
 IF(LETKF_BUILD_GRIB)

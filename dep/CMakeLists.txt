@@ -6,5 +6,5 @@ IF(LETKF_ENABLE_GRIB)
   include(wgrib2.cmake)
 ENDIF()
 
-set(BUILD_TESTING 0)
+option(BUILD_TESTING "" OFF)
 add_subdirectory(libyaml)
