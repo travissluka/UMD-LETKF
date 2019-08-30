@@ -5,14 +5,9 @@
 For complete set of documentation, visit [umd-letkf.readthedocs.io](http://umd-letkf.readthedocs.io/).
 
 
-```diff
--NOTE: This library is still under active development
--  (but I hope to have it wrapped up, documented, and available for public use "shortly")
-```
-
 Brief Description
 ----------
-The following library is a rewrite of the local ensemble transform Kalman filter (LETKF) originally developed by Hunt et al., 2007 [1], coded by Takemasa Miyoshi [2], with additional modifications for the ocean by Steve Penny [3].
+The following library is a rewrite of the local ensemble transform Kalman filter (LETKF) originally developed by Hunt et al., 2007 [1], coded by Takemasa Miyoshi [2], with additional modifications for the ocean by Steve Penny [3]. 
 
 It is built with the following design choices in mind:
 
@@ -23,3 +18,19 @@ It is built with the following design choices in mind:
 [1]: Hunt, B. R., Kostelich, E. J., & Szunyogh, I. (2007). Efficient data assimilation for spatiotemporal chaos: A local ensemble transform Kalman filter. Physica D: Nonlinear Phenomena, 230(1-2), 112–126. [http://doi.org/10.1016/j.physd.2006.11.008](http://doi.org/10.1016/j.physd.2006.11.008)
 
 [2]: Miyoshi, T. (2005). Ensemble Kalman Filter Experiments with a Primitive-Equation Global Model. University of Maryland. Retrieved from [http://hdl.handle.net/1903/3046](http://hdl.handle.net/1903/3046)
+
+How to Build the LETKF Library on Theia
+----------
+## Clone godas
+1. `git clone --recursive https://github.com/NOAA-EMC/UMD-LETKF.git letkf`
+2. `cd letkf`
+3. `git submodule update --init --recursive` 
+
+## Compile the code
+0. `cd [...]/letkf`
+1. Setup the environment at Theia
+   `source config/env.theia`
+2. Building path TBD: `cd [...]/build`
+3. Run the cmake:
+   `cmake -DNETCDF_DIR=$NETCDF  [...]/letkf`
+4. `make -j<n>`

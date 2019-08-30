@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
-project(letkf Fortran C CXX)
+project(letkf Fortran C)
 
 
 #------------------------------------------------------------
@@ -50,9 +50,9 @@ find_package(NetCDF REQUIRED)
 
 # LAPACK / BLAS
 # If Intel, assume the mkl library is used 
-IF(NOT CMAKE_C_COMPILER_ID MATCHES Intel)
+#IF(NOT CMAKE_C_COMPILER_ID MATCHES Intel)
   find_package(LAPACK REQUIRED)
-ENDIF()
+#ENDIF()
 
 # grib2
 option( LETKF_ENABLE_GRIB "enable grib2 support for state I/O" OFF)
