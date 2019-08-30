@@ -30,7 +30,8 @@ How to Build the LETKF Library on Theia
 0. `cd [...]/letkf`
 1. Setup the environment at Theia
    `source config/env.theia`
-2. Building path TBD: `cd [...]/build`
-3. Run the cmake:
+2. `mkdir -p [...]/letkf/build`
+3. Building path TBD: `cd [...]/build`
+4. Run the cmake:
    `cmake -DNETCDF_DIR=$NETCDF  [...]/letkf`
-4. `make -j<n>`
+5. `make -j<n>`
