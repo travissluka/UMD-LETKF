@@ -52,8 +52,7 @@ IF(LETKF_ENABLE_GRIB)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_Fortran_FLAGS}")
 ENDIF()
 
-# yaml, TODO: set the include directory correctly
-include_directories(${CMAKE_SOURCE_DIR}/dep/libyaml/include)
+# yaml
 target_link_libraries(letkf PRIVATE yaml)
 
 
