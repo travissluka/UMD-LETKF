@@ -367,19 +367,32 @@ CONTAINS
     CHARACTER(*), INTENT(in)  :: varname, filename
     REAL, ALLOCATABLE, INTENT(out) :: array(:,:)
 
-    INTEGER :: i, dimids(2), nx, ny
+    INTEGER :: i, j, l, nx, ny
+    INTEGER, ALLOCATABLE :: dimids(:)
     INTEGER :: ncid, varid
 
     ! open file, find dimensions
-    ! TODO, handle a time dimension if stored that way
     CALL check(nf90_open(filename, nf90_nowrite, ncid), &
          '"'//TRIM(filename)//'"')
     
     CALL check(nf90_inq_varid(ncid, varname, varid), &
          '"'//TRIM(varname)//'" in "'//TRIM(filename)//'"')
-    
-    CALL check(nf90_inquire_variable(ncid, varid, ndims=i))    
-    IF ( i /= 2) CALL letkf_mpi_abort("variable dimensions /= 2")
+
+    CALL check(nf90_inquire_variable(ncid, varid, ndims=i))
+    ALLOCATE( dimids(i) )
+
+    ! if more than 2 dimensions, make sure all but the first 2 are of size 1
+    ! (since a lot of files tend to include time dimension of size 1)
+    IF ( i < 2) CALL letkf_mpi_abort("variable dimensions /= 2")
+    IF ( i > 2 ) THEN
+      CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))
+      DO j=i,3,-1
+        CALL check(nf90_inquire_dimension(ncid, dimids(j), len=l))
+        IF ( l > 1 ) CALL letkf_mpi_abort("variable dimensions /= 2")
+      ENDDO
+    ENDIF
+
+    ! get the dimension sizes
     CALL check(nf90_inquire_variable(ncid, varid, dimids=dimids))
     CALL check(nf90_inquire_dimension(ncid, dimids(1), len=nx))
     CALL check(nf90_inquire_dimension(ncid, dimids(2), len=ny))
