@@ -1,3 +1,15 @@
+! Copyright 2018-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> Module providing optional model state IO helper functions.
 !--------------------------------------------------------------------------------
@@ -477,9 +489,9 @@ CONTAINS
       i = INDEX(str_out, key)
       DO WHILE(i>0)
          str_out = str_out(1:i-1) // TRIM(val) // str_out(i+LEN(key):LEN(str_out))
-         i = INDEX(str_out, key)               
+         i = INDEX(str_out, key)
       END DO
-      
+
     END FUNCTION replace_str
 
   END FUNCTION parse_ens_filename

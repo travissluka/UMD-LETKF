@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> NetCDF based state I/O
 !================================================================================
@@ -243,11 +255,11 @@ CONTAINS
     INTEGER :: i, j, idx1, idx2
     CHARACTER(:), ALLOCATABLE :: str
     INTEGER :: ncid, d_t, d_x, d_y, d_z(100), varid
-    
+
     LOGICAL :: var_unsaved(SIZE(statevars))
     LOGICAL :: var_tosave(SIZE(statevars))
     CHARACTER(:), ALLOCATABLE :: curr_filename, var_filename
-    
+
 
     var_unsaved=.true.
     ! while there are variables that have not been saved yet
@@ -255,7 +267,7 @@ CONTAINS
     DO WHILE(ANY(var_unsaved))
        var_tosave=.false.
        curr_filename = ""
-       
+
        ! look at all the variables, and determine the next batch to save
        ! (i.e. variables with the same output filename)
        DO i=1, SIZE(statevars)
@@ -267,12 +279,12 @@ CONTAINS
 
           ! if current filename empty, init
           IF(curr_filename=="") curr_filename = var_filename
-          
+
           ! if this variable's filename does equals current filename, add to list to save
           IF(curr_filename == var_filename) var_tosave(i) = .true.
        END DO
 
-       
+
        ! initialize the file
        ! TODO: add support for multiple horizontal grids
        ! TODO handle 2D, 3D, and constant vertical grids
@@ -305,13 +317,13 @@ CONTAINS
        DO i=1, SIZE(statevars)
           ! skip if not being saved in this file
           IF( .NOT. var_tosave(i)) CYCLE
-          
+
           ! determine which vertical coordinate is the matching one
           str = statevars(i)%vtgrid
           DO j=1, SIZE(vtgrids)
              IF (vtgrids(j)%name == str) EXIT
           END DO
-          
+
           ! create variable
           IF(j > SIZE(vtgrids))&
                CALL letkf_mpi_abort("cannot find vertical grid in stateio_nc_write_init")
@@ -338,7 +350,7 @@ CONTAINS
        ! write actual values of the variables, mark variable as saved
        DO i=1, SIZE(statevars)
           IF(.NOT. var_tosave(i)) CYCLE
-          
+
           idx1 = statevars(i)%grid_s_idx
           idx2 = idx1 + statevars(i)%levels - 1
 
@@ -353,7 +365,7 @@ CONTAINS
        CALL check(nf90_close(ncid))
 
     END DO
-    
+
 
   END SUBROUTINE stateio_nc_write_state
   !================================================================================
@@ -374,7 +386,7 @@ CONTAINS
     ! open file, find dimensions
     CALL check(nf90_open(filename, nf90_nowrite, ncid), &
          '"'//TRIM(filename)//'"')
-    
+
     CALL check(nf90_inq_varid(ncid, varname, varid), &
          '"'//TRIM(varname)//'" in "'//TRIM(filename)//'"')
 
@@ -451,14 +463,14 @@ CONTAINS
     CHARACTER(*), OPTIONAL, INTENT(in) :: str
 
     CHARACTER(:), ALLOCATABLE :: str2
-    
+
     IF(status /= nf90_noerr) THEN
        str2=TRIM(nf90_strerror(status))
-       
+
        IF(PRESENT(str)) THEN
           str2=str2//": "//TRIM(str)
        END IF
-       
+
        CALL letkf_mpi_abort(str2)
     END IF
   END SUBROUTINE check

@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> Module for the obesrvation localization methods
 !!
@@ -11,7 +23,6 @@ MODULE letkf_loc
   PRIVATE
 
 
-
   !================================================================================
   !================================================================================
   ! Public components
@@ -21,8 +32,6 @@ MODULE letkf_loc
   PUBLIC :: letkf_loc_init
   PUBLIC :: letkf_loc_register
   PUBLIC :: letkf_loc_gc
-  !  PUBLIC :: letkf_loc_gaus
-
 
 
   !================================================================================
@@ -35,7 +44,6 @@ MODULE letkf_loc
      INTEGER, ALLOCATABLE :: slab(:)
   END TYPE letkf_localizer_group
   !================================================================================
-
 
 
   !================================================================================
@@ -103,7 +111,6 @@ MODULE letkf_loc
   !================================================================================
 
 
-
   !================================================================================
   !> simple wrapper for localizer so that we can have arrays of pointers.
   !--------------------------------------------------------------------------------
@@ -111,7 +118,6 @@ MODULE letkf_loc
      CLASS(letkf_localizer), POINTER :: p
   END TYPE localizer_ptr
   !================================================================================
-
 
 
   !================================================================================
@@ -129,7 +135,6 @@ MODULE letkf_loc
      MODULE PROCEDURE linearinterp_lat_init
   END INTERFACE linearinterp_lat
   !================================================================================
-
 
 
   ! public variables

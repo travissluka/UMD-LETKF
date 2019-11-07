@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> Module for handling the observation I/O.
 !!
@@ -464,7 +476,7 @@ CONTAINS
        END IF
     END IF
 
-    
+
     ! remove all bad observations, by shifting good obs down in the list, and decrementing "nobs"
     nobs=0
     DO i=1,size(obs_def)
@@ -476,8 +488,8 @@ CONTAINS
        obs_hx_mean(nobs)=obs_hx_mean(i)
     END DO
 
-    
-    ! add obs to KD tree    
+
+    ! add obs to KD tree
     IF (nobs > 0) THEN
        ALLOCATE(obs_lons(nobs))
        ALLOCATE(obs_lats(nobs))
