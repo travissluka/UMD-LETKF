@@ -13,6 +13,7 @@ MODULE letkf_obs
   USE running_stats_mod
   USE letkf_config
   USE letkf_mpi
+  USE letkf_util
 
   IMPLICIT NONE
   PRIVATE
@@ -68,6 +69,21 @@ MODULE letkf_obs
   !================================================================================
 
 
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  TYPE, PUBLIC :: letkf_obsplatdef_list
+    PRIVATE
+      TYPE(letkf_obsplatdef), ALLOCATABLE :: list(:)
+    CONTAINS
+      PROCEDURE :: count => obsplatdef_list_count
+      PROCEDURE :: add => obsplatdef_list_add
+      PROCEDURE :: get => obsplatdef_list_get
+      PROCEDURE :: set => obsplatdef_list_set
+      PROCEDURE :: has => obsplatdef_list_has
+  END TYPE letkf_obsplatdef_list
+  !================================================================================
+
 
   !================================================================================
   !> Abstract base class for observation file reading and writing.
@@ -104,11 +120,15 @@ MODULE letkf_obs
        CHARACTER(:), ALLOCATABLE :: I_letkf_obsio_getstr
      END FUNCTION I_letkf_obsio_getstr
 
-     SUBROUTINE I_letkf_obsio_init(self, config)
+     SUBROUTINE I_letkf_obsio_init(self, config, obsdef, platdef)
        IMPORT letkf_obsio
        IMPORT configuration
+       IMPORT letkf_obsplatdef
+       IMPORT letkf_obsplatdef_list
        CLASS(letkf_obsio) :: self
        TYPE(configuration), INTENT(in) :: config
+       TYPE(letkf_obsplatdef_list), INTENT(out) :: obsdef
+       TYPE(letkf_obsplatdef_list), INTENT(out) :: platdef
      END SUBROUTINE I_letkf_obsio_init
 
      SUBROUTINE I_letkf_obsio_read_obs(self, obs)
@@ -122,8 +142,9 @@ MODULE letkf_obs
        IMPORT letkf_obsio
        CLASS(letkf_obsio) :: self
        INTEGER, INTENT(in) :: ensmem
-       REAL, ALLOCATABLE, INTENT(out) :: hx(:)
+       REAL, ALLOCATABLE, INTENT(inout) :: hx(:)
      END SUBROUTINE I_letkf_obsio_read_hx
+
   END INTERFACE
   !================================================================================
 
@@ -160,10 +181,10 @@ MODULE letkf_obs
   !------------------------------------------------------------
 
   !> list of all observation types
-  TYPE(letkf_obsplatdef), ALLOCATABLE :: obsdef_list(:)
+  TYPE(letkf_obsplatdef_list) :: obsdef_list
 
   !> list of all platform types
-  TYPE(letkf_obsplatdef), ALLOCATABLE :: platdef_list(:)
+  TYPE(letkf_obsplatdef_list) :: platdef_list
 
 
   ! mpi derived types
@@ -217,6 +238,7 @@ CONTAINS
     TYPE(configuration) :: ioconfig, config_def, config_def0
     INTEGER :: i
     CHARACTER(:), ALLOCATABLE :: ioclass, str
+    TYPE(letkf_obsplatdef) :: obsplatdef_tmp
 
     ! print header
     IF (pe_isroot) THEN
@@ -232,66 +254,19 @@ CONTAINS
        PRINT *, ""
        PRINT *, "List of obsio classes registered:"
        DO i=1, obsio_reg_num
-          PRINT *, ' * "', tolower(obsio_reg(i)%p%name()), &
+          PRINT *, ' * "', str_tolower(obsio_reg(i)%p%name()), &
                '"  (', obsio_reg(i)%p%desc(), ")"
        END DO
        PRINT *, ""
     END IF
 
-
-
-    ! read in the observation definition configuration
-    IF(pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "observation definitions"
-       PRINT *, "------------------------------------------------------------"
-       PRINT "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
-    END IF
-    CALL config%get("obsdef", config_def)
-    ALLOCATE(obsdef_list(config_def%COUNT()))
-    DO i=1,config_def%COUNT()
-       CALL config_def%get(i, config_def0)
-       CALL config_def0%get(1, str)
-       obsdef_list(i)%name = tolower(str)
-       CALL config_def0%get(2, obsdef_list(i)%id)
-       CALL config_def0%get(3, str)
-       obsdef_list(i)%name_long = str
-       IF(pe_isroot) &
-            PRINT "(A10, I6, A5, A)", TRIM(obsdef_list(i)%name), obsdef_list(i)%id, &
-            "", TRIM(obsdef_list(i)%name_long)
-    END DO
-
-
-    ! read in the platform definition configuration
-    IF(pe_isroot) THEN
-       PRINT *, ""
-       PRINT *, "platform definitions"
-       PRINT *, "------------------------------------------------------------"
-       PRINT "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
-    END IF
-    CALL config%get("platdef", config_def)
-    ALLOCATE(platdef_list(config_def%COUNT()))
-    DO i=1,config_def%COUNT()
-       CALL config_def%get(i, config_def0)
-       CALL config_def0%get(1, str)
-       platdef_list(i)%name = tolower(str)
-       CALL config_def0%get(2, platdef_list(i)%id)
-       CALL config_def0%get(3, str)
-       platdef_list(i)%name_long = str
-       IF(pe_isroot) &
-            PRINT "(A10, I6, A5, A)", TRIM(platdef_list(i)%name), platdef_list(i)%id, &
-            "", TRIM(platdef_list(i)%name_long)
-    END DO
-    IF(pe_isroot) PRINT *, ""
-
-
     ! determine which io class to use
     CALL config%get("class", ioclass)
-    ioclass = tolower(ioclass)
+    ioclass = str_tolower(ioclass)
     IF (pe_isroot) PRINT *, "observation.class= "//ioclass
     NULLIFY(obsio_class)
     DO i=1,obsio_reg_num
-       IF (tolower(obsio_reg(i)%p%name()) == ioclass) THEN
+       IF (str_tolower(obsio_reg(i)%p%name()) == ioclass) THEN
           obsio_class => obsio_reg(i)%p
           EXIT
        END IF
@@ -300,17 +275,59 @@ CONTAINS
        CALL letkf_mpi_abort("obsio class "//ioclass// " not found.")
     END IF
 
-
-    ! initialize MPI object for later sending/receving obsservations
-    CALL init_mpi_observation()
-
     ! finish initialize  of the obsio class
     IF (pe_isroot) THEN
        PRINT *, ""
        PRINT *, "Intializing I/O ioclass: ",obsio_class%name()
     END IF
-    CALL config%get(ioclass, ioconfig)
-    CALL obsio_class%init(ioconfig)
+    CALL obsio_class%init(config, obsdef_list, platdef_list)
+
+    ! initialize MPI object for later sending/receving obsservations
+    CALL init_mpi_observation()
+
+    ! print the observation definition configuration
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "observation definitions"
+       PRINT *, "------------------------------------------------------------"
+       PRINT "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
+    END IF
+    IF (obsdef_list%count() <= 0) &
+      CALL letkf_mpi_abort("no obsdef list returned by the ioclass")
+    DO i=1,obsdef_list%count()
+      ! make sure the name is lower case
+      obsplatdef_tmp = obsdef_list%get(i)
+      obsplatdef_tmp%name = str_tolower(obsplatdef_tmp%name)
+      CALL obsdef_list%set(i, obsplatdef_tmp)
+
+      ! print out information
+      IF(pe_isroot) &
+            PRINT "(A10, I6, A5, A)", TRIM(obsplatdef_tmp%name), &
+              obsplatdef_tmp%id, "", TRIM(obsplatdef_tmp%name_long)
+    END DO
+
+
+    ! print the platform definition configuration
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "platform definitions"
+       PRINT *, "------------------------------------------------------------"
+       PRINT "(A8,A8,A5,A)", "NAME", "ID", "","DESCRIPTION"
+    END IF
+    IF (platdef_list%count() <= 0) &
+      CALL letkf_mpi_abort("no platdef list returned by the ioclass")
+    DO i=1,platdef_list%count()
+      ! make sure the name is lower case
+      obsplatdef_tmp = platdef_list%get(i)
+      obsplatdef_tmp%name = str_tolower(obsplatdef_tmp%name)
+      CALL platdef_list%set(i, obsplatdef_tmp)
+
+      ! print out information
+      IF(pe_isroot) &
+           PRINT "(A10, I6, A5, A)", TRIM(obsplatdef_tmp%name), obsplatdef_tmp%id, &
+           "", TRIM(obsplatdef_tmp%name_long)
+    END DO
+    IF(pe_isroot) PRINT *, ""
 
   END SUBROUTINE letkf_obs_init
   !> \endcond
@@ -372,9 +389,16 @@ CONTAINS
 
     CALL timing_start('read_obs')
 
+    IF(pe_isroot) THEN
+       PRINT *, ""
+       PRINT *, "reading observations"
+       PRINT *, "------------------------------------------------------------"
+    END IF
+
     obs_pe = 0
     IF(pe_rank == obs_pe) THEN
        ! have the I/O class read the main observations file
+       ! TODO, allow ioclass to distribute this?
        CALL obsio_class%read_obs(obs_def)
 
        ! check to make sure everything looks good
@@ -402,6 +426,10 @@ CONTAINS
     DO i=1,ens_size
        IF(pe_rank == obshx_pe(i)) THEN
           CALL obsio_class%read_hx(i, tmp_r)
+          IF ( .NOT. ALLOCATED(tmp_r)) &
+                CALL letkf_mpi_abort("obsio class returned unallocated hx array")
+          IF ( size(tmp_r) /= nobs ) &
+                CALL letkf_mpi_abort("obsio class returned hx array of wrong size")
           obs_hx(i,:) = tmp_r
        END IF
     END DO
@@ -409,15 +437,14 @@ CONTAINS
     DO i=1,ens_size
        CALL mpi_bcast(obs_hx(i,1), nobs, mpitype_real_nk, obshx_pe(i), letkf_mpi_comm, ierr)
     END DO
-    DEALLOCATE(tmp_r)
 
 
     !> \todo make sure nobs agrees for all files
 
-    
+
     !> \todo do extra QC checks
 
-    
+
     ! calculate hx_mean
     ALLOCATE(obs_hx_mean(nobs))
     obs_hx_mean = SUM(obs_hx, 1)/ens_size
@@ -494,9 +521,9 @@ CONTAINS
     ! make sure a class of this name hasn't already been registered
     IF ( pe_isroot ) THEN
        DO i=1, obsio_reg_num
-          IF (tolower(obsio_reg(i)%p%name()) == tolower(ioclass%name())) THEN
+          IF (str_tolower(obsio_reg(i)%p%name()) == str_tolower(ioclass%name())) THEN
              CALL letkf_mpi_abort("can't register obsio class '"// &
-                  tolower(ioclass%name())// &
+                  str_tolower(ioclass%name())// &
                   "', a class by that name already has been registered.")
           END IF
        END DO
@@ -552,16 +579,17 @@ CONTAINS
     TYPE(running_stats), ALLOCATABLE :: osprd_stats(:), psprd_stats(:)
 
     INTEGER :: cnt, i, j, cnt_total
+    TYPE(letkf_obsplatdef) :: obsplatdef
 
     IF(.NOT. pe_isroot) RETURN
 
     cnt_total=0
-    ALLOCATE(obst_count(SIZE(obsdef_list)+1, 4))
-    ALLOCATE(plat_count(SIZE(platdef_list)+1, 4))
-    ALLOCATE(odep_stats(SIZE(obsdef_list)))
-    ALLOCATE(pdep_stats(SIZE(platdef_list)))
-    ALLOCATE(osprd_stats(SIZE(obsdef_list)))
-    ALLOCATE(psprd_stats(SIZE(platdef_list)))
+    ALLOCATE(obst_count(obsdef_list%count()+1, 4))
+    ALLOCATE(plat_count(platdef_list%count()+1, 4))
+    ALLOCATE(odep_stats(obsdef_list%count()))
+    ALLOCATE(pdep_stats(platdef_list%count()))
+    ALLOCATE(osprd_stats(obsdef_list%count()))
+    ALLOCATE(psprd_stats(platdef_list%count()))
 
     obst_count = 0
     plat_count = 0
@@ -580,8 +608,9 @@ CONTAINS
        END IF
 
        ! count by obs type
-       DO j=1, SIZE(obsdef_list)
-          IF(obs_t(i)%obsid == obsdef_list(j)%id) THEN
+       DO j=1, obsdef_list%count()
+          obsplatdef = obsdef_list%get(j)
+          IF(obs_t(i)%obsid == obsplatdef%id) THEN
              obst_count(j,1) = obst_count(j,1) + 1
              obst_count(j,cnt) = obst_count(j,cnt) +1
 
@@ -594,12 +623,13 @@ CONTAINS
              EXIT
           END IF
        END DO
-       IF(j > SIZE(obsdef_list)) obst_count(SIZE(obsdef_list)+1,1) = &
-            obst_count(SIZE(obsdef_list)+1,1) + 1
+       IF(j > obsdef_list%count()) obst_count(obsdef_list%count()+1,1) = &
+            obst_count(obsdef_list%count()+1,1) + 1
 
        ! count by plat type
-       DO j=1, SIZE(platdef_list)
-          IF(obs_t(i)%platid == platdef_list(j)%id) THEN
+       DO j=1, platdef_list%count()
+          obsplatdef = platdef_list%get(j)
+          IF(obs_t(i)%platid == obsplatdef%id) THEN
              plat_count(j,1) = plat_count(j,1) + 1
              plat_count(j,cnt) = plat_count(j,cnt) +1
 
@@ -612,8 +642,8 @@ CONTAINS
              EXIT
           END IF
        END DO
-       IF(j > SIZE(platdef_list)) plat_count(SIZE(platdef_list)+1,1) = &
-            plat_count(SIZE(platdef_list)+1,1) + 1
+       IF(j > platdef_list%count()) plat_count(platdef_list%count()+1,1) = &
+            plat_count(platdef_list%count()+1,1) + 1
     END DO
 
 
@@ -629,8 +659,9 @@ CONTAINS
     DO i=1,SIZE(obst_count,1)
        IF (obst_count(i,1) == 0) CYCLE
        IF (i < SIZE(obst_count,1)) THEN
+          obsplatdef = obsdef_list%get(i)
           PRINT '(A10,I10, 2I10, I10, A2, F5.1,A)', &
-               TRIM(obsdef_list(i)%name), obst_count(i,1), &
+               TRIM(obsplatdef%name), obst_count(i,1), &
                obst_count(i,3), obst_count(i,4), &
                obst_count(i,2), '(', REAL(obst_count(i,2))/obst_count(i,1)*100,&
                ')%'
@@ -644,8 +675,9 @@ CONTAINS
     DO i=1,SIZE(plat_count,1)
        IF (plat_count(i,1) == 0) CYCLE
        IF (i < SIZE(plat_count,1)) THEN
+          obsplatdef = platdef_list%get(i)
           PRINT '(A10,I10, 2I10, I10, A2, F5.1,A)', &
-               TRIM(platdef_list(i)%name), plat_count(i,1), &
+               TRIM(obsplatdef%name), plat_count(i,1), &
                plat_count(i,3), plat_count(i,4), &
                plat_count(i,2), '(', REAL(plat_count(i,2))/plat_count(i,1)*100,&
                ')%'
@@ -666,8 +698,9 @@ CONTAINS
     DO i=1,SIZE(obst_count,1)
        IF (obst_count(i,1) == 0) CYCLE
        IF (i < SIZE(obst_count,1)) THEN
+          obsplatdef = obsdef_list%get(i)
           PRINT '(A10,6F12.5)', &
-               TRIM(obsdef_list(i)%name), SQRT(odep_stats(i)%mean(2)), &
+               TRIM(obsplatdef%name), SQRT(odep_stats(i)%mean(2)), &
                odep_stats(i)%mean(1), odep_stats(i)%MIN(), odep_stats(i)%MAX(), &
                SQRT(osprd_stats(i)%mean())
        END IF
@@ -679,8 +712,9 @@ CONTAINS
     DO i=1,SIZE(plat_count,1)
        IF (plat_count(i,1) == 0) CYCLE
        IF (i < SIZE(plat_count,1)) THEN
+          obsplatdef = platdef_list%get(i)
           PRINT '(A10,5F12.5)', &
-               TRIM(platdef_list(i)%name), SQRT(pdep_stats(i)%mean(2)), &
+               TRIM(obsplatdef%name), SQRT(pdep_stats(i)%mean(2)), &
                pdep_stats(i)%mean(1), pdep_stats(i)%MIN(), pdep_stats(i)%MAX(), &
                SQRT(psprd_stats(i)%mean())
        END IF
@@ -703,25 +737,25 @@ CONTAINS
     CHARACTER(:), ALLOCATABLE :: name0
     INTEGER :: i
 
-    name0 = TRIM(tolower(name))
+    name0 = TRIM(str_tolower(name))
     i =1
     IF (obs_plat == 'O') THEN
-       DO WHILE (i <= SIZE(obsdef_list))
-          IF(obsdef_list(i)%name == name0) EXIT
+       DO WHILE (i <= obsdef_list%count())
+          res = obsdef_list%get(i)
+          IF(res%name == name0) EXIT
           i = i + 1
        END DO
-       IF ( i > SIZE(obsdef_list)) &
+       IF ( i > obsdef_list%count()) &
             CALL letkf_mpi_abort("observation definition for '"//name0//"' not found")
-       res = obsdef_list(i)
 
     ELSE IF (obs_plat == 'P') THEN
-       DO WHILE (i <= SIZE(platdef_list))
-          IF(platdef_list(i)%name == name0) EXIT
+       DO WHILE (i <= platdef_list%count())
+          res = platdef_list%get(i)
+          IF(res%name == name0) EXIT
           i = i + 1
        END DO
-       IF ( i > SIZE(platdef_list)) &
+       IF ( i > platdef_list%count()) &
             CALL letkf_mpi_abort("platform definition for '"//name0//"' not found")
-       res = platdef_list(i)
 
     ELSE
        CALL letkf_mpi_abort("letkf_obs_getdef: first argument must be 'P' or 'O'")
@@ -734,23 +768,131 @@ CONTAINS
 
 
   !================================================================================
-  !> Convert a string to lowercase
+  !>
   !--------------------------------------------------------------------------------
-  FUNCTION tolower(in_str) RESULT(out_str)
-    CHARACTER(*), INTENT(in) :: in_str !< input string
-    CHARACTER(LEN(in_str)) :: out_str  !< output string
+  FUNCTION obsplatdef_list_count(self) RESULT(ret)
+    CLASS(letkf_obsplatdef_list) :: self
+    INTEGER :: ret
+
+    IF(.NOT. ALLOCATED(self%list)) THEN
+      ret = 0
+    ELSE
+      ret = SIZE(self%list)
+    END IF
+  END FUNCTION obsplatdef_list_count
+  !================================================================================
+
+
+
+  !================================================================================
+  !>
+  ! NOTE: this is inefficient as the list is always dealloacted and recreated
+  ! should be using a linked list or something similar.
+  !--------------------------------------------------------------------------------
+  SUBROUTINE obsplatdef_list_add(self, item, allow_duplicate)
+    CLASS(letkf_obsplatdef_list) :: self
+    TYPE(letkf_obsplatdef), INTENT(in) :: item
+    LOGICAL, INTENT(in), OPTIONAL :: allow_duplicate
+
+    INTEGER :: n
+    TYPE(letkf_obsplatdef), ALLOCATABLE :: new_list(:)
+    LOGICAL :: allow_duplicate0
+
+    allow_duplicate0=.FALSE.
+    IF(PRESENT(allow_duplicate)) allow_duplicate0 = allow_duplicate
+
+    ! make sure the defintion doesn't already exist, if so, ignore
+    IF ( ALLOCATED(self%list)) THEN
+      DO n=1, SIZE(self%list)
+        IF (self%list(n)%name == item%name) THEN
+          ! TODO, check to make sure they are fully the same
+          IF ( allow_duplicate0 ) THEN
+            RETURN
+          ELSE
+            CALL letkf_mpi_abort("duplicate in obsplatdef_list%add()")
+          END IF
+        END IF
+      END DO
+    END IF
+
+    ! allocate the new list
+    IF (.NOT. ALLOCATED(self%list)) THEN
+      ALLOCATE(new_list(1))
+    ELSE
+      n = SIZE(self%list)
+      ALLOCATE(new_list(n+1))
+      new_list(1:n) = self%list
+    END IF
+
+    ! append to list
+    new_list(SIZE(new_list)) = item
+
+    ! swap lists
+    IF(ALLOCATED(self%list)) DEALLOCATE(self%list)
+    self%list = new_list
+  END SUBROUTINE obsplatdef_list_add
+  !================================================================================
+
+
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  FUNCTION obsplatdef_list_get(self, idx) RESULT(ret)
+    CLASS(letkf_obsplatdef_list) :: self
+    INTEGER, INTENT(in) :: idx
+    TYPE(letkf_obsplatdef) :: ret
+
+    IF ( .NOT. ALLOCATED(self%list) ) CALL letkf_mpi_abort( &
+      "ERROR in obsplatdef_list%set(), unallocated list")
+    IF ( idx > SIZE(self%list)) CALL letkf_mpi_abort( &
+        "ERROR in obsplatdef_list%set(), index out of range")
+
+    ret = self%list(idx)
+  END FUNCTION obsplatdef_list_get
+  !================================================================================
+
+
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  FUNCTION obsplatdef_list_has(self, name) RESULT(ret)
+    CLASS(letkf_obsplatdef_list) :: self
+    CHARACTER(len=*), INTENT(in) :: name
+    LOGICAL :: ret
 
     INTEGER :: i
-    INTEGER, PARAMETER :: offset = 32
 
-    out_str = in_str
-    DO i = 1, LEN(out_str)
-       IF (out_str(i:i) >= "A" .AND. out_str(i:i) <= "Z") THEN
-          out_str(i:i) = ACHAR(IACHAR(out_str(i:i)) + offset)
-       END IF
+    ret = .FALSE.
+    IF ( .NOT. ALLOCATED(self%list) ) RETURN
+
+    DO i=1,self%count()
+      ! TODO to lower
+      IF( TRIM(self%list(i)%name) == TRIM(name)) THEN
+        ret = .TRUE.
+        EXIT
+      END IF
     END DO
+  END FUNCTION obsplatdef_list_has
+  !================================================================================
 
-  END FUNCTION tolower
+
+  !================================================================================
+  !>
+  !--------------------------------------------------------------------------------
+  SUBROUTINE obsplatdef_list_set(self, idx, item)
+    CLASS(letkf_obsplatdef_list) :: self
+    INTEGER, INTENT(in) :: idx
+    TYPE(letkf_obsplatdef), INTENT(in) :: item
+
+    IF ( .NOT. ALLOCATED(self%list) ) CALL letkf_mpi_abort( &
+      "ERROR in obsplatdef_list%set(), unallocated list")
+    IF ( idx > SIZE(self%list)) CALL letkf_mpi_abort( &
+        "ERROR in obsplatdef_list%set(), index out of range")
+
+    self%list(idx) = item
+  END SUBROUTINE obsplatdef_list_set
   !================================================================================
 
 

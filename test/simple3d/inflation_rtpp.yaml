@@ -4,16 +4,11 @@ mpi:
   ppn: 1
 
 observation:
-  obsdef:
-  - ["obs1", 1, "observation type 1"]
-  - ["obs2", 2, "observation type 2"]
-  platdef:
-  - ["plat1", 1, "platform type 1"]
-  - ["plat2", 2, "platform type 2"]
   class: obsio_test
-  obsio_test:
-  - ["obs1", "plat1", "state1", 40.5, 220.5, 1.0, 0.0,  1.0, 1.0]
-  - ["obs2", "plat1", "state2", -1.5, 220.5, 1.0, 0.0, -1.0, 1.0]
+
+  synthetic_obs:
+  - [obs1, plat1, state1, 40.5, 220.5, 1.0, 0.0,  1.0, 1.0]
+  - [obs2, plat1, state2, -1.5, 220.5, 1.0, 0.0, -1.0, 1.0]
 
 state:
   class: stateio_nc

@@ -11,18 +11,10 @@ solver:
 observation:
   class: obsio_test
 
-  obsdef:
-  - [obs1, 1, observation type 1]
-  - [obs2, 2, observation type 2]
-
-  platdef:
-  - [plat1, 1, platform type 1]
-  - [plat2, 2, platform type 2]
-
-  obsio_test:
+  synthetic_obs:
+  # ob_type, plat_type, state_var, lat, lon, depth, time, val, err
   - [obs1, plat1, state1, 40.5, 220.5, 1,  0,  1, 1]
   - [obs2, plat1, state2,  1.5, 220.5, 1, 10, -1, 1]
-
 
 state:
   class: stateio_nc

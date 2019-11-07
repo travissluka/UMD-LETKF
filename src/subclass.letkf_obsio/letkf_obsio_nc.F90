@@ -6,6 +6,7 @@ MODULE letkf_obsio_nc_mod
   USE letkf_config
   USE letkf_obs
   USE letkf_mpi
+  USE letkf_util
 
   IMPLICIT NONE
   PRIVATE
@@ -77,16 +78,21 @@ CONTAINS
   !! input filenames should be.
   !! @param nml_filename path to the namelist we are to open
   !--------------------------------------------------------------------------------
-  SUBROUTINE obsio_nc_init(self, config)
+  SUBROUTINE obsio_nc_init(self, config, obsdef, platdef)
     CLASS(letkf_obsio_nc) :: self
     TYPE(configuration), INTENT(in) :: config
+    TYPE(letkf_obsplatdef_list), INTENT(out) :: obsdef
+    TYPE(letkf_obsplatdef_list), INTENT(out) :: platdef
 
+    TYPE(configuration) :: config_def, config_def0
+    INTEGER :: i
     CHARACTER(len=:), ALLOCATABLE :: str
+    TYPE(letkf_obsplatdef) :: obsplatdef
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
        PRINT *, " letkf_obsio_nc_init() : "
-       PRINT *, "============================================================"
+       PRINT *, "------------------------------------------------------------"
     END IF
 
     ! load in our section of the namelist
@@ -96,10 +102,35 @@ CONTAINS
     self%filename_obs_hx = str
     CALL config%get("read_inc", self%read_inc)
     IF(pe_isroot) THEN
-       PRINT '(A,A)', " filename_obs=", TRIM(self%filename_obs)
-       PRINT '(A,A)', " filename_obshx=", TRIM(self%filename_obs_hx)
-       PRINT *, "read_inc=",self%read_inc
+       PRINT '(A,A)', "  filename_obs=", TRIM(self%filename_obs)
+       PRINT '(A,A)', "  filename_obshx=", TRIM(self%filename_obs_hx)
+       PRINT *, " read_inc=",self%read_inc
     END IF
+
+    ! load in the obsdef configuration
+    CALL config%get("obsdef", config_def)
+    DO i=1,config_def%count()
+      CALL config_def%get(i, config_def0)
+      CALL config_def0%get(1, str)
+      obsplatdef%name = str_tolower(str)
+      CALL config_def0%get(2, obsplatdef%id)
+      CALL config_def0%get(3, str)
+      obsplatdef%name_long = str
+      CALL obsdef%add(obsplatdef)
+    END DO
+
+    ! load in the platdef configuration
+    CALL config%get("platdef", config_def)
+    DO i=1,config_def%count()
+      CALL config_def%get(i, config_def0)
+      CALL config_def0%get(1, str)
+      obsplatdef%name = str_tolower(str)
+      CALL config_def0%get(2, obsplatdef%id)
+      CALL config_def0%get(3, str)
+      obsplatdef%name_long = str
+      CALL platdef%add(obsplatdef)
+    END DO
+    obsplatdef = platdef%get(1)
   END SUBROUTINE obsio_nc_init
   !================================================================================
 
@@ -220,7 +251,7 @@ CONTAINS
   SUBROUTINE obsio_nc_read_hx(self, ensmem, hx)
     CLASS(letkf_obsio_nc) :: self
     INTEGER, INTENT(in) :: ensmem
-    REAL, ALLOCATABLE, INTENT(out) :: hx(:)
+    REAL, ALLOCATABLE, INTENT(inout) :: hx(:)
     REAL, ALLOCATABLE :: val(:)
 
     LOGICAL :: ex
@@ -260,8 +291,9 @@ CONTAINS
          '"obs" in '//self%filename_obs)
     CALL check( nf90_inquire_dimension(ncid, dimid, len=n) )
 
-
-    ALLOCATE(hx(n))
+    ! make sure obs in the file matches the array size passed in
+    IF( n /= SIZE(hx)) CALL letkf_mpi_abort( &
+        "error in obsio_nc_read_hx(), obs in file does not match expected.")
 
     IF(self%read_inc) THEN
        ALLOCATE(val(n))

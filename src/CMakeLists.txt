@@ -18,6 +18,7 @@ set( letkf_lib_srcs
   letkf_solver.F90
   letkf_state.F90
   letkf_state_helper.F90
+  letkf_util.F90
   letkf.F90
   ${KDTREE_SRC_FILES}
   )

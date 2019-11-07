@@ -1,0 +1,79 @@
+---
+mpi:
+  ens_size: 5
+
+
+state:
+  class: stateio_nc
+
+  hzgrid:
+  - name: hz1
+    lat2d: [lat,    "soca_gridspec.nc"]
+    lon2d: [lon,    "soca_gridspec.nc"]
+    mask:  [mask2d, "soca_gridspec.nc"]
+
+  vtgrid:
+  - name: vt1
+    vert1d: [Layer,  "Vertical_coordinate.nc"]
+  - name: vt_surf
+    vert1d: [0.0, "#CONST#"]
+
+  statedef:
+  - name: ocn_t
+    hzgrid: hz1
+    vtgrid: vt1
+    ana_bounds: [-2.0, 40]
+    ana_inc_max: 3
+    input:  [Temp, "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"]
+    output: [Temp, "ocn.#TYPE#.#ENS1#.nc"]
+
+  - name: ocn_s
+    hzgrid: hz1
+    vtgrid: vt1
+    ana_bounds: [0, 50.0]
+    ana_inc_max: 2
+    input:  [Salt, "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"]
+    output: [Salt, "ocn.#TYPE#.#ENS1#.nc"]
+
+  - name: ocn_ssh
+    hzgrid: hz1
+    vtgrid: vt_surf
+    input:  [ave_ssh, "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"]
+    output: [ave_ssh, "ocn.#TYPE#.#ENS1#.nc"]
+
+
+observation:
+  class: obsio_ioda
+
+  # note, filename will have _XXXX.nc appended, where XXXX is each tiled output
+  ioda_files:
+  - file: hofx/mem#ENS1#/sst.out
+    vars:
+    - [ocn_sst, sat, sea_surface_temperature]
+  - file: hofx/mem#ENS1#/sss.out
+    vars:
+    - [ocn_sss, sat, sea_surface_salinity]
+  - file: hofx/mem#ENS1#/adt.out
+    vars:
+    - [ocn_adt, sat, obs_absolute_dynamic_topography]
+  - file: hofx/mem#ENS1#/prof.S.out
+    vars:
+    - [ocn_s, insitu, sea_water_salinity]
+  - file: hofx/mem#ENS1#/prof.T.out
+    vars:
+    - [ocn_t, insitu, sea_water_temperature]
+
+
+localization:
+  class: loc_ocean
+  hzloc_prof: "0.0 1000e3 / 10.0 1000e3 / 50.0 500e3"
+  hzloc_sat: "0.0 200e3 / 10.0 100e3"
+  surf_plats: [sat]
+
+
+solver:
+  save_diag: true
+  inflation:
+    rtps: 0.6
+    rtpp: 0.0
+    mul:  1.0

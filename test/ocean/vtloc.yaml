@@ -67,18 +67,11 @@ localization:
 
 
 observation:
-  obsdef:
-  - ["ocn_t", 2210, "ocean insitu temperature (C)"]
-  - ["ocn_s", 2220, "ocean salinity (PSU)"]
-
-  platdef:
-  - ["ocn_prf", 1, "all insitu obs"]
-  - ["ocn_sat", 1000, "all satellite based obs"]
-
   class: obsio_test
-  obsio_test:
-  - ["ocn_t", "ocn_sat", "ocn_t", 20.0, -140.0, 5.0, 0.0, -1.0, 0.1]
-  - ["ocn_t", "ocn_prf", "ocn_t",  0.0, -140.0, 5.0, 0.0, -1.0, 1.0]
-  - ["ocn_t", "ocn_prf", "ocn_t",  0.0, -150.0, 5.0, 0.0, -1.0, 1.0]
-  - ["ocn_t", "ocn_prf", "ocn_t",  0.0, -160.0, 5.0, 0.0, -1.0, 1.0]
-  - ["ocn_t", "ocn_prf", "ocn_s",  0.0, -160.0, 5.0, 0.0,  0.5, 1.0]
+
+  synthetic_obs:
+  - [ocn_t, ocn_sat, ocn_t, 20.0, -140.0, 5.0, 0.0, -1.0, 0.1]
+  - [ocn_t, ocn_prf, ocn_t,  0.0, -140.0, 5.0, 0.0, -1.0, 1.0]
+  - [ocn_t, ocn_prf, ocn_t,  0.0, -150.0, 5.0, 0.0, -1.0, 1.0]
+  - [ocn_t, ocn_prf, ocn_t,  0.0, -160.0, 5.0, 0.0, -1.0, 1.0]
+  - [ocn_t, ocn_prf, ocn_s,  0.0, -160.0, 5.0, 0.0,  0.5, 1.0]

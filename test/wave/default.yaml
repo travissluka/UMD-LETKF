@@ -9,16 +9,10 @@ solver:
 
 
 observation:
-  obsdef:
-  - ["h", 1, "wave height"]
-
-  platdef:
-  - ["plat", 1, "satellite"]
-
   class: obsio_test
-  obsio_test:
-  - ["h", "plat", "HTSGW", 48.5, 210.5, 1.0, 0.0,  1, 0.1]
-  - ["h", "plat", "HTSGW", 37.5, 185.5, 1.0, 0.0, -1, 0.1]
+  synthetic_obs:
+  - [h, plat, HTSGW, 48.5, 210.5, 1.0, 0.0,  1, 0.1]
+  - [h, plat, HTSGW, 37.5, 185.5, 1.0, 0.0, -1, 0.1]
 
 
 state:

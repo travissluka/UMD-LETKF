@@ -7,6 +7,7 @@ MODULE letkf_state
   USE mpi
   USE letkf_config
   USE letkf_mpi
+  USE letkf_util
 
   IMPLICIT NONE
   PRIVATE
@@ -266,7 +267,7 @@ CONTAINS
     IF (pe_isroot) THEN
        PRINT *, "List of stateio classes registered and available:"
        DO i=1, stateio_reg_num
-          PRINT *, ' * "', tolower(stateio_reg(i)%p%name()), &
+          PRINT *, ' * "', str_tolower(stateio_reg(i)%p%name()), &
                '"  (', stateio_reg(i)%p%desc(), ")"
        END DO
        PRINT *, ""
@@ -278,11 +279,11 @@ CONTAINS
 
     ! determine the stateio class to use
     CALL config%get("class", ioclass)
-    ioclass = tolower(ioclass)
+    ioclass = str_tolower(ioclass)
     IF (pe_isroot) PRINT '(A,A)',  " state.class= ",ioclass
     NULLIFY(stateio_class)
     DO i=1, stateio_reg_num
-       IF (tolower(stateio_reg(i)%p%name()) == ioclass) THEN
+       IF (str_tolower(stateio_reg(i)%p%name()) == ioclass) THEN
           stateio_class => stateio_reg(i)%p
           EXIT
        END IF
@@ -1072,9 +1073,9 @@ CONTAINS
     ! make sure a class of this name hasn't already been registered
     IF ( pe_isroot ) THEN
        DO i=1, stateio_reg_num
-          IF (tolower(stateio_reg(i)%p%name()) == tolower(ioclass%name())) THEN
+          IF (str_tolower(stateio_reg(i)%p%name()) == str_tolower(ioclass%name())) THEN
              CALL letkf_mpi_abort("can't register stateio class "//'"'// &
-                  tolower(ioclass%name())// &
+                  str_tolower(ioclass%name())// &
                   '", a class by that name already has been registered.')
           END IF
        END DO
@@ -1160,27 +1161,6 @@ CONTAINS
          CALL letkf_mpi_abort("state definition for variable '"//name0//"' not found")
     res = statevars(i)
   END FUNCTION letkf_state_var_getdef
-  !================================================================================
-
-
-
-  !================================================================================
-  !> Convert a string to lower
-  !--------------------------------------------------------------------------------
-  FUNCTION tolower(in_str) RESULT(out_str)
-    CHARACTER(*), INTENT(in) :: in_str
-    CHARACTER(LEN(in_str)) :: out_str
-    INTEGER :: i
-    INTEGER, PARAMETER :: offset = 32
-
-    out_str = in_str
-    DO i = 1, LEN(out_str)
-       IF (out_str(i:i) >= "A" .AND. out_str(i:i) <= "Z") THEN
-          out_str(i:i) = ACHAR(IACHAR(out_str(i:i)) + offset)
-       END IF
-    END DO
-
-  END FUNCTION tolower
   !================================================================================
 
 END MODULE letkf_state

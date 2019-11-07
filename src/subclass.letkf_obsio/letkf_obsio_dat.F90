@@ -79,9 +79,11 @@ CONTAINS
   !! input filenames should be.
   !! @param nml_filename path to the namelist we are to open
   !--------------------------------------------------------------------------------
-  SUBROUTINE obsio_dat_init(self, config)
+  SUBROUTINE obsio_dat_init(self, config, obsdef, platdef)
     CLASS(letkf_obsio_dat) :: self
     TYPE(configuration), INTENT(in) :: config
+    TYPE(letkf_obsplatdef_list), INTENT(out) :: obsdef
+    TYPE(letkf_obsplatdef_list), INTENT(out) :: platdef
 
     IF (pe_isroot) THEN
        PRINT '(/A)', ""
@@ -217,7 +219,7 @@ CONTAINS
   SUBROUTINE obsio_dat_read_hx(self, ensmem, hx)
     CLASS(letkf_obsio_dat) :: self
     INTEGER, INTENT(in) :: ensmem
-    REAL, ALLOCATABLE, INTENT(out) :: hx(:)
+    REAL, ALLOCATABLE, INTENT(inout) :: hx(:)
     REAL, ALLOCATABLE :: val(:)
 
     ! LOGICAL :: ex
