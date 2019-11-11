@@ -20,7 +20,7 @@ before_script:
 script:
   - mkdir build; cd build; FC=gfortran cmake ../ -DLETKF_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DLETKF_ENABLE_CODECOVERAGE=ON -DLETKF_ENABLE_GRIB=ON -DLETKF_BUILD_GRIB=ON;
   - make
-  - ctest -VV
+  - ctest --output-on-failure
 
 
 
