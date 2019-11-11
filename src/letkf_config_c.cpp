@@ -136,16 +136,17 @@ yaml_node_t * letkf_yaml_get_child_name(yaml_document_t *&doc,
         yaml_node_pair_t *node_kv;
         yaml_node_t *node_k, *node_v;
 
-        // abort if this is not a sequence or mapping
-        if(node->type == YAML_SCALAR_NODE) {
-                return NULL;
-        }
+        // abort if this is not a mapping
+        if(node->type == YAML_SCALAR_NODE) return NULL;
+        if(node->type == YAML_SEQUENCE_NODE) return NULL;
 
         //find the matching key
         node_kv = node->data.mapping.pairs.start;
         while (node_kv != node->data.mapping.pairs.top) {
                 node_k = yaml_document_get_node(doc,  node_kv->key);
                 node_v = yaml_document_get_node(doc,  node_kv->value);
+                if (node_k == NULL) return NULL;
+                if (node_v == NULL) return NULL;
                 if (node_k->type == YAML_SCALAR_NODE) {
                         // all keys should be scalar nodes... but just to be safe
                         if (strcmp((char*)node_k->data.scalar.value, key) == 0) {

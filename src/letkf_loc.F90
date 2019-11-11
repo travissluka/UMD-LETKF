@@ -248,51 +248,48 @@ CONTAINS
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  FUNCTION linearinterp_lat_init(config_str) RESULT(l)
-    CHARACTER(*), INTENT(IN) :: config_str
+  FUNCTION linearinterp_lat_init(config) RESULT(l)
+    TYPE(configuration), INTENT(in) :: config
     TYPE(linearinterp_lat) :: l
 
+    TYPE(CONFIGURATION) :: config2
     INTEGER :: npoints
-    INTEGER :: i, j
+    INTEGER :: i
 
-    REAL :: lat, dist
+    REAL :: lat, radius
 
     ! determine the number of interp points
-    npoints = 0
-    i=1
-    DO WHILE(i < LEN(config_str))
-       j=i
-       i=SCAN(config_str(j:), "/")+j-2
-       IF(i <j) i = LEN(config_str)
-       i=i+2
-       npoints = npoints+1
-    END DO
+    npoints = config%count()
 
     ! allocate space (2 extra in case 0 and 90 not explicitly defined)
     ALLOCATE(l%lat(npoints+2))
     ALLOCATE(l%dist(npoints+2))
     l%npoints=0
-    i=1
-    DO WHILE(i < LEN(config_str))
-       j=i
-       i=SCAN(config_str(j:), "/")+j-2
-       IF(i <j)i = LEN(config_str)
-       READ (config_str(j:i),*) lat, dist
 
-       IF(lat > 0.0 .AND. l%npoints == 0) THEN
-          l%npoints = l%npoints + 1
-          l%lat(1)=0.0
-          l%dist(1)=dist
-       END IF
-       l%npoints = l%npoints+1
-       l%lat(l%npoints) = lat
-       l%dist(l%npoints) = dist
-       i=i+2
+    ! parse the configuration
+    DO i=1, config%count()
+      CALL config%get(i, config2)
+      CALL config2%get("lat", lat)
+      CALL config2%get("radius", radius)
+
+      ! stick a 0.0 latitude at the beginning, if needed
+      ! (If the first point starts after 0.0)
+      IF( lat > 0.0 .AND. l%npoints == 0) THEN
+        l%npoints = l%npoints + 1
+        l%lat(1) = 0.0
+        l%dist(1) = radius
+      ENDIF
+
+      l%npoints = l%npoints + 1
+      l%lat(l%npoints) = lat
+      l%dist(l%npoints) = radius
     END DO
+
+    ! add a 90.0 latitue at the end, if needed
     IF (lat < 90) THEN
-       l%npoints = l%npoints +1
-       l%lat(l%npoints) = 90
-       l%dist(l%npoints) = dist
+      l%npoints = l%npoints +1
+      l%lat(l%npoints) = 90
+      l%dist(l%npoints) = radius
     END IF
   END FUNCTION linearinterp_lat_init
   !================================================================================

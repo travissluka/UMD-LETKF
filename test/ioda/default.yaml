@@ -8,15 +8,15 @@ state:
 
   hzgrid:
   - name: hz1
-    lat2d: [lat,    "soca_gridspec.nc"]
-    lon2d: [lon,    "soca_gridspec.nc"]
-    mask:  [mask2d, "soca_gridspec.nc"]
+    lat2d: {file: soca_gridspec.nc, variable: lat}
+    lon2d: {file: soca_gridspec.nc, variable: lon}
+    mask:  {file: soca_gridspec.nc, variable: mask2d}
 
   vtgrid:
   - name: vt1
-    vert1d: [Layer,  "Vertical_coordinate.nc"]
+    vert1d: {file: Vertical_coordinate.nc, variable: Layer}
   - name: vt_surf
-    vert1d: [0.0, "#CONST#"]
+    vert1d: {file: "#CONST#", variable: 0.0}
 
   statedef:
   - name: ocn_t
@@ -24,22 +24,22 @@ state:
     vtgrid: vt1
     ana_bounds: [-2.0, 40]
     ana_inc_max: 3
-    input:  [Temp, "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"]
-    output: [Temp, "ocn.#TYPE#.#ENS1#.nc"]
+    input:  {variable: Temp, file: "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"}
+    output: {variable: Temp, file: "ocn.#TYPE#.#ENS1#.nc"}
 
   - name: ocn_s
     hzgrid: hz1
     vtgrid: vt1
     ana_bounds: [0, 50.0]
     ana_inc_max: 2
-    input:  [Salt, "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"]
-    output: [Salt, "ocn.#TYPE#.#ENS1#.nc"]
+    input:  {variable: Salt, file: "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"}
+    output: {variable: Salt, file: "ocn.#TYPE#.#ENS1#.nc"}
 
   - name: ocn_ssh
     hzgrid: hz1
     vtgrid: vt_surf
-    input:  [ave_ssh, "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"]
-    output: [ave_ssh, "ocn.#TYPE#.#ENS1#.nc"]
+    input:  {variable: ave_ssh, file: "bkg/ocn.pert.ens.#ENS1#.2018-04-15T00:00:00Z.PT6H.nc"}
+    output: {variable: ave_ssh, file: "ocn.#TYPE#.#ENS1#.nc"}
 
 
 observation:
@@ -66,9 +66,20 @@ observation:
 
 localization:
   class: loc_ocean
-  hzloc_prof: "0.0 1000e3 / 10.0 1000e3 / 50.0 500e3"
-  hzloc_sat: "0.0 200e3 / 10.0 100e3"
-  surf_plats: [sat]
+  hzloc_prof:
+    type: linearinterp_lat
+    value:
+    - {lat:  0.0, radius: 1000e3}
+    - {lat: 10.0, radius: 1000e3}
+    - {lat: 50.0, radius:  500e3}
+  hzloc_sat:
+    type: linearinterp_lat
+    value:
+    - {lat:  0.0, radius: 200e3}
+    - {lat: 10.0, radius: 100e3}
+
+  sat_plats:
+  - sat
 
 
 solver:

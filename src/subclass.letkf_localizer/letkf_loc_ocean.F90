@@ -119,10 +119,31 @@ CONTAINS
 
     CALL config%get("save_diag", self%save_diag, .true.)
     CALL config%get("diag_file", self%diag_file, "diag.loc_ocean.nc" )
-    CALL config%get("hzloc_prof", str)
-    self%hzdist_prof = linearinterp_lat(str)
-    CALL config%get("hzloc_sat",  str)
-    self%hzdist_sat = linearinterp_lat(str)
+
+    ! TODO, this has gotten a bit messy,
+    ! generalize this by making a separate hzloc class
+
+    ! hz loc for profiles
+    CALL config%get("hzloc_prof", config2)
+    CALL config2%get("type", str)
+    IF (str == "linearinterp_lat") THEN
+      CALL config2%get("value", config3)
+      self%hzdist_prof = linearinterp_lat(config3)
+    ELSE
+      CALL letkf_mpi_abort('unrecognized hzloc_prof type: "'//TRIM(str)//'"')
+    ENDIF
+
+    ! hzloc for satellites
+    CALL config%get("hzloc_sat", config2)
+    CALL config2%get("type", str)
+    IF (str == "linearinterp_lat") THEN
+      CALL config2%get("value", config3)
+      self%hzdist_sat = linearinterp_lat(config3)
+    ELSE
+      CALL letkf_mpi_abort('unrecognized hzloc_sat type: "'//TRIM(str)//'"')
+    ENDIF
+
+    ! temporal localization
     CALL config%get("tloc_prof", self%tloc_prof, default=-1.0)
     CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
 
@@ -178,10 +199,10 @@ CONTAINS
     ! determine the list of observations or platform ids that are considered
     ! surface observations that need to be localized. Convert from a specified
     ! string on the config file to the associated integer id.
-    IF(config%found("surf_obs")) THEN
+    IF(config%found("sat_obs")) THEN
        IF(pe_isroot) PRINT *, " satellite observation types:"
 
-       CALL config%get("surf_obs", config3)
+       CALL config%get("sat_obs", config3)
        ALLOCATE(self%surf_obs(config3%COUNT()))
        DO i = 1, SIZE(self%surf_obs)
           CALL config3%get(i,str)
@@ -193,10 +214,10 @@ CONTAINS
        ALLOCATE(self%surf_obs(0))
     END IF
 
-    IF(config%found("surf_plats")) THEN
+    IF(config%found("sat_plats")) THEN
        IF(pe_isroot) PRINT *, " satellite platform types:"
 
-       CALL config%get("surf_plats", config3)
+       CALL config%get("sat_plats", config3)
        ALLOCATE(self%surf_plats(config3%COUNT()))
        DO i = 1, SIZE(self%surf_plats)
           CALL config3%get(i,str)

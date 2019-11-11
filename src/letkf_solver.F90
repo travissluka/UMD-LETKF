@@ -87,11 +87,20 @@ CONTAINS
     CALL config%get("diag_file", diag_file, "diag.solver.nc")
 
     ! get the inflation parameters
-    CALL config%get("inflation", infl_config)
+    ! NOTE: weird syntax so that if "inflation" is not found
+    !  things carry on normally and the default values are set
+    IF (config%found("inflation")) THEN
+      CALL config%get("inflation", infl_config)
+    ELSE
+      infl_config = config
+      IF(pe_isroot) PRINT *, 'WARNING: not"inflation" section found in "solver"' &
+         // ', using default values.'
+    ENDIF
     CALL infl_config%get("mul", infl_mul, default=1.0)
     CALL infl_config%get("rtps", infl_rtps, default=0.0)
     CALL infl_config%get("rtpp", infl_rtpp, default=0.0)
 
+    ! print out the values used
     IF(pe_isroot) THEN
        PRINT *, "solver.save_diag=",save_diag
        IF(save_diag) PRINT *, "solver.diag_file=",diag_file

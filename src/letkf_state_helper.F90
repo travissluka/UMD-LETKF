@@ -118,9 +118,9 @@ CONTAINS
        hzgrids_files(i)%nomlat%file = ""
        IF(config2%found("lat2d")) THEN
           CALL config2%get("lat2d", config3)
-          CALL config3%get(1, str)
+          CALL config3%get("variable", str)
           hzgrids_files(i)%lat%var = str
-          CALL config3%get(2, str)
+          CALL config3%get("file", str)
           hzgrids_files(i)%lat%file = str
           IF(pe_isroot) PRINT *,'   lat2d: ("', &
                TRIM(hzgrids_files(i)%lat%var), '", "', &
@@ -129,9 +129,9 @@ CONTAINS
        END IF
        IF(config2%found("lat1d")) THEN
           CALL config2%get("lat1d", config3)
-          CALL config3%get(1, str)
+          CALL config3%get("variable", str)
           hzgrids_files(i)%nomlat%var = str
-          CALL config3%get(2, str)
+          CALL config3%get("file", str)
           hzgrids_files(i)%nomlat%file = str
           IF(pe_isroot) PRINT *,'   lat1d: ("', &
                TRIM(hzgrids_files(i)%nomlat%var), '", "', &
@@ -145,9 +145,9 @@ CONTAINS
        hzgrids_files(i)%nomlon%file = ""
        IF(config2%found("lon2d")) THEN
           CALL config2%get("lon2d", config3)
-          CALL config3%get(1, str)
+          CALL config3%get("variable", str)
           hzgrids_files(i)%lon%var = str
-          CALL config3%get(2, str)
+          CALL config3%get("file", str)
           hzgrids_files(i)%lon%file = str
           IF(pe_isroot) PRINT *,'   lon2d: ("', &
                TRIM(hzgrids_files(i)%lon%var), '", "', &
@@ -155,9 +155,9 @@ CONTAINS
        END IF
        IF(config2%found("lon1d")) THEN
           CALL config2%get("lon1d", config3)
-          CALL config3%get(1, str)
+          CALL config3%get("variable", str)
           hzgrids_files(i)%nomlon%var = str
-          CALL config3%get(2, str)
+          CALL config3%get("file", str)
           hzgrids_files(i)%nomlon%file = str
           IF(pe_isroot) PRINT *,'   lon1d: ("', &
                TRIM(hzgrids_files(i)%nomlon%var), '", "', &
@@ -169,9 +169,9 @@ CONTAINS
        hzgrids_files(i)%mask%file = ""
        IF(config2%found("mask")) THEN
           CALL config2%get("mask", config3)
-          CALL config3%get(1, str)
+          CALL config3%get("variable", str)
           hzgrids_files(i)%mask%var = str
-          CALL config3%get(2, str)
+          CALL config3%get("file", str)
           hzgrids_files(i)%mask%file = str
           IF(pe_isroot) PRINT *,'   mask:  ("', &
                TRIM(hzgrids_files(i)%mask%var), '", "', &
@@ -282,8 +282,8 @@ CONTAINS
        ! TODO, read in 3D vertical coordinates
        IF(config2%found("vert1d")) THEN
           CALL config2%get("vert1d", config3)
-          CALL config3%get(1, varname)
-          CALL config3%get(2, filename)
+          CALL config3%get("variable", varname)
+          CALL config3%get("file", filename)
           IF(pe_isroot) PRINT *,'   vert1d: ("', varname, '", "',filename,'")'
           vtgrids(i)%dims=1
           vtgrids_files(i)%vt1d%var = varname
@@ -397,9 +397,9 @@ CONTAINS
                '"input" field missing for state variable "'//statevars(i)%name)
        END IF
        CALL config2%get("input", config3)
-       CALL config3%get(1, str)
+       CALL config3%get("variable", str)
        statevars_files(i)%input%var = str
-       CALL config3%get(2, str)
+       CALL config3%get("file", str)
        statevars_files(i)%input%file = str
        IF(pe_isroot) PRINT *, '   input:  ("', &
             TRIM(statevars_files(i)%input%var), '", "', &
@@ -411,9 +411,9 @@ CONTAINS
                '"output" field missing for state variable "'//statevars(i)%name)
        END IF
        CALL config2%get("output", config3)
-       CALL config3%get(1, str)
+       CALL config3%get("variable", str)
        statevars_files(i)%output%var = str
-       CALL config3%get(2, str)
+       CALL config3%get("file", str)
        statevars_files(i)%output%file = str
        IF(pe_isroot) PRINT *, '   output: ("', &
             TRIM(statevars_files(i)%output%var), '", "', &

@@ -85,6 +85,7 @@ CONTAINS
     TYPE(configuration), INTENT(in) :: config
 
     CHARACTER(:), ALLOCATABLE :: str
+    TYPE(configuration) :: config2, config3
 
     IF (pe_isroot) THEN
        PRINT *, ""
@@ -92,8 +93,17 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
-    CALL config%get("hzloc", str, "0.0 500.0e3 / 90.0 50.0e3")
-    self%hzdist = linearinterp_lat(str)
+    ! TODO, this has gotten a bit messy,
+    ! generalize this by making a separate hzloc class
+    CALL config%get("hzloc", config2)
+    CALL config2%get("type", str)
+    IF (str == "linearinterp_lat") THEN
+      CALL config2%get("value", config3)
+      self%hzdist = linearinterp_lat(config3)
+    ELSE
+      CALL letkf_mpi_abort('Unrecognized hzloc type: "'//TRIM(str)//'"')
+    END IF
+
     IF (pe_isroot) PRINT *, "hzloc=",self%hzdist%string()
 
     self%maxgroups=1

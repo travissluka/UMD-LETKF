@@ -1,8 +1,0 @@
----
-obsdef:
-- ["ocn_t", 2210, "ocean insitu temperature (C)"]
-- ["ocn_s", 2220, "ocean salinity (PSU)"]
-
-platdef:
-- ["ocn_prf", 1, "all insitu obs"]
-- ["ocn_sat", 1000, "all satellite based obs"]

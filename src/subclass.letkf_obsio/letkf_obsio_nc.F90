@@ -123,10 +123,10 @@ CONTAINS
     CALL config%get("obsdef", config_def)
     DO i=1,config_def%count()
       CALL config_def%get(i, config_def0)
-      CALL config_def0%get(1, str)
+      CALL config_def0%get("name", str)
       obsplatdef%name = str_tolower(str)
-      CALL config_def0%get(2, obsplatdef%id)
-      CALL config_def0%get(3, str)
+      CALL config_def0%get("id", obsplatdef%id)
+      CALL config_def0%get("description", str)
       obsplatdef%name_long = str
       CALL obsdef%add(obsplatdef)
     END DO
@@ -135,10 +135,10 @@ CONTAINS
     CALL config%get("platdef", config_def)
     DO i=1,config_def%count()
       CALL config_def%get(i, config_def0)
-      CALL config_def0%get(1, str)
+      CALL config_def0%get("name", str)
       obsplatdef%name = str_tolower(str)
-      CALL config_def0%get(2, obsplatdef%id)
-      CALL config_def0%get(3, str)
+      CALL config_def0%get("id", obsplatdef%id)
+      CALL config_def0%get("description", str)
       obsplatdef%name_long = str
       CALL platdef%add(obsplatdef)
     END DO
