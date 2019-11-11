@@ -92,5 +92,6 @@ endforeach(m)
 # Default LETKF driver program
 #--------------------------------------------------------------------------------
 add_executable( letkfdriver letkf_driver.F90)
+set_target_properties(letkfdriver PROPERTIES LINKER_LANGUAGE Fortran) 
 target_link_libraries( letkfdriver letkf )
 install(TARGETS letkfdriver RUNTIME DESTINATION bin)

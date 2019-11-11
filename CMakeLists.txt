@@ -14,6 +14,12 @@
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 project(letkf Fortran C CXX)
 
+# set the default build type to Release
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING
+  "Build type, options are: Debug Release RelWithDebInfo" FORCE)
+endif()
+
 
 #------------------------------------------------------------
 # determine the repository version
@@ -62,10 +68,7 @@ set(NETCDF_F90 "YES")
 find_package(NetCDF REQUIRED)
 
 # LAPACK / BLAS
-# If Intel, assume the mkl library is used
-IF(NOT CMAKE_C_COMPILER_ID MATCHES Intel)
-  find_package(LAPACK REQUIRED)
-ENDIF()
+find_package(LAPACK REQUIRED)
 
 # grib2
 option( LETKF_ENABLE_GRIB "enable grib2 support for state I/O" OFF)
