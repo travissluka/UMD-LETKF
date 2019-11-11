@@ -74,11 +74,6 @@ CONTAINS
   SUBROUTINE letkf_init(config_filename)
     CHARACTER(len=*) :: config_filename !< json configuration file to load
 
-    ! temprary pointers for initializing and registering the default classes
-    CLASS(letkf_obsio),     POINTER :: obsio_ptr
-    CLASS(letkf_stateio),   POINTER :: stateio_ptr
-    CLASS(letkf_localizer), POINTER :: localizer_ptr
-
     ! initialize the mpi backend
     CALL letkf_mpi_preinit()
     CALL getmem_init(pe_root, letkf_mpi_comm)

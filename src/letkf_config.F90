@@ -427,7 +427,6 @@ CONTAINS
     CLASS(configuration), INTENT(in) :: self
     INTEGER, INTENT(in) :: idx
     REAL(4), INTENT(out) :: val
-    TYPE(configuration) :: child
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
@@ -457,7 +456,7 @@ CONTAINS
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
-    INTEGER :: str_len, err
+    INTEGER :: str_len
 
     res_node = letkf_yaml_get_child_name(&
          self%yaml_doc, self%yaml_node, key//c_null_char)
@@ -481,11 +480,10 @@ CONTAINS
     CLASS(configuration), INTENT(in) :: self
     INTEGER, INTENT(in) :: idx
     CHARACTER(len=:), ALLOCATABLE, INTENT(out) :: val
-    TYPE(configuration) :: child
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
-    INTEGER :: str_len, err
+    INTEGER :: str_len
 
     res_node = letkf_yaml_get_child_idx(self%yaml_doc, self%yaml_node, idx, &
          str, str_len)
@@ -512,7 +510,7 @@ CONTAINS
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
-    INTEGER :: str_len, err
+    INTEGER :: str_len
 
     res_node = letkf_yaml_get_child_name(&
          self%yaml_doc, self%yaml_node, key//c_null_char)

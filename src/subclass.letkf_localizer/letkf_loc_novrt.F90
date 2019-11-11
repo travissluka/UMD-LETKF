@@ -160,7 +160,7 @@ CONTAINS
     TYPE(letkf_localizer_group), INTENT(in) :: group
     TYPE(letkf_observation), INTENT(in) :: obs
     REAL, INTENT(in) :: dist
-    REAL :: loc, r
+    REAL :: loc
 
     ! TODO temporal localization
 

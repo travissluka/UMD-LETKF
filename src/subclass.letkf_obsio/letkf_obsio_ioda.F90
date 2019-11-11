@@ -149,17 +149,15 @@ CONTAINS
     INTEGER :: count_local, count, file_num
 
     INTEGER :: obsid, platid
-    INTEGER :: ncid, dimid, varid
-    INTEGER :: nlocs, nvars, offset
+    INTEGER :: ncid, dimid
+    INTEGER :: nlocs, offset
     INTEGER :: n, num_files
     LOGICAL :: ex
-    INTEGER, ALLOCATABLE :: tmp_i(:)
-    REAL(4), ALLOCATABLE :: tmp_r(:)
-    TYPE(configuration) :: local_config, vars_config
+    TYPE(configuration) :: local_config, vars_config, var_config
     TYPE(letkf_observation), ALLOCATABLE :: obs_tmp(:)
     TYPE(letkf_obsplatdef) :: obsdef
 
-    CHARACTER(len=:), ALLOCATABLE :: varname, varname2, str1, var_short, var_long
+    CHARACTER(len=:), ALLOCATABLE :: str1, var_short, var_long
     CHARACTER(len=MAX_FILENAME_LEN) :: str2
 
     ! Determine the number of obs that need to be allocated
@@ -222,14 +220,14 @@ CONTAINS
         IF (.NOT. ex) EXIT
         IF (pe_isroot) PRINT *, "  reading: ", TRIM(str2)
         CALL local_config%get("vars", vars_config)
-        CALL vars_config%get(1, vars_config)
-        CALL vars_config%get(1, var_short)
+        CALL vars_config%get(1, var_config)
+        CALL var_config%get(1, var_short)
         obsdef=letkf_obs_getdef('O', var_short)
         obsid=obsdef%id
-        CALL vars_config%get(2, var_short)
+        CALL var_config%get(2, var_short)
         obsdef=letkf_obs_getdef('P', var_short)
         platid=obsdef%id
-        CALL vars_config%get(3, var_long)
+        CALL var_config%get(3, var_long)
 
         CALL read_file(str2, obs_tmp, obsid, platid, var_long)
         IF (.NOT. ALLOCATED(obs_tmp)) &
@@ -260,15 +258,11 @@ CONTAINS
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(inout) :: hx(:)
 
-    INTEGER :: ncid, dimid, varid
-    INTEGER :: nlocs, n, i
+    INTEGER :: n
     LOGICAL :: ex
-    CHARACTER(len=:), ALLOCATABLE :: varname, varname2
-    CHARACTER(len=:), ALLOCATABLE :: filename, str1, var_long
-    CHARACTER(len=10) :: fmt
-    CHARACTER(len=6)  :: pattern
+    CHARACTER(len=:), ALLOCATABLE :: str1, var_long
     INTEGER :: offset, file_num
-    TYPE(configuration) :: local_config, vars_config
+    TYPE(configuration) :: local_config, vars_config, var_config
     CHARACTER(len=MAX_FILENAME_LEN) :: str2
 
     REAL, ALLOCATABLE :: hx_tmp(:)
@@ -295,8 +289,8 @@ CONTAINS
           ! TODO, process multiple vars
           ! TODO do the same for the obs section
           CALL local_config%get("vars", vars_config)
-          CALL vars_config%get(1, vars_config)
-          CALL vars_config%get(3, var_long)
+          CALL vars_config%get(1, var_config)
+          CALL var_config%get(3, var_long)
 
           CALL read_file_hx(str2, hx_tmp, var_long)
 
@@ -361,7 +355,6 @@ CONTAINS
     INTEGER, INTENT(in) :: obsid, platid
     TYPE(letkf_observation), ALLOCATABLE, INTENT(out) :: obs(:)
 
-    TYPE(configuration) :: config_tmp
     INTEGER :: n
     LOGICAL :: ex
     INTEGER :: dimid, ncid, nlocs, vid

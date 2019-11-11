@@ -247,9 +247,8 @@ CONTAINS
   SUBROUTINE letkf_obs_init(config)
     TYPE(configuration), INTENT(in) :: config
 
-    TYPE(configuration) :: ioconfig, config_def, config_def0
     INTEGER :: i
-    CHARACTER(:), ALLOCATABLE :: ioclass, str
+    CHARACTER(:), ALLOCATABLE :: ioclass
     TYPE(letkf_obsplatdef) :: obsplatdef_tmp
 
     ! print header
@@ -746,7 +745,7 @@ CONTAINS
     CHARACTER(len=*), INTENT(in) :: name     !< platform or observation name to get
     TYPE(letkf_obsplatdef) :: res            !< the returned definition
 
-    CHARACTER(:), ALLOCATABLE :: name0
+    CHARACTER(len=:), ALLOCATABLE :: name0
     INTEGER :: i
 
     name0 = TRIM(str_tolower(name))
