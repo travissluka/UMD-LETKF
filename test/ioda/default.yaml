@@ -16,7 +16,7 @@ state:
   - name: vt1
     vert1d: {file: Vertical_coordinate.nc, variable: Layer}
   - name: vt_surf
-    vert1d: {file: "#CONST#", variable: 0.0}
+    vert1d: {constant: 0.0}
 
   statedef:
   - name: ocn_t

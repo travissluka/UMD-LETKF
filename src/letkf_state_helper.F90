@@ -262,7 +262,7 @@ CONTAINS
     END IF
     CALL config%get("vtgrid", vt_config)
 
-    ! How many horizontal grids are there?
+    ! How many vertical grids are there?
     cnt = vt_config%COUNT()
     ALLOCATE(vtgrids(cnt))
     ALLOCATE(vtgrids_files(cnt))
@@ -281,13 +281,26 @@ CONTAINS
        ! TODO, interpret depth/height vs thickness
        ! TODO, read in 3D vertical coordinates
        IF(config2%found("vert1d")) THEN
-          CALL config2%get("vert1d", config3)
-          CALL config3%get("variable", varname)
-          CALL config3%get("file", filename)
-          IF(pe_isroot) PRINT *,'   vert1d: ("', varname, '", "',filename,'")'
           vtgrids(i)%dims=1
-          vtgrids_files(i)%vt1d%var = varname
-          vtgrids_files(i)%vt1d%file = filename
+          CALL config2%get("vert1d", config3)
+          IF (config3%found("constant")) THEN
+            ! TODO this is handled in a messy way, as a holdover
+            ! from previous method of providing #CONST# for the filename
+            CALL config3%get("constant", varname)
+            vtgrids_files(i)%vt1d%file = "#CONST#"
+            vtgrids_files(i)%vt1d%var = varname
+            IF(pe_isroot) PRINT *,'   vert1d: (constant: "', varname, '")'
+
+          ELSE IF (config3%found("file")) THEN
+            CALL config3%get("variable", varname)
+            CALL config3%get("file", filename)
+            vtgrids_files(i)%vt1d%var = varname
+            vtgrids_files(i)%vt1d%file = filename
+            IF(pe_isroot) PRINT *,'   vert1d: ("', varname, '", "',filename,'")'
+          ELSE
+            CALL letkf_mpi_abort("vert1d coordinates need to be specified, either via "&
+               // '"file:" or "constant:"')
+          END IF
        ELSE
           CALL letkf_mpi_abort("vert1d is missing for "//TRIM(vtgrids(i)%name))
        END IF
