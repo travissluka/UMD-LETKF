@@ -149,11 +149,13 @@ CONTAINS
 
     IF(pe_isroot) THEN
        PRINT *, "localization.save_diag  = ", self%save_diag
-       IF(self%save_diag) PRINT *, "localization.diag_file = ", self%diag_file
+       IF(self%save_diag) PRINT *, "localization.diag_file  = ", self%diag_file
        PRINT *, "localization.tloc_prof  = ", self%tloc_prof
        PRINT *, "localization.tloc_sat   = ", self%tloc_sat
-       PRINT *, "localization.hzloc_prof = ", self%hzdist_prof%string()
-       PRINT *, "localization.hzloc_sat  = ", self%hzdist_sat%string()
+       PRINT *, "localization.hzloc_prof = "
+       CALL self%hzdist_prof%print()
+       PRINT *, "localization.hzloc_sat  = "
+       CALL self%hzdist_sat%print()
     END IF
 
     ! get type of vertical localization used for SST obs
@@ -200,7 +202,7 @@ CONTAINS
     ! surface observations that need to be localized. Convert from a specified
     ! string on the config file to the associated integer id.
     IF(config%found("sat_obs")) THEN
-       IF(pe_isroot) PRINT *, " satellite observation types:"
+       IF(pe_isroot) PRINT *, "satellite observation types:"
 
        CALL config%get("sat_obs", config3)
        ALLOCATE(self%surf_obs(config3%COUNT()))
@@ -215,7 +217,7 @@ CONTAINS
     END IF
 
     IF(config%found("sat_plats")) THEN
-       IF(pe_isroot) PRINT *, " satellite platform types:"
+       IF(pe_isroot) PRINT *, "satellite platform types:"
 
        CALL config%get("sat_plats", config3)
        ALLOCATE(self%surf_plats(config3%COUNT()))

@@ -150,8 +150,8 @@ CONTAINS
 
     INTEGER :: obsid, platid
     INTEGER :: ncid, dimid
-    INTEGER :: nlocs, offset
-    INTEGER :: n, num_files
+    INTEGER :: nlocs, offset, nvars
+    INTEGER :: i, n, num_files
     LOGICAL :: ex
     TYPE(configuration) :: local_config, vars_config, var_config
     TYPE(letkf_observation), ALLOCATABLE :: obs_tmp(:)
@@ -171,6 +171,10 @@ CONTAINS
       CALL local_config%get("file", str1)
       CALL str_pattern_ens(str1, str1, 1)
 
+      ! get the number of variables (according to the yaml file)
+      CALL local_config%get("vars", var_config)
+      nvars = var_config%count()
+
       ! there are likely multiple files that end with a 4 digit number
       ! Check to see which ones exist and parse them
       file_num = 0
@@ -187,7 +191,7 @@ CONTAINS
             'Reading dimension "nlocs"')
         CALL check( nf90_inquire_dimension(ncid, dimid, len=nlocs) )
         CALL check( nf90_close(ncid))
-        count_local = count_local + nlocs
+        count_local = count_local + (nlocs * nvars)
 
         ! find next file...
         file_num = file_num + 1
@@ -195,7 +199,7 @@ CONTAINS
 
       count = count + count_local
     end do
-    print *, "total obs count: ", count
+    PRINT *, "total obs count: ", count
 
 
     ! allocate space depending on global number of observations
@@ -218,24 +222,28 @@ CONTAINS
         ! make sure the file exists
         INQUIRE(file=str2, exist=ex)
         IF (.NOT. ex) EXIT
-        IF (pe_isroot) PRINT *, "  reading: ", TRIM(str2)
+        !IF (pe_isroot) PRINT *, "  reading: ", TRIM(str2)
+
+        ! for each variable listed in the yaml for this file
         CALL local_config%get("vars", vars_config)
-        CALL vars_config%get(1, var_config)
-        CALL var_config%get(1, var_short)
-        obsdef=letkf_obs_getdef('O', var_short)
-        obsid=obsdef%id
-        CALL var_config%get(2, var_short)
-        obsdef=letkf_obs_getdef('P', var_short)
-        platid=obsdef%id
-        CALL var_config%get(3, var_long)
+        DO i = 1, vars_config%count()
+          CALL vars_config%get(i, var_config)
+          CALL var_config%get(1, var_short)
+          obsdef=letkf_obs_getdef('O', var_short)
+          obsid=obsdef%id
+          CALL var_config%get(2, var_short)
+          obsdef=letkf_obs_getdef('P', var_short)
+          platid=obsdef%id
+          CALL var_config%get(3, var_long)
 
-        CALL read_file(str2, obs_tmp, obsid, platid, var_long)
-        IF (.NOT. ALLOCATED(obs_tmp)) &
-          CALL letkf_mpi_abort("ERROR loading file")
+          CALL read_file(str2, obs_tmp, obsid, platid, var_long)
+          IF (.NOT. ALLOCATED(obs_tmp)) &
+            CALL letkf_mpi_abort("ERROR loading file")
 
-        ! cat array
-        obs(offset+1:offset+1+SIZE(obs_tmp)) = obs_tmp
-        offset = offset + SIZE(obs_tmp)
+          ! cat array
+          obs(offset+1:offset+1+SIZE(obs_tmp)) = obs_tmp
+          offset = offset + SIZE(obs_tmp)
+        END DO
 
         ! find next file...
         file_num = file_num + 1
@@ -258,7 +266,7 @@ CONTAINS
     INTEGER, INTENT(in) :: ensmem
     REAL, ALLOCATABLE, INTENT(inout) :: hx(:)
 
-    INTEGER :: n
+    INTEGER :: n,i
     LOGICAL :: ex
     CHARACTER(len=:), ALLOCATABLE :: str1, var_long
     INTEGER :: offset, file_num
@@ -285,25 +293,26 @@ CONTAINS
           ! TODO check verbose
           INQUIRE(file=str2, exist=ex)
           IF (.NOT. ex) EXIT
-          PRINT *, "reading hofx: ", TRIM(str2)
-          ! TODO, process multiple vars
-          ! TODO do the same for the obs section
+          !PRINT *, "reading hofx: ", TRIM(str2)
+
+          ! for each variable in the yaml for this file
           CALL local_config%get("vars", vars_config)
-          CALL vars_config%get(1, var_config)
-          CALL var_config%get(3, var_long)
+          DO i=1,vars_config%count()
+            CALL vars_config%get(1, var_config)
+            CALL var_config%get(3, var_long)
+            CALL read_file_hx(str2, hx_tmp, var_long)
 
-          CALL read_file_hx(str2, hx_tmp, var_long)
-
-          IF (.NOT. ALLOCATED(hx_tmp)) CALL letkf_mpi_abort( &
+            IF (.NOT. ALLOCATED(hx_tmp)) CALL letkf_mpi_abort( &
                "ERROR loading hx file")
 
-          ! safety check to make sure we won't go out of bounds
-          print *, offset, size(hx_tmp), size(hx)
-          IF (offset + SIZE(hx_tmp) > SIZE(hx)) CALL letkf_mpi_abort( &
-            "ERROR in ioda_read_hx(), hx array out of bounds")
-          ! cat array
-          hx(offset+1:offset+SIZE(hx_tmp)) = hx_tmp
-          offset = offset + SIZE(hx_tmp)
+            ! safety check to make sure we won't go out of bounds
+            IF (offset + SIZE(hx_tmp) > SIZE(hx)) CALL letkf_mpi_abort( &
+              "ERROR in ioda_read_hx(), hx array out of bounds")
+
+            ! cat array
+            hx(offset+1:offset+SIZE(hx_tmp)) = hx_tmp
+            offset = offset + SIZE(hx_tmp)
+          END DO
 
           ! find next file
           file_num = file_num + 1

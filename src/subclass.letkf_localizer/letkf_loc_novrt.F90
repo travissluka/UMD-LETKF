@@ -104,7 +104,10 @@ CONTAINS
       CALL letkf_mpi_abort('Unrecognized hzloc type: "'//TRIM(str)//'"')
     END IF
 
-    IF (pe_isroot) PRINT *, "hzloc=",self%hzdist%string()
+    IF (pe_isroot) THEN
+      PRINT *, "hzloc="
+      CALL self%hzdist%print()
+    ENDIF
 
     self%maxgroups=1
 
