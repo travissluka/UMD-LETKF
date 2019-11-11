@@ -21,35 +21,41 @@ state:
 
   hzgrid:
   - name: hz1
-    lat1d: [lat, bkg/bkg.0001.nc]
-    lon1d: [lon, bkg/bkg.0001.nc]
+    lat1d: {file: bkg/bkg.0001.nc, variable: lat}
+    lon1d: {file: bkg/bkg.0001.nc, variable: lon}
 
   vtgrid:
   - name: vt1
-    vert1d: [depth, bkg/bkg.0001.nc]
+    vert1d: {file: bkg/bkg.0001.nc, variable: depth}
 
   statedef:
   - name: state1
     hzgrid: hz1
     vtgrid: vt1
     ana_bounds: [-2, 2]
-    input:  [var1, "bkg/bkg.#ENS4#.nc"]
-    output: [var1, "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: var1}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: var1}
 
   - name: state2
     hzgrid: hz1
     vtgrid: vt1
     ana_inc_max: 2
-    input:  [var2, "bkg/bkg.#ENS4#.nc"]
-    output: [var2, "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: var2}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: var2}
 
   - name: state3
     hzgrid: hz1
     vtgrid: vt1
     ana_inc_max: 0.2
     ana_bounds: [-2, 2]
-    input:  [var3, "bkg/bkg.#ENS4#.nc"]
-    output: [var3, "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: var3}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: var3}
+
 
 localization:
   class: loc_novrt
+  hzloc:
+    type: linearinterp_lat
+    value:
+    - {lat: 0.0,  radius: 500.0e3}
+    - {lat: 90.0, radius:  50.0e3}

@@ -1,5 +1,17 @@
+! Copyright 2018-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
-!> maintains configuration tree by loading in a JSON configuration file.
+!> maintains configuration tree by loading in a YAML configuration file.
 !================================================================================
 MODULE letkf_config
   USE,INTRINSIC :: iso_c_binding
@@ -415,7 +427,6 @@ CONTAINS
     CLASS(configuration), INTENT(in) :: self
     INTEGER, INTENT(in) :: idx
     REAL(4), INTENT(out) :: val
-    TYPE(configuration) :: child
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
@@ -445,7 +456,7 @@ CONTAINS
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
-    INTEGER :: str_len, err
+    INTEGER :: str_len
 
     res_node = letkf_yaml_get_child_name(&
          self%yaml_doc, self%yaml_node, key//c_null_char)
@@ -469,11 +480,10 @@ CONTAINS
     CLASS(configuration), INTENT(in) :: self
     INTEGER, INTENT(in) :: idx
     CHARACTER(len=:), ALLOCATABLE, INTENT(out) :: val
-    TYPE(configuration) :: child
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
-    INTEGER :: str_len, err
+    INTEGER :: str_len
 
     res_node = letkf_yaml_get_child_idx(self%yaml_doc, self%yaml_node, idx, &
          str, str_len)
@@ -500,7 +510,7 @@ CONTAINS
 
     TYPE(c_ptr) :: res_node
     CHARACTER(len=1024) :: str
-    INTEGER :: str_len, err
+    INTEGER :: str_len
 
     res_node = letkf_yaml_get_child_name(&
          self%yaml_doc, self%yaml_node, key//c_null_char)

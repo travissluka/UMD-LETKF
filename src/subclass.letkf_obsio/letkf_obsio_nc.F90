@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !>
 !================================================================================
@@ -111,10 +123,10 @@ CONTAINS
     CALL config%get("obsdef", config_def)
     DO i=1,config_def%count()
       CALL config_def%get(i, config_def0)
-      CALL config_def0%get(1, str)
+      CALL config_def0%get("name", str)
       obsplatdef%name = str_tolower(str)
-      CALL config_def0%get(2, obsplatdef%id)
-      CALL config_def0%get(3, str)
+      CALL config_def0%get("id", obsplatdef%id)
+      CALL config_def0%get("description", str)
       obsplatdef%name_long = str
       CALL obsdef%add(obsplatdef)
     END DO
@@ -123,10 +135,10 @@ CONTAINS
     CALL config%get("platdef", config_def)
     DO i=1,config_def%count()
       CALL config_def%get(i, config_def0)
-      CALL config_def0%get(1, str)
+      CALL config_def0%get("name", str)
       obsplatdef%name = str_tolower(str)
-      CALL config_def0%get(2, obsplatdef%id)
-      CALL config_def0%get(3, str)
+      CALL config_def0%get("id", obsplatdef%id)
+      CALL config_def0%get("description", str)
       obsplatdef%name_long = str
       CALL platdef%add(obsplatdef)
     END DO

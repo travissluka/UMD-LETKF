@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> does the majority of the real "LETKF" work.
 !--------------------------------------------------------------------------------
@@ -35,7 +47,7 @@ MODULE letkf_solver
   REAL, PARAMETER :: stdev2max = SQRT(40.0/3.0)
 
   CHARACTER(:), ALLOCATABLE :: diag_file
-  
+
   ! inflation values
   !--------------------------------------------------------------------------------
   REAL :: infl_rtps
@@ -50,7 +62,7 @@ MODULE letkf_solver
   REAL, ALLOCATABLE :: diag_lg_obsloc(:,:)
 
 
-  
+
 CONTAINS
 
 
@@ -73,13 +85,22 @@ CONTAINS
     ! get solver parameters
     CALL config%get("save_diag", save_diag, .true.)
     CALL config%get("diag_file", diag_file, "diag.solver.nc")
-    
+
     ! get the inflation parameters
-    CALL config%get("inflation", infl_config)
+    ! NOTE: weird syntax so that if "inflation" is not found
+    !  things carry on normally and the default values are set
+    IF (config%found("inflation")) THEN
+      CALL config%get("inflation", infl_config)
+    ELSE
+      infl_config = config
+      IF(pe_isroot) PRINT *, 'WARNING: not"inflation" section found in "solver"' &
+         // ', using default values.'
+    ENDIF
     CALL infl_config%get("mul", infl_mul, default=1.0)
     CALL infl_config%get("rtps", infl_rtps, default=0.0)
     CALL infl_config%get("rtpp", infl_rtpp, default=0.0)
 
+    ! print out the values used
     IF(pe_isroot) THEN
        PRINT *, "solver.save_diag=",save_diag
        IF(save_diag) PRINT *, "solver.diag_file=",diag_file
@@ -88,7 +109,7 @@ CONTAINS
        PRINT *, "solver.inflation.mul= ",infl_mul
     END IF
 
-    
+
     ! make sure the inflation parameters are correct
     IF(pe_isroot) THEN
        IF(infl_rtps > 1.0 .OR. infl_rtps < 0.0) &
@@ -227,7 +248,7 @@ CONTAINS
              r = localizer_class%localize(ij, loc_groups(lg), &
                   obs_def(idx), obs_ij_dist(i))
 
-             IF (r > 1.0e-4) THEN               
+             IF (r > 1.0e-4) THEN
                 ! this observation will be kept
                 ! TODO, check the QC flag too? or have I implemented
                 ! removal of bad obs higher up in the code somewhere

@@ -1,3 +1,15 @@
+! Copyright 2018-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !>
 !================================================================================
@@ -107,20 +119,43 @@ CONTAINS
 
     CALL config%get("save_diag", self%save_diag, .true.)
     CALL config%get("diag_file", self%diag_file, "diag.loc_ocean.nc" )
-    CALL config%get("hzloc_prof", str)
-    self%hzdist_prof = linearinterp_lat(str)
-    CALL config%get("hzloc_sat",  str)
-    self%hzdist_sat = linearinterp_lat(str)
+
+    ! TODO, this has gotten a bit messy,
+    ! generalize this by making a separate hzloc class
+
+    ! hz loc for profiles
+    CALL config%get("hzloc_prof", config2)
+    CALL config2%get("type", str)
+    IF (str == "linearinterp_lat") THEN
+      CALL config2%get("value", config3)
+      self%hzdist_prof = linearinterp_lat(config3)
+    ELSE
+      CALL letkf_mpi_abort('unrecognized hzloc_prof type: "'//TRIM(str)//'"')
+    ENDIF
+
+    ! hzloc for satellites
+    CALL config%get("hzloc_sat", config2)
+    CALL config2%get("type", str)
+    IF (str == "linearinterp_lat") THEN
+      CALL config2%get("value", config3)
+      self%hzdist_sat = linearinterp_lat(config3)
+    ELSE
+      CALL letkf_mpi_abort('unrecognized hzloc_sat type: "'//TRIM(str)//'"')
+    ENDIF
+
+    ! temporal localization
     CALL config%get("tloc_prof", self%tloc_prof, default=-1.0)
     CALL config%get("tloc_sat",  self%tloc_sat, default=-1.0)
 
     IF(pe_isroot) THEN
        PRINT *, "localization.save_diag  = ", self%save_diag
-       IF(self%save_diag) PRINT *, "localization.diag_file = ", self%diag_file
+       IF(self%save_diag) PRINT *, "localization.diag_file  = ", self%diag_file
        PRINT *, "localization.tloc_prof  = ", self%tloc_prof
        PRINT *, "localization.tloc_sat   = ", self%tloc_sat
-       PRINT *, "localization.hzloc_prof = ", self%hzdist_prof%string()
-       PRINT *, "localization.hzloc_sat  = ", self%hzdist_sat%string()
+       PRINT *, "localization.hzloc_prof = "
+       CALL self%hzdist_prof%print()
+       PRINT *, "localization.hzloc_sat  = "
+       CALL self%hzdist_sat%print()
     END IF
 
     ! get type of vertical localization used for SST obs
@@ -166,10 +201,10 @@ CONTAINS
     ! determine the list of observations or platform ids that are considered
     ! surface observations that need to be localized. Convert from a specified
     ! string on the config file to the associated integer id.
-    IF(config%found("surf_obs")) THEN
-       IF(pe_isroot) PRINT *, " satellite observation types:"
-          
-       CALL config%get("surf_obs", config3)
+    IF(config%found("sat_obs")) THEN
+       IF(pe_isroot) PRINT *, "satellite observation types:"
+
+       CALL config%get("sat_obs", config3)
        ALLOCATE(self%surf_obs(config3%COUNT()))
        DO i = 1, SIZE(self%surf_obs)
           CALL config3%get(i,str)
@@ -181,10 +216,10 @@ CONTAINS
        ALLOCATE(self%surf_obs(0))
     END IF
 
-    IF(config%found("surf_plats")) THEN
-       IF(pe_isroot) PRINT *, " satellite platform types:"
+    IF(config%found("sat_plats")) THEN
+       IF(pe_isroot) PRINT *, "satellite platform types:"
 
-       CALL config%get("surf_plats", config3)
+       CALL config%get("sat_plats", config3)
        ALLOCATE(self%surf_plats(config3%COUNT()))
        DO i = 1, SIZE(self%surf_plats)
           CALL config3%get(i,str)

@@ -12,51 +12,55 @@ solver:
 
 
 state:
-  verbose: false
   class: stateio_nc
+  verbose: false
   compression: 0
 
   hzgrid:
   - name: hz1
-    lat2d: ["geolat", "grid/ocean.hgrid.nc"]
-    lon2d: ["geolon", "grid/ocean.hgrid.nc"]
-    lat1d: ["lath", "grid/ocean.hgrid.nc"]
-    lon1d: ["lonh", "grid/ocean.hgrid.nc"]
-    mask:  ["wet", "grid/ocean.hgrid.nc"]
+    lat2d: {file: grid/ocean.hgrid.nc, variable: geolat}
+    lon2d: {file: grid/ocean.hgrid.nc, variable: geolon}
+    lat1d: {file: grid/ocean.hgrid.nc, variable: lath}
+    lon1d: {file: grid/ocean.hgrid.nc, variable: lonh}
+    mask:  {file: grid/ocean.hgrid.nc, variable: wet}
 
   vtgrid:
   - name: vt1
-    vert1d: ["Layer", "grid/ocean.vgrid.nc"]
+    vert1d: {file: grid/ocean.vgrid.nc, variable: Layer}
 
   statedef:
   - name: ocn_t
     hzgrid: hz1
     vtgrid: vt1
-    input:  ["Temp", "bkg/bkg.#ENS4#.nc"]
-    output: ["Temp", "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: Temp}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: Temp}
 
   - name: ocn_s
     hzgrid: hz1
     vtgrid: vt1
-    input:  ["Salt", "bkg/bkg.#ENS4#.nc"]
-    output: ["Salt", "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: Salt}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: Salt}
 
   - name: ocn_u
     hzgrid: hz1
     vtgrid: vt1
-    input:  ["u", "bkg/bkg.#ENS4#.nc"]
-    output: ["u", "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: u}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: u}
 
   - name: ocn_v
     hzgrid: hz1
     vtgrid: vt1
-    input:  ["v", "bkg/bkg.#ENS4#.nc"]
-    output: ["v", "#TYPE#.#ENS4#.nc"]
+    input:  {file: "bkg/bkg.#ENS4#.nc", variable: v}
+    output: {file: "#TYPE#.#ENS4#.nc",  variable: v}
 
 
 localization:
   class: loc_novrt
-
+  hzloc:
+    type: linearinterp_lat
+    value:
+    - {lat: 0.0,  radius: 500.0e3}
+    - {lat: 90.0, radius: 50.0e3}
 
 observation:
   class: obsio_test

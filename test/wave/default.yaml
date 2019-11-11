@@ -5,7 +5,6 @@ mpi:
 
 
 solver:
-  inflation: {}
 
 
 observation:
@@ -22,21 +21,25 @@ state:
 
   hzgrid:
   - name: hz1
-    lat2d: ["HTSGW", "bkg/gwes01.grib2"]
-    lon2d: ["HTSGW", "bkg/gwes01.grib2"]
+    lat2d: {file: bkg/gwes01.grib2, variable: HTSGW}
+    lon2d: {file: bkg/gwes01.grib2, variable: HTSGW}
 
   vtgrid:
   - name: surface
-    vert1d: ["ignore_for_now", "ignore_for_now"]
+    vert1d: {file: ignore_for_now, variable: ignore_for_now}
 
   statedef:
   - name: HTSGW
     hzgrid: hz1
     vtgrid: surface
-    input : ["HTSGW:surface:12 hour fcst", "bkg/gwes#ENS2#.grib2"]
-    output: ["HTSGW:surface:12 hour fcst", "#TYPE#.#ENS4#.grib2"]
+    input : {file: "bkg/gwes#ENS2#.grib2", variable: "HTSGW:surface:12 hour fcst"}
+    output: {file: "#TYPE#.#ENS4#.grib2",  variable: "HTSGW:surface:12 hour fcst"}
 
 
 localization:
   class: loc_novrt
-  hzloc: "0.0 500.0e3 / 90.0 500.0e3"
+  hzloc:
+    type: linearinterp_lat
+    value:
+    - {lat: 0.0,  radius: 500.0e3}
+    - {lat: 90.0, radius: 500.0e3}
