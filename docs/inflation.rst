@@ -14,7 +14,7 @@ The inflation factor :math:`\alpha`, which is greater than or equal to 1.0, incr
 .. math::
    \mathbf{x}_i^{'a} \leftarrow \alpha \mathbf{x}_i^{'a}
 
-This method works sufficiently for domain that are regulary sampled by observations. (e.g. the atmosphere). If a domain is **not** sufficiently sampled (such as the deep ocean), this method may result in the ensemble spread growing far too rapidly and the filter ultimately diverging.
+This method works sufficiently for domain that are regularly sampled by observations. (e.g. the atmosphere). If a domain is **not** sufficiently sampled (such as the deep ocean), this method may result in the ensemble spread growing far too rapidly and the filter ultimately diverging.
 
 
 .. _RTPP:

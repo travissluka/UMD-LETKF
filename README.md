@@ -6,8 +6,9 @@ For complete set of documentation, visit [umd-letkf.readthedocs.io](http://umd-l
 
 
 ```diff
--NOTE: This library is still under active development
--  (but I hope to have it wrapped up, documented, and available for public use "shortly")
+-NOTE: This library is still under active development, though it should have sufficient
+-  documentation to be useable now. It has been extensively tested with ocean data assimilation
+-  specifically. Appropriate localization classes still need to be added for non-ocean domains.
 ```
 
 Brief Description

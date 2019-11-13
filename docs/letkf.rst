@@ -8,7 +8,7 @@ The local ensemble transform Kalman filter (LETKF) is a type of ensemble Kalman 
 .. math::
    \mathbf{y}^{b(i)} = H\mathbf{x}^{b(i)}
 
-note, that the application of the observation operator is applie *outside* this UMD-LETKF library.
+note, that the application of the observation operator is applied *outside* this UMD-LETKF library.
 
 A set of intermediate weights, :math:`\bar{\mathbf{w}}^{a}` are calculated to find the analysis mean :math:`\bar{\mathbf{x}}^a`
 

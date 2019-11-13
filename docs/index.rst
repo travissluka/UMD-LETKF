@@ -6,11 +6,11 @@ Universal Multi-Domain Local Ensemble Transform Kalman Filter
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+   :numbered:
 
    overview
-   installation   
-   configuration
-   plugins
+   installation
+   configuration/index.rst
    diagnostics
    reference
    support

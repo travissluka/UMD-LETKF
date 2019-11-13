@@ -20,8 +20,8 @@
 # -- Project information -----------------------------------------------------
 
 project = u'UMD-LETKF'
-copyright = u'2018, Travis C Sluka'
-author = u'Travis C Sluka'
+copyright = u'2019, Travis C. Sluka'
+author = u'Travis C. Sluka'
 
 # The short X.Y version
 version = u''
@@ -38,8 +38,10 @@ release = u''
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = [ 'sphinx.ext.mathjax'
-]
+extensions = [ 'sphinx.ext.mathjax',
+               'sphinx.ext.todo']
+
+todo_include_todos = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
