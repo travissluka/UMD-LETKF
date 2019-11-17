@@ -4,6 +4,7 @@
 
 For complete set of documentation, visit [umd-letkf.readthedocs.io](http://umd-letkf.readthedocs.io/).
 
+=======
 
 Brief Description
 ----------
@@ -29,9 +30,19 @@ How to Build the LETKF Library on Theia
 ## Compile the code
 0. `cd [...]/letkf`
 1. Setup the environment at Theia
-   `source config/env.theia`
+#   `source config/env.theia`
+`module load intel` 
+`module load impi`
+`module load netcdf/4.6.1`
+`module use -a /contrib/modulefiles`
+`module load cmake/3.9.0`
+`setenv FC mpiifort`
+`setenv CC mpiicc`
+`setenv CXX mpiicpc`
+
 2. `mkdir -p [...]/letkf/build`
 3. Building path TBD: `cd [...]/build`
+
 4. Run the cmake:
    `cmake -DNETCDF_DIR=$NETCDF  [...]/letkf`
 5. `make -j<n>`
