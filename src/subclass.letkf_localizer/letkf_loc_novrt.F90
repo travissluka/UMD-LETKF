@@ -1,3 +1,15 @@
+! Copyright 2018-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> default, simple, horizontal only  localization
 !================================================================================
@@ -73,6 +85,7 @@ CONTAINS
     TYPE(configuration), INTENT(in) :: config
 
     CHARACTER(:), ALLOCATABLE :: str
+    TYPE(configuration) :: config2, config3
 
     IF (pe_isroot) THEN
        PRINT *, ""
@@ -80,9 +93,21 @@ CONTAINS
        PRINT *, "------------------------------------------------------------"
     END IF
 
-    CALL config%get("hzloc", str, "0.0 500.0e3 / 90.0 50.0e3")
-    self%hzdist = linearinterp_lat(str)
-    IF (pe_isroot) PRINT *, "hzloc=",self%hzdist%string()
+    ! TODO, this has gotten a bit messy,
+    ! generalize this by making a separate hzloc class
+    CALL config%get("hzloc", config2)
+    CALL config2%get("type", str)
+    IF (str == "linearinterp_lat") THEN
+      CALL config2%get("value", config3)
+      self%hzdist = linearinterp_lat(config3)
+    ELSE
+      CALL letkf_mpi_abort('Unrecognized hzloc type: "'//TRIM(str)//'"')
+    END IF
+
+    IF (pe_isroot) THEN
+      PRINT *, "hzloc="
+      CALL self%hzdist%print()
+    ENDIF
 
     self%maxgroups=1
 
@@ -148,7 +173,7 @@ CONTAINS
     TYPE(letkf_localizer_group), INTENT(in) :: group
     TYPE(letkf_observation), INTENT(in) :: obs
     REAL, INTENT(in) :: dist
-    REAL :: loc, r
+    REAL :: loc
 
     ! TODO temporal localization
 

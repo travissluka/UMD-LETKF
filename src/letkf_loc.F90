@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> Module for the obesrvation localization methods
 !!
@@ -11,7 +23,6 @@ MODULE letkf_loc
   PRIVATE
 
 
-
   !================================================================================
   !================================================================================
   ! Public components
@@ -21,8 +32,6 @@ MODULE letkf_loc
   PUBLIC :: letkf_loc_init
   PUBLIC :: letkf_loc_register
   PUBLIC :: letkf_loc_gc
-  !  PUBLIC :: letkf_loc_gaus
-
 
 
   !================================================================================
@@ -35,7 +44,6 @@ MODULE letkf_loc
      INTEGER, ALLOCATABLE :: slab(:)
   END TYPE letkf_localizer_group
   !================================================================================
-
 
 
   !================================================================================
@@ -103,7 +111,6 @@ MODULE letkf_loc
   !================================================================================
 
 
-
   !================================================================================
   !> simple wrapper for localizer so that we can have arrays of pointers.
   !--------------------------------------------------------------------------------
@@ -111,7 +118,6 @@ MODULE letkf_loc
      CLASS(letkf_localizer), POINTER :: p
   END TYPE localizer_ptr
   !================================================================================
-
 
 
   !================================================================================
@@ -123,13 +129,12 @@ MODULE letkf_loc
      REAL, ALLOCATABLE :: dist(:)
    CONTAINS
      PROCEDURE :: get_dist => linearinterp_lat_get_dist
-     PROCEDURE :: string => linearinterp_lat_string
+     PROCEDURE :: print => linearinterp_lat_print
   END TYPE linearinterp_lat
   INTERFACE linearinterp_lat
      MODULE PROCEDURE linearinterp_lat_init
   END INTERFACE linearinterp_lat
   !================================================================================
-
 
 
   ! public variables
@@ -243,51 +248,48 @@ CONTAINS
   !================================================================================
   !>
   !--------------------------------------------------------------------------------
-  FUNCTION linearinterp_lat_init(config_str) RESULT(l)
-    CHARACTER(*), INTENT(IN) :: config_str
+  FUNCTION linearinterp_lat_init(config) RESULT(l)
+    TYPE(configuration), INTENT(in) :: config
     TYPE(linearinterp_lat) :: l
 
+    TYPE(CONFIGURATION) :: config2
     INTEGER :: npoints
-    INTEGER :: i, j
+    INTEGER :: i
 
-    REAL :: lat, dist
+    REAL :: lat, radius
 
     ! determine the number of interp points
-    npoints = 0
-    i=1
-    DO WHILE(i < LEN(config_str))
-       j=i
-       i=SCAN(config_str(j:), "/")+j-2
-       IF(i <j) i = LEN(config_str)
-       i=i+2
-       npoints = npoints+1
-    END DO
+    npoints = config%count()
 
     ! allocate space (2 extra in case 0 and 90 not explicitly defined)
     ALLOCATE(l%lat(npoints+2))
     ALLOCATE(l%dist(npoints+2))
     l%npoints=0
-    i=1
-    DO WHILE(i < LEN(config_str))
-       j=i
-       i=SCAN(config_str(j:), "/")+j-2
-       IF(i <j)i = LEN(config_str)
-       READ (config_str(j:i),*) lat, dist
 
-       IF(lat > 0.0 .AND. l%npoints == 0) THEN
-          l%npoints = l%npoints + 1
-          l%lat(1)=0.0
-          l%dist(1)=dist
-       END IF
-       l%npoints = l%npoints+1
-       l%lat(l%npoints) = lat
-       l%dist(l%npoints) = dist
-       i=i+2
+    ! parse the configuration
+    DO i=1, config%count()
+      CALL config%get(i, config2)
+      CALL config2%get("lat", lat)
+      CALL config2%get("radius", radius)
+
+      ! stick a 0.0 latitude at the beginning, if needed
+      ! (If the first point starts after 0.0)
+      IF( lat > 0.0 .AND. l%npoints == 0) THEN
+        l%npoints = l%npoints + 1
+        l%lat(1) = 0.0
+        l%dist(1) = radius
+      ENDIF
+
+      l%npoints = l%npoints + 1
+      l%lat(l%npoints) = lat
+      l%dist(l%npoints) = radius
     END DO
+
+    ! add a 90.0 latitue at the end, if needed
     IF (lat < 90) THEN
-       l%npoints = l%npoints +1
-       l%lat(l%npoints) = 90
-       l%dist(l%npoints) = dist
+      l%npoints = l%npoints +1
+      l%lat(l%npoints) = 90
+      l%dist(l%npoints) = radius
     END IF
   END FUNCTION linearinterp_lat_init
   !================================================================================
@@ -321,23 +323,19 @@ CONTAINS
 
 
   !================================================================================
-  FUNCTION linearinterp_lat_string(self) RESULT(str)
+  SUBROUTINE linearinterp_lat_print(self)
     CLASS(linearinterp_lat), INTENT(in) :: self
-    CHARACTER(:), ALLOCATABLE :: str
 
-    CHARACTER(:), ALLOCATABLE :: str2
+    CHARACTER(:), ALLOCATABLE :: str
     INTEGER :: i
 
-    str = ""
     DO i = 1,self%npoints
-      str2 = REPEAT(' ', 1024)
-      WRITE (str2, '(F4.1,A,EN9.1E1,A)') self%lat(i), 'N ', self%dist(i),' m'
-      str = str // trim(str2)
-      IF (i/=self%npoints) str = str//"  /  "
+      str = REPEAT(' ', 1024)
+      WRITE (str, '(A,F4.1,A,EN10.1E1,A)') "    ", self%lat(i), ' N/S ', self%dist(i),' m'
+      PRINT *, TRIM(str)
     END DO
 
-
-  END FUNCTION linearinterp_lat_string
+  END SUBROUTINE linearinterp_lat_print
   !================================================================================
 
 

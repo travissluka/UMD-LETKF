@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !>
 !================================================================================
@@ -8,6 +20,7 @@ MODULE letkf_obsio_test_mod
   USE letkf_mpi
   USE letkf_obs
   USE letkf_state
+  USE letkf_util
 
   IMPLICIT NONE
   PRIVATE
@@ -64,13 +77,17 @@ CONTAINS
   !================================================================================
   !> initialize the test observation generation class
   !--------------------------------------------------------------------------------
-  SUBROUTINE obsio_test_init(self, config)
+  SUBROUTINE obsio_test_init(self, config, obsdef, platdef)
     CLASS(letkf_obsio_test) :: self
     TYPE(configuration), INTENT(in) :: config
-    TYPE(configuration) :: config_ob
+    TYPE(letkf_obsplatdef_list), INTENT(out) :: obsdef
+    TYPE(letkf_obsplatdef_list), INTENT(out) :: platdef
+
+    TYPE(configuration) :: config_obs, config_ob
 
     INTEGER :: nobs
     INTEGER :: i, t, ierr
+    INTEGER :: idx_o, idx_p
     TYPE(kd_root) :: grd_tree
     INTEGER, ALLOCATABLE :: grd_idx(:)
     REAL,    ALLOCATABLE :: grd_dist(:), min_dist(:), hx2(:,:)
@@ -78,28 +95,41 @@ CONTAINS
     CHARACTER(len=60), ALLOCATABLE :: ob_state_type(:)
 
     INTEGER :: lvl, s, j, k, m
-    CHARACTER(:), ALLOCATABLE :: str
+    CHARACTER(:), ALLOCATABLE :: str1,str2,str3
 
-    TYPE(letkf_obsplatdef) :: def
+    TYPE(letkf_obsplatdef) :: obsdef_item, platdef_item
     TYPE(letkf_statevar_spec) :: state_def
 
 
     ! read in the configuration file
-    nobs = config%COUNT()
+    ! creating the obsdef and platdef lists along the way
+    CALL config%get("synthetic_obs", config_obs)
+    nobs = config_obs%count()
     ALLOCATE(self%obs(nobs), ob_state_type(nobs))
+    platdef_item%name_long = "synthetic platform"
+    idx_o = 0
+    idx_p = 0
     DO i=1,nobs
-       CALL config%get(i, config_ob)
+       CALL config_obs%get(i, config_ob)
 
-       CALL config_ob%get(1, str)
-       def = letkf_obs_getdef('O', str)
-       self%obs(i)%obsid = def%id
+       CALL config_ob%get(1, str1)
+       CALL config_ob%get(2, str2)
+       CALL config_ob%get(3, str3)
 
-       CALL config_ob%get(2, str)
-       def = letkf_obs_getdef('P', str)
-       self%obs(i)%platid = def%id
+       obsdef_item%name = str_tolower(str1)
+       obsdef_item%name_long = 'synthetic ob of "'//TRIM(str3)//'"'
+       IF( .NOT. obsdef%has(str1) ) idx_o = idx_o + 1
+       obsdef_item%id = idx_o
+       CALL obsdef%add(obsdef_item, allow_duplicate=.TRUE.)
+       self%obs(i)%obsid = idx_o
 
-       CALL config_ob%get(3, str)
-       ob_state_type(i) = str
+       platdef_item%name = str2
+       IF (.NOT. platdef%has(str2)) idx_p = idx_p + 1
+       platdef_item%id = idx_p
+       CALL platdef%add(platdef_item, allow_duplicate=.TRUE.)
+       self%obs(i)%platid = idx_p
+
+       ob_state_type(i) = str3
 
        CALL config_ob%get(4, self%obs(i)%lat)
        CALL config_ob%get(5, self%obs(i)%lon)
@@ -220,9 +250,8 @@ CONTAINS
   SUBROUTINE obsio_test_read_hx(self, ensmem, hx)
     CLASS(letkf_obsio_test) :: self
     INTEGER, INTENT(in) :: ensmem
-    REAL, ALLOCATABLE, INTENT(out) :: hx(:)
+    REAL, ALLOCATABLE, INTENT(inout) :: hx(:)
 
-    ALLOCATE(hx(SIZE(self%obs)))
     hx = self%hx(ensmem, :)
 
   END SUBROUTINE obsio_test_read_hx

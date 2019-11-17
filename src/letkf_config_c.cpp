@@ -1,9 +1,23 @@
+// Copyright 2019-2019 Travis Sluka
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+/**
+ * \cond internal
+ * Interfacing between the fortran and C++ yaml library
+ */
+
 #include "yaml.h"
 #include <iostream>
-
-
-
-
 
 extern "C" {
 
@@ -122,16 +136,17 @@ yaml_node_t * letkf_yaml_get_child_name(yaml_document_t *&doc,
         yaml_node_pair_t *node_kv;
         yaml_node_t *node_k, *node_v;
 
-        // abort if this is not a sequence or mapping
-        if(node->type == YAML_SCALAR_NODE) {
-                return NULL;
-        }
+        // abort if this is not a mapping
+        if(node->type == YAML_SCALAR_NODE) return NULL;
+        if(node->type == YAML_SEQUENCE_NODE) return NULL;
 
         //find the matching key
         node_kv = node->data.mapping.pairs.start;
         while (node_kv != node->data.mapping.pairs.top) {
                 node_k = yaml_document_get_node(doc,  node_kv->key);
                 node_v = yaml_document_get_node(doc,  node_kv->value);
+                if (node_k == NULL) return NULL;
+                if (node_v == NULL) return NULL;
                 if (node_k->type == YAML_SCALAR_NODE) {
                         // all keys should be scalar nodes... but just to be safe
                         if (strcmp((char*)node_k->data.scalar.value, key) == 0) {
@@ -172,9 +187,8 @@ yaml_node_t * letkf_yaml_get_child_idx(yaml_document_t *&doc,
 
 }
 
-
-
-
-
-
 }
+
+/**
+ * \endcond
+ **/

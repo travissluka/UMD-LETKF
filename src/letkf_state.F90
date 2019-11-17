@@ -1,3 +1,15 @@
+! Copyright 2016-2019 Travis Sluka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
 !================================================================================
 !> Module providing model state IO and access to the PE-scattered state.
 !!
@@ -7,6 +19,7 @@ MODULE letkf_state
   USE mpi
   USE letkf_config
   USE letkf_mpi
+  USE letkf_util
 
   IMPLICIT NONE
   PRIVATE
@@ -266,7 +279,7 @@ CONTAINS
     IF (pe_isroot) THEN
        PRINT *, "List of stateio classes registered and available:"
        DO i=1, stateio_reg_num
-          PRINT *, ' * "', tolower(stateio_reg(i)%p%name()), &
+          PRINT *, ' * "', str_tolower(stateio_reg(i)%p%name()), &
                '"  (', stateio_reg(i)%p%desc(), ")"
        END DO
        PRINT *, ""
@@ -278,11 +291,11 @@ CONTAINS
 
     ! determine the stateio class to use
     CALL config%get("class", ioclass)
-    ioclass = tolower(ioclass)
+    ioclass = str_tolower(ioclass)
     IF (pe_isroot) PRINT '(A,A)',  " state.class= ",ioclass
     NULLIFY(stateio_class)
     DO i=1, stateio_reg_num
-       IF (tolower(stateio_reg(i)%p%name()) == ioclass) THEN
+       IF (str_tolower(stateio_reg(i)%p%name()) == ioclass) THEN
           stateio_class => stateio_reg(i)%p
           EXIT
        END IF
@@ -482,7 +495,7 @@ CONTAINS
     REAL, ALLOCATABLE, INTENT(INOUT) :: data(:)
     INTEGER, INTENT(IN) :: x1, x2
     INTEGER :: x2b
-    
+
     REAL, ALLOCATABLE :: temp(:)
 
     x2b=MERGE(SIZE(data), x2, x2<=0)
@@ -495,7 +508,7 @@ CONTAINS
     DEALLOCATE(temp)
   END SUBROUTINE crop_data_1d_r
 
-  
+
   !================================================================================
   !> \cond INTERNAL
   !> Reads in the grid specification (horizontal and vertical grids) and the
@@ -506,7 +519,7 @@ CONTAINS
     INTEGER :: i, j, k, l, ierr
     TYPE(configuration) :: config2, config3, config4
     CHARACTER(:), ALLOCATABLE :: str
-    
+
     CALL timing_start("read_state_specs")
 
     ! call the class initialization routine
@@ -534,7 +547,7 @@ CONTAINS
        ! Check the horizontal grids for their validity
        !------------------------------------------------------------------------
        DO i=1,SIZE(hzgrids)
-          
+
           ! make sure the required variables are initialized
           IF (.NOT. ALLOCATED(hzgrids(i)%lat) ) &
                CALL letkf_mpi_abort("LAT uninitiallized from stateio_class%read_specs()")
@@ -549,10 +562,10 @@ CONTAINS
                CALL letkf_mpi_abort("LAT_NOM uninitialized from stateio_class%read_specs()")
           IF (.NOT. ALLOCATED(hzgrids(i)%lon_nom)) &
                CALL letkf_mpi_abort("LON_NOM uninitialized from stateio_class%read_specs()")
-          
+
           !TODO, create nominal lat/lon if not already given
 
-          
+
           ! perform subsetting of the grid, if required
           !TODO save this configuration info somewhere else tied to the grid
           !  so that we don't have to search through again
@@ -567,7 +580,7 @@ CONTAINS
                    CALL config4%get(2, l)
                    CALL crop_data_2d_r(hzgrids(i)%lat, k, l, 1, -1)
                    CALL crop_data_2d_r(hzgrids(i)%lon, k, l, 1, -1)
-                   CALL crop_data_2d_l(hzgrids(i)%mask, k, l, 1, -1)                                      
+                   CALL crop_data_2d_l(hzgrids(i)%mask, k, l, 1, -1)
                    CALL crop_data_1d_r(hzgrids(i)%lon_nom, k, l)
                    PRINT *,""
                    PRINT *, "Cropping X dim of horizontal grids to: ", k,l
@@ -583,7 +596,7 @@ CONTAINS
                    PRINT *,""
                    PRINT *, "Cropping Y dim of horizontal grids to: ", k,l
                 END IF
-                
+
                 EXIT
              END IF
           END DO
@@ -602,7 +615,7 @@ CONTAINS
 
        END DO
 
-       
+
        ! the grids have been deemed valid, print out a summary of the grids
        !----------------------------------------------------------------------
        PRINT *, ""
@@ -1016,7 +1029,7 @@ CONTAINS
           END IF
           CALL timing_stop("io_read")
 
-          
+
           ! scatter the variable
           CALL timing_start("mpi_send")
           sends_cnt=0
@@ -1072,9 +1085,9 @@ CONTAINS
     ! make sure a class of this name hasn't already been registered
     IF ( pe_isroot ) THEN
        DO i=1, stateio_reg_num
-          IF (tolower(stateio_reg(i)%p%name()) == tolower(ioclass%name())) THEN
+          IF (str_tolower(stateio_reg(i)%p%name()) == str_tolower(ioclass%name())) THEN
              CALL letkf_mpi_abort("can't register stateio class "//'"'// &
-                  tolower(ioclass%name())// &
+                  str_tolower(ioclass%name())// &
                   '", a class by that name already has been registered.')
           END IF
        END DO
@@ -1160,27 +1173,6 @@ CONTAINS
          CALL letkf_mpi_abort("state definition for variable '"//name0//"' not found")
     res = statevars(i)
   END FUNCTION letkf_state_var_getdef
-  !================================================================================
-
-
-
-  !================================================================================
-  !> Convert a string to lower
-  !--------------------------------------------------------------------------------
-  FUNCTION tolower(in_str) RESULT(out_str)
-    CHARACTER(*), INTENT(in) :: in_str
-    CHARACTER(LEN(in_str)) :: out_str
-    INTEGER :: i
-    INTEGER, PARAMETER :: offset = 32
-
-    out_str = in_str
-    DO i = 1, LEN(out_str)
-       IF (out_str(i:i) >= "A" .AND. out_str(i:i) <= "Z") THEN
-          out_str(i:i) = ACHAR(IACHAR(out_str(i:i)) + offset)
-       END IF
-    END DO
-
-  END FUNCTION tolower
   !================================================================================
 
 END MODULE letkf_state
