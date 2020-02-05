@@ -375,7 +375,7 @@ CONTAINS
 
     ! need to read in, for each variable
     ! variable_names@VarMetaData
-    ! @ObsValue, @ObsError, @PreQc
+    ! @ObsValue, @ObsError, @PreQC
     ! latitude@MetaData, longitude@MetaData, depth@MetaData
 
     ! make sure the file exists
@@ -443,7 +443,7 @@ CONTAINS
        obs(n)%err = tmp_r(n)
     END DO
 
-    varname2=varname//"@PreQc"
+    varname2=varname//"@PreQC"
     ! TODO, use the actual QC from hofx files?
     CALL check( nf90_inq_varid(ncid, varname2, vid), &
          varname2// ' in '//filename )
